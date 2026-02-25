@@ -16,8 +16,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
+
+      - name: Init Yunit submodule
+        shell: pwsh
+        run: git submodule update --init tools/Yunit
 
       # Install AHK v1 (for .ahk.txt production scripts)
       - name: Install AutoHotkey v1
@@ -185,8 +187,10 @@ jobs:
     needs: syntax-check
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
+
+      - name: Init Yunit submodule
+        shell: pwsh
+        run: git submodule update --init tools/Yunit
 
       - name: Install AutoHotkey v1
         shell: pwsh
