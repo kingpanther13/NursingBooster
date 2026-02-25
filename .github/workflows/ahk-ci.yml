@@ -5,10 +5,12 @@ on:
     paths:
       - '**.ahk'
       - '**.ahk.txt'
+      - '.github/workflows/ahk-ci.yml'
   pull_request:
     paths:
       - '**.ahk'
       - '**.ahk.txt'
+      - '.github/workflows/ahk-ci.yml'
 
 jobs:
   syntax-check:
