@@ -1,0 +1,285 @@
+name: AHK Syntax Check & Build
+
+on:
+  push:
+    paths:
+      - '**.ahk'
+      - '**.ahk.txt'
+  pull_request:
+    paths:
+      - '**.ahk'
+      - '**.ahk.txt'
+
+jobs:
+  syntax-check:
+    name: Syntax Validation
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # Install AHK v1 (for .ahk.txt production scripts)
+      - name: Install AutoHotkey v1
+        shell: pwsh
+        run: |
+          $ahk1Url = "https://www.autohotkey.com/download/ahk-install.exe"
+          Invoke-WebRequest -Uri $ahk1Url -OutFile "$env:TEMP\ahk1-install.exe"
+          Start-Process -FilePath "$env:TEMP\ahk1-install.exe" -ArgumentList "/S" -Wait
+          Write-Host "AHK v1 installed at: C:\Program Files\AutoHotkey"
+          & "C:\Program Files\AutoHotkey\AutoHotkey.exe" /? 2>&1 | Out-Null
+          Write-Host "AHK v1 installation verified"
+
+      # Install AHK v2 (for standalone .ahk scripts)
+      - name: Install AutoHotkey v2
+        shell: pwsh
+        run: |
+          $ahk2Url = "https://www.autohotkey.com/download/ahk-v2.exe"
+          Invoke-WebRequest -Uri $ahk2Url -OutFile "$env:TEMP\ahk2-install.exe"
+          Start-Process -FilePath "$env:TEMP\ahk2-install.exe" -ArgumentList "/S" -Wait
+          # v2 installs alongside v1 under AutoHotkey/v2/
+          $v2Path = "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe"
+          if (Test-Path $v2Path) {
+            Write-Host "AHK v2 installed at: $v2Path"
+          } else {
+            # Fallback: check alternate install location
+            $v2Path = "C:\Program Files\AutoHotkey\v2\AutoHotkey.exe"
+            if (Test-Path $v2Path) {
+              Write-Host "AHK v2 installed at: $v2Path"
+            } else {
+              Write-Host "::warning::AHK v2 not found at expected path. Standalone v2 scripts will be skipped."
+            }
+          }
+
+      # Syntax check v1 scripts (.ahk.txt files)
+      - name: Syntax check AHK v1 scripts
+        shell: pwsh
+        run: |
+          $ahk1 = "C:\Program Files\AutoHotkey\AutoHotkey.exe"
+          $failed = @()
+          $scripts = Get-ChildItem -Path . -Filter "*.ahk.txt" -Recurse
+
+          if ($scripts.Count -eq 0) {
+            Write-Host "No .ahk.txt files found, skipping v1 syntax check"
+            exit 0
+          }
+
+          foreach ($script in $scripts) {
+            Write-Host "Checking: $($script.FullName)"
+
+            # Copy to .ahk so AHK can parse it
+            $tempAhk = "$($script.FullName -replace '\.txt$', '')"
+            Copy-Item $script.FullName $tempAhk
+
+            $proc = Start-Process -FilePath $ahk1 `
+              -ArgumentList "/ErrorStdOut", "/iLib", "NUL", $tempAhk `
+              -Wait -PassThru -NoNewWindow `
+              -RedirectStandardError "$env:TEMP\ahk_stderr.txt" `
+              -RedirectStandardOutput "$env:TEMP\ahk_stdout.txt"
+
+            $stderr = ""
+            if (Test-Path "$env:TEMP\ahk_stderr.txt") {
+              $stderr = Get-Content "$env:TEMP\ahk_stderr.txt" -Raw
+            }
+            $stdout = ""
+            if (Test-Path "$env:TEMP\ahk_stdout.txt") {
+              $stdout = Get-Content "$env:TEMP\ahk_stdout.txt" -Raw
+            }
+
+            # Clean up temp copy
+            Remove-Item $tempAhk -ErrorAction SilentlyContinue
+
+            if ($proc.ExitCode -ne 0 -or $stderr -match "Error") {
+              $errMsg = if ($stderr) { $stderr } else { $stdout }
+              Write-Host "::error file=$($script.Name)::Syntax error in $($script.Name): $errMsg"
+              $failed += $script.Name
+            } else {
+              Write-Host "  PASS"
+            }
+          }
+
+          if ($failed.Count -gt 0) {
+            Write-Host ""
+            Write-Host "::error::FAILED syntax check for: $($failed -join ', ')"
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "All v1 scripts passed syntax check"
+
+      # Syntax check v2 scripts (.ahk files with #Requires v2)
+      - name: Syntax check AHK v2 scripts
+        shell: pwsh
+        run: |
+          $v2Paths = @(
+            "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe",
+            "C:\Program Files\AutoHotkey\v2\AutoHotkey.exe"
+          )
+          $ahk2 = $null
+          foreach ($p in $v2Paths) {
+            if (Test-Path $p) { $ahk2 = $p; break }
+          }
+
+          if (-not $ahk2) {
+            Write-Host "::warning::AHK v2 not available, skipping v2 syntax check"
+            exit 0
+          }
+
+          $failed = @()
+          $scripts = Get-ChildItem -Path . -Filter "*.ahk" -Recurse |
+            Where-Object { $_.FullName -notmatch "\\tools\\" }
+
+          if ($scripts.Count -eq 0) {
+            Write-Host "No standalone .ahk files found, skipping v2 syntax check"
+            exit 0
+          }
+
+          foreach ($script in $scripts) {
+            # Verify it's actually a v2 script
+            $firstLines = Get-Content $script.FullName -TotalCount 5
+            $isV2 = $firstLines | Where-Object { $_ -match "#Requires AutoHotkey v2" }
+
+            if (-not $isV2) {
+              Write-Host "Skipping $($script.Name) (not a v2 script)"
+              continue
+            }
+
+            Write-Host "Checking: $($script.FullName)"
+
+            $proc = Start-Process -FilePath $ahk2 `
+              -ArgumentList "/ErrorStdOut=utf-8", "/iLib", "NUL", $script.FullName `
+              -Wait -PassThru -NoNewWindow `
+              -RedirectStandardError "$env:TEMP\ahk_stderr.txt" `
+              -RedirectStandardOutput "$env:TEMP\ahk_stdout.txt"
+
+            $stderr = ""
+            if (Test-Path "$env:TEMP\ahk_stderr.txt") {
+              $stderr = Get-Content "$env:TEMP\ahk_stderr.txt" -Raw
+            }
+            $stdout = ""
+            if (Test-Path "$env:TEMP\ahk_stdout.txt") {
+              $stdout = Get-Content "$env:TEMP\ahk_stdout.txt" -Raw
+            }
+
+            if ($proc.ExitCode -ne 0 -or $stderr -match "Error") {
+              $errMsg = if ($stderr) { $stderr } else { $stdout }
+              Write-Host "::error file=$($script.Name)::Syntax error in $($script.Name): $errMsg"
+              $failed += $script.Name
+            } else {
+              Write-Host "  PASS"
+            }
+          }
+
+          if ($failed.Count -gt 0) {
+            Write-Host ""
+            Write-Host "::error::FAILED syntax check for: $($failed -join ', ')"
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "All v2 scripts passed syntax check"
+
+  unit-tests:
+    name: Unit Tests (Yunit)
+    runs-on: windows-latest
+    needs: syntax-check
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install AutoHotkey v1
+        shell: pwsh
+        run: |
+          $ahk1Url = "https://www.autohotkey.com/download/ahk-install.exe"
+          Invoke-WebRequest -Uri $ahk1Url -OutFile "$env:TEMP\ahk1-install.exe"
+          Start-Process -FilePath "$env:TEMP\ahk1-install.exe" -ArgumentList "/S" -Wait
+
+      - name: Run Yunit tests
+        shell: pwsh
+        run: |
+          $ahk1 = "C:\Program Files\AutoHotkey\AutoHotkey.exe"
+          $testFiles = Get-ChildItem -Path tests -Filter "test_*.ahk.txt" -Recurse
+          $failed = @()
+
+          if ($testFiles.Count -eq 0) {
+            Write-Host "No test files found in tests/, skipping"
+            exit 0
+          }
+
+          foreach ($test in $testFiles) {
+            Write-Host "Running: $($test.Name)"
+
+            # Copy to .ahk for execution
+            $tempAhk = "$($test.FullName -replace '\.txt$', '')"
+            Copy-Item $test.FullName $tempAhk
+
+            $proc = Start-Process -FilePath $ahk1 `
+              -ArgumentList "/ErrorStdOut", $tempAhk `
+              -Wait -PassThru -NoNewWindow `
+              -RedirectStandardError "$env:TEMP\test_stderr.txt" `
+              -RedirectStandardOutput "$env:TEMP\test_stdout.txt"
+
+            $stderr = ""
+            if (Test-Path "$env:TEMP\test_stderr.txt") {
+              $stderr = Get-Content "$env:TEMP\test_stderr.txt" -Raw
+            }
+            $stdout = ""
+            if (Test-Path "$env:TEMP\test_stdout.txt") {
+              $stdout = Get-Content "$env:TEMP\test_stdout.txt" -Raw
+            }
+
+            Remove-Item $tempAhk -ErrorAction SilentlyContinue
+
+            if ($stdout) { Write-Host $stdout }
+
+            if ($proc.ExitCode -ne 0 -or $stderr -match "Error|FAIL") {
+              $errMsg = if ($stderr) { $stderr } else { "Exit code: $($proc.ExitCode)" }
+              Write-Host "::error file=$($test.Name)::Test failure in $($test.Name): $errMsg"
+              $failed += $test.Name
+            } else {
+              Write-Host "  PASS"
+            }
+          }
+
+          if ($failed.Count -gt 0) {
+            Write-Host ""
+            Write-Host "::error::FAILED tests: $($failed -join ', ')"
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "All unit tests passed"
+
+  compile-check:
+    name: Compilation Check
+    runs-on: windows-latest
+    needs: syntax-check
+    steps:
+      - uses: actions/checkout@v4
+
+      # Try to compile the latest combined script to verify structure
+      - name: Compile latest v1 script
+        uses: nukdokplex/autohotkey-build@v0.1
+        with:
+          version: "1.1.37.02"
+          x64: true
+          x86: false
+          compression: none
+          in: .
+          out: build
+        continue-on-error: true
+
+      - name: Report compilation results
+        shell: pwsh
+        run: |
+          $exes = Get-ChildItem -Path build -Filter "*.exe" -ErrorAction SilentlyContinue
+          if ($exes) {
+            Write-Host "Successfully compiled:"
+            foreach ($exe in $exes) {
+              Write-Host "  $($exe.Name) ($([math]::Round($exe.Length / 1KB)) KB)"
+            }
+          } else {
+            Write-Host "::warning::No executables produced. This may be expected if .ahk.txt files need renaming."
+            Write-Host "Syntax validation is the primary check — compilation is a bonus."
+          }

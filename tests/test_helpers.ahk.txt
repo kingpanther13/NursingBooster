@@ -1,0 +1,83 @@
+; ===========================================================================
+; test_helpers.ahk - Yunit test suite for NursingBooster helper functions
+; AutoHotkey v1.1+ — run with: AutoHotkey.exe /ErrorStdOut test_helpers.ahk
+;
+; To run: rename to .ahk (or copy), then execute
+; These tests validate pure-logic helper functions WITHOUT needing CPRS
+; ===========================================================================
+#SingleInstance force
+#NoEnv
+SetBatchLines, -1
+
+; Include Yunit framework
+#Include %A_ScriptDir%\..\tools\Yunit\Yunit.ahk
+#Include %A_ScriptDir%\..\tools\Yunit\Window.ahk
+#Include %A_ScriptDir%\..\tools\Yunit\Stdout.ahk
+
+; Run tests with both Window and Stdout output
+Yunit.Use(YunitWindow, YunitStdout).Test(SanitizeTests, PathTests)
+return
+
+; ===========================================================================
+; Test Suite: Filename Sanitization
+; ===========================================================================
+class SanitizeTests {
+    TestBasicName() {
+        result := SanitizeFilename("Negative Assessment")
+        Yunit.Assert(result = "Negative Assessment", "Basic name should pass through unchanged")
+    }
+
+    TestSpecialChars() {
+        result := SanitizeFilename("Test/File:Name*Bad")
+        Yunit.Assert(!InStr(result, "/"), "Should strip forward slashes")
+        Yunit.Assert(!InStr(result, ":"), "Should strip colons")
+        Yunit.Assert(!InStr(result, "*"), "Should strip asterisks")
+    }
+
+    TestEmptyString() {
+        result := SanitizeFilename("")
+        Yunit.Assert(result = "", "Empty string should return empty")
+    }
+}
+
+; ===========================================================================
+; Test Suite: Path Building
+; ===========================================================================
+class PathTests {
+    TestTemplatePathBuild() {
+        baseDir := "C:\Users\TestUser\OneDrive\CPRSBooster\NursingTemplates"
+        name := "Negative Assessment"
+        expected := baseDir . "\" . name . ".json"
+        result := baseDir . "\" . SanitizeFilename(name) . ".json"
+        Yunit.Assert(result = expected, "Template path should be properly constructed")
+    }
+
+    TestTrailingBackslash() {
+        ; Ensure path building handles dirs with/without trailing backslash
+        dir1 := "C:\Foo\"
+        dir2 := "C:\Foo"
+        file := "bar.json"
+        path1 := RTrim(dir1, "\") . "\" . file
+        path2 := RTrim(dir2, "\") . "\" . file
+        Yunit.Assert(path1 = path2, "Paths should match regardless of trailing backslash")
+    }
+}
+
+; ===========================================================================
+; Helper functions under test (extract these from your main script later)
+; For now, inline stubs that mirror production logic
+; ===========================================================================
+
+SanitizeFilename(name) {
+    ; Remove characters that are invalid in Windows filenames
+    StringReplace, name, name, /, , All
+    StringReplace, name, name, \, , All
+    StringReplace, name, name, :, , All
+    StringReplace, name, name, *, , All
+    StringReplace, name, name, ?, , All
+    StringReplace, name, name, ", , All
+    StringReplace, name, name, <, , All
+    StringReplace, name, name, >, , All
+    StringReplace, name, name, |, , All
+    return name
+}
