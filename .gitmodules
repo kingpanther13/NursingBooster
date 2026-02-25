@@ -1,0 +1,6 @@
+[submodule "tools/Yunit"]
+	path = tools/Yunit
+	url = https://github.com/Uberi/Yunit.git
+[submodule "tools/ClautoHotkey"]
+	path = tools/ClautoHotkey
+	url = https://github.com/012090120901209/ClautoHotkey.git
