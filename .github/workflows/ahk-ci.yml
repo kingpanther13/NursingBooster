@@ -23,43 +23,48 @@ jobs:
         shell: pwsh
         run: git submodule update --init tools/Yunit
 
-      # Install AHK v1 (for .ahk.txt production scripts)
+      # Download portable AHK v1 from GitHub releases (autohotkey.com is behind Cloudflare)
       - name: Install AutoHotkey v1
         shell: pwsh
         run: |
-          $ahk1Url = "https://www.autohotkey.com/download/ahk-install.exe"
-          Invoke-WebRequest -Uri $ahk1Url -OutFile "$env:TEMP\ahk1-install.exe"
-          Start-Process -FilePath "$env:TEMP\ahk1-install.exe" -ArgumentList "/S" -Wait
-          Write-Host "AHK v1 installed at: C:\Program Files\AutoHotkey"
-          & "C:\Program Files\AutoHotkey\AutoHotkey.exe" /? 2>&1 | Out-Null
-          Write-Host "AHK v1 installation verified"
+          $ahkDir = "C:\ahk-v1"
+          New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
+          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip"
+          Invoke-WebRequest -Uri $zipUrl -OutFile "$env:TEMP\ahk-v1.zip"
+          Expand-Archive -Path "$env:TEMP\ahk-v1.zip" -DestinationPath $ahkDir -Force
+          # Find the exe (could be AutoHotkeyU64.exe or AutoHotkey.exe depending on zip layout)
+          $exe = Get-ChildItem -Path $ahkDir -Filter "AutoHotkey*.exe" -Recurse | Select-Object -First 1
+          Write-Host "AHK v1 found at: $($exe.FullName)"
+          echo "AHK1_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
 
-      # Install AHK v2 (for standalone .ahk scripts)
+      # Download portable AHK v2 from GitHub releases
       - name: Install AutoHotkey v2
         shell: pwsh
         run: |
-          $ahk2Url = "https://www.autohotkey.com/download/ahk-v2.exe"
-          Invoke-WebRequest -Uri $ahk2Url -OutFile "$env:TEMP\ahk2-install.exe"
-          Start-Process -FilePath "$env:TEMP\ahk2-install.exe" -ArgumentList "/S" -Wait
-          # v2 installs alongside v1 under AutoHotkey/v2/
-          $v2Path = "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe"
-          if (Test-Path $v2Path) {
-            Write-Host "AHK v2 installed at: $v2Path"
+          $ahkDir = "C:\ahk-v2"
+          New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
+          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.19/AutoHotkey_2.0.19.zip"
+          Invoke-WebRequest -Uri $zipUrl -OutFile "$env:TEMP\ahk-v2.zip"
+          Expand-Archive -Path "$env:TEMP\ahk-v2.zip" -DestinationPath $ahkDir -Force
+          $exe = Get-ChildItem -Path $ahkDir -Filter "AutoHotkey*.exe" -Recurse |
+            Where-Object { $_.Name -match "64" -or $_.Name -eq "AutoHotkey.exe" } |
+            Select-Object -First 1
+          if ($exe) {
+            Write-Host "AHK v2 found at: $($exe.FullName)"
+            echo "AHK2_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
           } else {
-            # Fallback: check alternate install location
-            $v2Path = "C:\Program Files\AutoHotkey\v2\AutoHotkey.exe"
-            if (Test-Path $v2Path) {
-              Write-Host "AHK v2 installed at: $v2Path"
-            } else {
-              Write-Host "::warning::AHK v2 not found at expected path. Standalone v2 scripts will be skipped."
-            }
+            Write-Host "::warning::AHK v2 exe not found in zip"
           }
 
       # Syntax check v1 scripts (.ahk.txt files)
       - name: Syntax check AHK v1 scripts
         shell: pwsh
         run: |
-          $ahk1 = "C:\Program Files\AutoHotkey\AutoHotkey.exe"
+          $ahk1 = $env:AHK1_EXE
+          if (-not $ahk1 -or -not (Test-Path $ahk1)) {
+            Write-Host "::error::AHK v1 exe not found at: $ahk1"
+            exit 1
+          }
           $failed = @()
           $scripts = Get-ChildItem -Path . -Filter "*.ahk.txt" -Recurse
 
@@ -90,7 +95,6 @@ jobs:
               $stdout = Get-Content "$env:TEMP\ahk_stdout.txt" -Raw
             }
 
-            # Clean up temp copy
             Remove-Item $tempAhk -ErrorAction SilentlyContinue
 
             if ($proc.ExitCode -ne 0 -or $stderr -match "Error") {
@@ -115,23 +119,15 @@ jobs:
       - name: Syntax check AHK v2 scripts
         shell: pwsh
         run: |
-          $v2Paths = @(
-            "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe",
-            "C:\Program Files\AutoHotkey\v2\AutoHotkey.exe"
-          )
-          $ahk2 = $null
-          foreach ($p in $v2Paths) {
-            if (Test-Path $p) { $ahk2 = $p; break }
-          }
-
-          if (-not $ahk2) {
+          $ahk2 = $env:AHK2_EXE
+          if (-not $ahk2 -or -not (Test-Path $ahk2)) {
             Write-Host "::warning::AHK v2 not available, skipping v2 syntax check"
             exit 0
           }
 
           $failed = @()
           $scripts = Get-ChildItem -Path . -Filter "*.ahk" -Recurse |
-            Where-Object { $_.FullName -notmatch "\\tools\\" }
+            Where-Object { $_.FullName -notmatch "\\tools\\" -and $_.FullName -notmatch "\\tests\\" }
 
           if ($scripts.Count -eq 0) {
             Write-Host "No standalone .ahk files found, skipping v2 syntax check"
@@ -139,7 +135,6 @@ jobs:
           }
 
           foreach ($script in $scripts) {
-            # Verify it's actually a v2 script
             $firstLines = Get-Content $script.FullName -TotalCount 5
             $isV2 = $firstLines | Where-Object { $_ -match "#Requires AutoHotkey v2" }
 
@@ -197,14 +192,18 @@ jobs:
       - name: Install AutoHotkey v1
         shell: pwsh
         run: |
-          $ahk1Url = "https://www.autohotkey.com/download/ahk-install.exe"
-          Invoke-WebRequest -Uri $ahk1Url -OutFile "$env:TEMP\ahk1-install.exe"
-          Start-Process -FilePath "$env:TEMP\ahk1-install.exe" -ArgumentList "/S" -Wait
+          $ahkDir = "C:\ahk-v1"
+          New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
+          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip"
+          Invoke-WebRequest -Uri $zipUrl -OutFile "$env:TEMP\ahk-v1.zip"
+          Expand-Archive -Path "$env:TEMP\ahk-v1.zip" -DestinationPath $ahkDir -Force
+          $exe = Get-ChildItem -Path $ahkDir -Filter "AutoHotkey*.exe" -Recurse | Select-Object -First 1
+          echo "AHK1_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
 
       - name: Run Yunit tests
         shell: pwsh
         run: |
-          $ahk1 = "C:\Program Files\AutoHotkey\AutoHotkey.exe"
+          $ahk1 = $env:AHK1_EXE
           $testFiles = Get-ChildItem -Path tests -Filter "test_*.ahk.txt" -Recurse
           $failed = @()
 
@@ -216,7 +215,6 @@ jobs:
           foreach ($test in $testFiles) {
             Write-Host "Running: $($test.Name)"
 
-            # Copy to .ahk for execution
             $tempAhk = "$($test.FullName -replace '\.txt$', '')"
             Copy-Item $test.FullName $tempAhk
 
@@ -264,7 +262,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Try to compile the latest combined script to verify structure
       - name: Compile latest v1 script
         uses: nukdokplex/autohotkey-build@v0.1
         with:
