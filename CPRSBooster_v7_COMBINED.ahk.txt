@@ -21853,7 +21853,7 @@ NB_MacroLVAction:
     }
 return
 
-; --- Edit Step dialog (Gui 73) ---
+; --- Edit Step dialog (Gui 74) ---
 NB_MacroEditStep:
     Gui, 69:Default
     global NB_MacroSteps, NB_AppTitle, NB_EditStepRow
@@ -21867,35 +21867,35 @@ NB_MacroEditStep:
     editCount := step.count
     editDelay := step.delay
 
-    Gui, 73:Destroy
-    Gui, 73:+AlwaysOnTop +ToolWindow +Owner69
-    Gui, 73:Font, s9, Segoe UI
-    Gui, 73:Color, F5F5F5
+    Gui, 74:Destroy
+    Gui, 74:+AlwaysOnTop +ToolWindow +Owner69
+    Gui, 74:Font, s9, Segoe UI
+    Gui, 74:Color, F5F5F5
 
     nb_editRow := NB_EditStepRow
-    Gui, 73:Add, Text, x10 y10, Editing step #%nb_editRow%
+    Gui, 74:Add, Text, x10 y10, Editing step #%nb_editRow%
 
-    Gui, 73:Add, Text, x10 y38, Key:
+    Gui, 74:Add, Text, x10 y38, Key:
     keyList := "Tab|Shift+Tab|Space|Down|Up|Left|Right|Enter|Escape|Home|End"
-    Gui, 73:Add, DropDownList, x70 y35 w120 vNB_EditKeyChoice, %keyList%
+    Gui, 74:Add, DropDownList, x70 y35 w120 vNB_EditKeyChoice, %keyList%
     ; Select the current key
-    GuiControl, 73:ChooseString, NB_EditKeyChoice, %editKey%
+    GuiControl, 74:ChooseString, NB_EditKeyChoice, %editKey%
 
-    Gui, 73:Add, Text, x10 y68, Count:
-    Gui, 73:Add, Edit, x70 y65 w50 vNB_EditCountVal, %editCount%
-    Gui, 73:Add, UpDown, Range1-99, %editCount%
+    Gui, 74:Add, Text, x10 y68, Count:
+    Gui, 74:Add, Edit, x70 y65 w50 vNB_EditCountVal, %editCount%
+    Gui, 74:Add, UpDown, Range1-99, %editCount%
 
-    Gui, 73:Add, Text, x10 y98, Delay (ms):
-    Gui, 73:Add, Edit, x70 y95 w50 vNB_EditDelayVal, %editDelay%
+    Gui, 74:Add, Text, x10 y98, Delay (ms):
+    Gui, 74:Add, Edit, x70 y95 w50 vNB_EditDelayVal, %editDelay%
 
-    Gui, 73:Add, Button, x10 y130 w80 h28 gNB_EditStepSave Default, OK
-    Gui, 73:Add, Button, x100 y130 w80 h28 gNB_EditStepCancel, Cancel
+    Gui, 74:Add, Button, x10 y130 w80 h28 gNB_EditStepSave Default, OK
+    Gui, 74:Add, Button, x100 y130 w80 h28 gNB_EditStepCancel, Cancel
 
-    Gui, 73:Show, w200 h168, Edit Step
+    Gui, 74:Show, w200 h168, Edit Step
 return
 
 NB_EditStepSave:
-    Gui, 73:Submit
+    Gui, 74:Submit
     global NB_MacroSteps, NB_EditStepRow
     newKey := NB_EditKeyChoice
     newCount := NB_EditCountVal + 0
@@ -21905,14 +21905,14 @@ NB_EditStepSave:
     if (newDelay < 0)
         newDelay := 150
     NB_MacroSteps[NB_EditStepRow] := {key: newKey, count: newCount, delay: newDelay}
-    Gui, 73:Destroy
+    Gui, 74:Destroy
     NB_MacroRefreshList()
 return
 
 NB_EditStepCancel:
-73GuiClose:
-73GuiEscape:
-    Gui, 73:Destroy
+74GuiClose:
+74GuiEscape:
+    Gui, 74:Destroy
 return
 
 ; --- Bulk edit: set delay on all selected steps ---
