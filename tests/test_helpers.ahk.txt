@@ -11,11 +11,10 @@ SetBatchLines, -1
 
 ; Include Yunit framework
 #Include %A_ScriptDir%\..\tools\Yunit\Yunit.ahk
-#Include %A_ScriptDir%\..\tools\Yunit\Window.ahk
 #Include %A_ScriptDir%\..\tools\Yunit\Stdout.ahk
 
-; Run tests with both Window and Stdout output
-Yunit.Use(YunitWindow, YunitStdout).Test(SanitizeTests, PathTests)
+; Run tests with Stdout output only (no GUI — safe for CI)
+Yunit.Use(YunitStdout).Test(SanitizeTests, PathTests)
 return
 
 ; ===========================================================================
