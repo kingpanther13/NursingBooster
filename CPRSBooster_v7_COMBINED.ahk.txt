@@ -106,6 +106,7 @@ global NB_MacroDir := onedrivelocal . "\NursingTemplates\KeyMacros"
 global NB_BoosterGuiVisible := 0
 global NB_ApplySpeed := 300  ; ms delay after parent toggle (slider range 50-1000)
 global NB_SpeedOverride := 0  ; 1 = use main panel speed, 0 = use per-template speed
+global NB_SettingsTplPathMap := {}  ; maps dropdown display name → full file path
 global NB_CPRSDetected := 0
 global NB_HotkeyConfigPath := onedrivelocal . "\NursingTemplates\hotkey_buttons.json"
 global NB_HK1_Label := "Quick 1"
@@ -773,7 +774,7 @@ NB_SettingsVisible := 0
 Gui, 73:Destroy
 Gui, 73:Color, 1a1a2e
 Gui, 73:Font, s9 cWhite, Segoe UI
-Gui, 73:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Nursing Booster Settings
+Gui, 73:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
 Gui, 73:Font, s7 c00FF88, Segoe UI
 Gui, 73:Add, Text, x10 y30 w65 h16 BackgroundTrans, Template:
 Gui, 73:Add, DropDownList, x80 y27 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
@@ -20131,11 +20132,14 @@ NB_SettingsTplChanged:
     GuiControlGet, selectedTpl, 73:, NB_SettingsTplDDL
     if (selectedTpl = "")
         return
-    tplPath := NB_TemplateDir . "\" . NB_SanitizeFilename(selectedTpl) . ".json"
+    tplPath := NB_SettingsTplPathMap[selectedTpl]
+    if (tplPath = "")
+        return
     tplSpeed := NB_ReadTemplateSpeed(tplPath)
+    displayName := RegExReplace(selectedTpl, "\s*\[(NB|CF)\]$", "")
     GuiControl, 73:, NB_TplSpeedSlider, %tplSpeed%
     GuiControl, 73:, NB_TplSpeedLabel, %tplSpeed% ms
-    GuiControl, 73:, NB_TplSpeedStatus, Speed for: %selectedTpl%
+    GuiControl, 73:, NB_TplSpeedStatus, Speed for: %displayName%
 return
 
 NB_TplSpeedChanged:
@@ -20150,9 +20154,14 @@ NB_SaveTplSpeed:
         return
     }
     GuiControlGet, newSpeed, 73:, NB_TplSpeedSlider
-    tplPath := NB_TemplateDir . "\" . NB_SanitizeFilename(selectedTpl) . ".json"
+    tplPath := NB_SettingsTplPathMap[selectedTpl]
+    if (tplPath = "") {
+        MsgBox, 48, %NB_AppTitle%, Template path not found.
+        return
+    }
+    displayName := RegExReplace(selectedTpl, "\s*\[(NB|CF)\]$", "")
     if (NB_WriteTemplateSpeed(tplPath, newSpeed)) {
-        GuiControl, 73:, NB_TplSpeedStatus, Saved: %newSpeed% ms for %selectedTpl%
+        GuiControl, 73:, NB_TplSpeedStatus, Saved: %newSpeed% ms for %displayName%
     } else {
         GuiControl, 73:, NB_TplSpeedStatus, Error saving speed!
     }
@@ -21430,15 +21439,35 @@ NB_ParseTopLevelParents(jsonContent) {
 ; ---------------------------------------------------------------------------
 
 NB_RefreshSettingsTplList() {
-    global NB_TemplateDir
+    global NB_TemplateDir, CF_TemplateDir, NB_SettingsTplPathMap
     list := ""
+    NB_SettingsTplPathMap := {}
+
+    ; NB templates
     Loop, Files, %NB_TemplateDir%\*.json
     {
         name := RegExReplace(A_LoopFileName, "\.json$", "")
+        displayName := name . " [NB]"
         if (list != "")
             list .= "|"
-        list .= name
+        list .= displayName
+        NB_SettingsTplPathMap[displayName] := NB_TemplateDir . "\" . A_LoopFileName
     }
+
+    ; CPFS templates
+    Loop, Files, %CF_TemplateDir%\*.json
+    {
+        ; Skip spy dump files
+        if (InStr(A_LoopFileName, "cpfs_spy_"))
+            continue
+        name := RegExReplace(A_LoopFileName, "\.json$", "")
+        displayName := name . " [CF]"
+        if (list != "")
+            list .= "|"
+        list .= displayName
+        NB_SettingsTplPathMap[displayName] := CF_TemplateDir . "\" . A_LoopFileName
+    }
+
     GuiControl, 73:, NB_SettingsTplDDL, |%list%
 }
 
@@ -23523,6 +23552,7 @@ CF_BtnSaveTemplate:
     json := "{"
     json .= "`n  ""name"": " . CF_EscJson(cfTemplateName) . ","
     json .= "`n  ""format"": 1,"
+    json .= "`n  ""speed"": 50,"
     json .= "`n  ""app"": ""CPFlowsheets"","
     json .= "`n  ""created"": """ . cfNowTime . ""","
     json .= "`n  ""window_title"": " . CF_EscJson(cfWinTitle) . ","
@@ -23636,7 +23666,7 @@ CF_CancelLoad:
 return
 
 CF_ApplyTemplate(templatePath) {
-    global CF_AppTitle
+    global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride
 
     targetHwnd := CF_FindAddDataWindow()
     if (!targetHwnd)
@@ -23658,6 +23688,15 @@ CF_ApplyTemplate(templatePath) {
         MsgBox, 48, %CF_AppTitle%, Template has no controls.
         return
     }
+
+    ; Determine effective speed: override → main panel, else → template speed (default 50ms for CPFS)
+    cfTplSpeed := 50
+    if (RegExMatch(content, """speed"":\s*(\d+)", spdM))
+        cfTplSpeed := spdM1 + 0
+    if (NB_SpeedOverride)
+        cfEffectiveSpeed := NB_ApplySpeed
+    else
+        cfEffectiveSpeed := cfTplSpeed
 
     ToolTip, Scanning live controls...
     WinActivate, ahk_id %targetHwnd%
@@ -23773,7 +23812,7 @@ CF_ApplyTemplate(templatePath) {
             if (currentChecked != cfTplChecked) {
                 PostMessage, 0x00F5, 0, 0,, ahk_id %cfMatchHwnd%   ; BM_CLICK
                 totalApplied++
-                Sleep, 50
+                Sleep, %cfEffectiveSpeed%
             }
         }
         else if (cfTplType = "checklist") {
@@ -23796,7 +23835,7 @@ CF_ApplyTemplate(templatePath) {
                 Sleep, 30
                 PostMessage, 0x0202, 0, clickLParam,, ahk_id %cfMatchHwnd%  ; WM_LBUTTONUP
                 totalApplied++
-                Sleep, 50
+                Sleep, %cfEffectiveSpeed%
             }
         }
         else if (cfTplType = "radio") {
@@ -23806,7 +23845,7 @@ CF_ApplyTemplate(templatePath) {
                 if (!currentSelected) {
                     PostMessage, 0x00F5, 0, 0,, ahk_id %cfMatchHwnd%   ; BM_CLICK
                     totalApplied++
-                    Sleep, 50
+                    Sleep, %cfEffectiveSpeed%
                 }
             }
         }
@@ -23818,7 +23857,7 @@ CF_ApplyTemplate(templatePath) {
                 wParam := (0x0001 << 16) | ctrlId
                 PostMessage, 0x0111, wParam, cfMatchHwnd,, ahk_id %cfComboParent%  ; WM_COMMAND
                 totalApplied++
-                Sleep, 50
+                Sleep, %cfEffectiveSpeed%
             }
         }
     }
