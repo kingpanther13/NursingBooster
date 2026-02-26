@@ -7000,8 +7000,8 @@ return ;----------???---------------**************END of ctrl-Q = test of functi
 
 ; beta 11-24-24 use line below #If (WinActive("ahk_exe CPRS") || WinActive("ahk_class AutoHotkeyGUI")) && !Winexist("Consult Toolbox") ; the second part means fxn and other keys will activate even if Floating bar active
 
-#If (!IncludeToolboxLogic || !WinExist("Consult Toolbox")) && (WinActive("ahk_exe CPRS") || WinActive("ahk_class AutoHotkeyGUI")) 
-;-------***********************-------HOT KEYS BELOW WILL ONLY WORK IN CPRS given LINE ABOVE
+#If (!IncludeToolboxLogic || !WinExist("Consult Toolbox")) && (WinActive("ahk_exe CPRS") || (WinActive("ahk_class AutoHotkeyGUI") && !WinActive("ahk_id " . NB_PanelHwnd)))
+;-------***********************-------HOT KEYS BELOW WILL ONLY WORK IN CPRS given LINE ABOVE (excludes NursingBooster panel)
 
 
 
@@ -20093,7 +20093,11 @@ NB_ToggleSettings:
         NB_SettingsVisible := 0
     } else {
         NB_RefreshSettingsTplList()
-        Gui, 73:Show
+        ; Position settings panel next to the booster panel
+        WinGetPos, nbPosX, nbPosY, nbPosW, nbPosH, ahk_id %NB_PanelHwnd%
+        settingsX := nbPosX + nbPosW + 5
+        settingsY := nbPosY
+        Gui, 73:Show, x%settingsX% y%settingsY%
         NB_SettingsVisible := 1
     }
 return
