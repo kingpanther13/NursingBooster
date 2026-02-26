@@ -105,6 +105,7 @@ global NB_LogDir := onedrivelocal . "\NursingTemplates\Logs"
 global NB_MacroDir := onedrivelocal . "\NursingTemplates\KeyMacros"
 global NB_BoosterGuiVisible := 0
 global NB_ApplySpeed := 300  ; ms delay after parent toggle (slider range 50-1000)
+global NB_SpeedOverride := 0  ; 1 = use main panel speed, 0 = use per-template speed
 global NB_CPRSDetected := 0
 global NB_HotkeyConfigPath := onedrivelocal . "\NursingTemplates\hotkey_buttons.json"
 global NB_HK1_Label := "Quick 1"
@@ -758,8 +759,13 @@ Gui, 67:Add, Button, x289 y153 w68 h24 gNB_HK5_Run vNB_HK5_Btn, %NB_HK5_Label%
 Gui, 67:Add, Button, x360 y153 w20 h24 gNB_HK_Setup, ...
 Gui, 67:Font, s7 cSilver, Segoe UI
 Gui, 67:Add, Text, x5 y181 w370 h16 Center BackgroundTrans vNB_PanelStatus, Ready | CPRS: Not detected | CPFS: Not detected
+Gui, 67:Font, s7 c00FF88, Segoe UI
+Gui, 67:Add, Checkbox, x5 y200 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans, Override Speed
+Gui, 67:Add, Slider, x108 y198 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range50-1000 TickInterval100 ToolTip, %NB_ApplySpeed%
+Gui, 67:Add, Text, x305 y200 w75 h16 BackgroundTrans vNB_MainSpeedLabel, %NB_ApplySpeed% ms
 Gui, 67:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd
-Gui, 67:Show, x0 y0 w385 h202 Hide, NursingBoosterPanel
+Gui, 67:Show, x0 y0 w385 h226 Hide, NursingBoosterPanel
+GuiControl, 67:Disable, NB_MainSpeedSlider
 NB_BoosterGuiVisible := 0
 NB_SettingsVisible := 0
 
@@ -767,13 +773,18 @@ NB_SettingsVisible := 0
 Gui, 73:Destroy
 Gui, 73:Color, 1a1a2e
 Gui, 73:Font, s9 cWhite, Segoe UI
-Gui, 73:Add, Text, x5 y4 w250 h20 Center BackgroundTrans, Nursing Booster Settings
+Gui, 73:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Nursing Booster Settings
 Gui, 73:Font, s7 c00FF88, Segoe UI
-Gui, 73:Add, Text, x10 y30 w80 h16 BackgroundTrans, Apply Speed:
-Gui, 73:Add, Slider, x90 y28 w140 h22 vNB_SpeedSlider gNB_SpeedSliderChanged Range50-1000 TickInterval100 ToolTip, %NB_ApplySpeed%
-Gui, 73:Add, Text, x235 y30 w50 h16 BackgroundTrans vNB_SpeedLabel, %NB_ApplySpeed% ms
+Gui, 73:Add, Text, x10 y30 w65 h16 BackgroundTrans, Template:
+Gui, 73:Add, DropDownList, x80 y27 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
+Gui, 73:Add, Text, x10 y58 w65 h16 BackgroundTrans, Speed:
+Gui, 73:Add, Slider, x80 y56 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range50-1000 TickInterval100 ToolTip, 300
+Gui, 73:Add, Text, x215 y58 w55 h16 BackgroundTrans vNB_TplSpeedLabel, 300 ms
+Gui, 73:Add, Button, x10 y84 w80 h24 gNB_SaveTplSpeed, Save Speed
+Gui, 73:Font, s6 cSilver, Segoe UI
+Gui, 73:Add, Text, x95 y88 w185 h14 BackgroundTrans vNB_TplSpeedStatus, Select a template to edit speed
 Gui, 73:+AlwaysOnTop +ToolWindow -MinimizeBox
-Gui, 73:Show, x400 y0 w290 h58 Hide, NB Settings
+Gui, 73:Show, x400 y0 w290 h116 Hide, NB Settings
 
 ; --- NursingBooster: Start CPRS detection timer ---
 SetTimer, NB_CheckCPRS, 3000
@@ -20080,6 +20091,7 @@ NB_ToggleSettings:
         Gui, 73:Hide
         NB_SettingsVisible := 0
     } else {
+        NB_RefreshSettingsTplList()
         Gui, 73:Show
         NB_SettingsVisible := 1
     }
@@ -20102,9 +20114,48 @@ NB_DragPanel:
     PostMessage, 0xA1, 2, 0,, NursingBoosterPanel
 return
 
-NB_SpeedSliderChanged:
-    GuiControlGet, NB_ApplySpeed, 73:, NB_SpeedSlider
-    GuiControl, 73:, NB_SpeedLabel, %NB_ApplySpeed% ms
+NB_SpeedOverrideChanged:
+    GuiControlGet, NB_SpeedOverride, 67:, NB_SpeedOverrideChk
+    if (NB_SpeedOverride)
+        GuiControl, 67:Enable, NB_MainSpeedSlider
+    else
+        GuiControl, 67:Disable, NB_MainSpeedSlider
+return
+
+NB_MainSpeedChanged:
+    GuiControlGet, NB_ApplySpeed, 67:, NB_MainSpeedSlider
+    GuiControl, 67:, NB_MainSpeedLabel, %NB_ApplySpeed% ms
+return
+
+NB_SettingsTplChanged:
+    GuiControlGet, selectedTpl, 73:, NB_SettingsTplDDL
+    if (selectedTpl = "")
+        return
+    tplPath := NB_TemplateDir . "\" . NB_SanitizeFilename(selectedTpl) . ".json"
+    tplSpeed := NB_ReadTemplateSpeed(tplPath)
+    GuiControl, 73:, NB_TplSpeedSlider, %tplSpeed%
+    GuiControl, 73:, NB_TplSpeedLabel, %tplSpeed% ms
+    GuiControl, 73:, NB_TplSpeedStatus, Speed for: %selectedTpl%
+return
+
+NB_TplSpeedChanged:
+    GuiControlGet, tplSpd, 73:, NB_TplSpeedSlider
+    GuiControl, 73:, NB_TplSpeedLabel, %tplSpd% ms
+return
+
+NB_SaveTplSpeed:
+    GuiControlGet, selectedTpl, 73:, NB_SettingsTplDDL
+    if (selectedTpl = "") {
+        MsgBox, 48, %NB_AppTitle%, Select a template first.
+        return
+    }
+    GuiControlGet, newSpeed, 73:, NB_TplSpeedSlider
+    tplPath := NB_TemplateDir . "\" . NB_SanitizeFilename(selectedTpl) . ".json"
+    if (NB_WriteTemplateSpeed(tplPath, newSpeed)) {
+        GuiControl, 73:, NB_TplSpeedStatus, Saved: %newSpeed% ms for %selectedTpl%
+    } else {
+        GuiControl, 73:, NB_TplSpeedStatus, Error saving speed!
+    }
 return
 
 73GuiClose:
@@ -20578,6 +20629,7 @@ NB_BtnSaveCurrentState:
     json .= "`n  ""name"": " . NB_EscJson(templateName) . ","
     json .= "`n  ""format"": 7,"
     json .= "`n  ""matching"": ""flat-sequential"","
+    json .= "`n  ""speed"": " . NB_ApplySpeed . ","
     FormatTime, nowTime,, yyyy-MM-dd HH:mm
     json .= "`n  ""created"": """ . nowTime . ""","
     WinGetTitle, dlgTitle, ahk_id %dlgHwnd%
@@ -20626,7 +20678,7 @@ return
 ;============================================================================================
 
 NB_ApplyTemplate(templatePath) {
-    global NB_AppTitle, NB_TemplateDir, NB_ApplySpeed
+    global NB_AppTitle, NB_TemplateDir, NB_ApplySpeed, NB_SpeedOverride
     dlgHwnd := NB_FindActiveDialogWindow()
     if (!dlgHwnd)
         return
@@ -20657,6 +20709,15 @@ NB_ApplyTemplate(templatePath) {
     }
 
     tplCount := tplItems.Length()
+
+    ; Determine effective speed: override checkbox → main panel speed, else → template speed
+    tplSpeed := 300
+    if (RegExMatch(content, """speed"":\s*(\d+)", spdM))
+        tplSpeed := spdM1 + 0
+    if (NB_SpeedOverride)
+        effectiveSpeed := NB_ApplySpeed
+    else
+        effectiveSpeed := tplSpeed
 
     ; Wait for dialog to load
     ToolTip, Waiting for dialog to load...
@@ -20710,10 +20771,10 @@ NB_ApplyTemplate(templatePath) {
 
                 ; Parent toggles create/destroy children — must re-enumerate
                 if (liveCb.className = "TCPRSDialogParentCheckBox") {
-                    Sleep, %NB_ApplySpeed%
+                    Sleep, %effectiveSpeed%
                     needReEnum := true
                 } else {
-                    leafDelay := NB_ApplySpeed // 6
+                    leafDelay := effectiveSpeed // 6
                     if (leafDelay < 20)
                         leafDelay := 20
                     Sleep, %leafDelay%
@@ -21362,6 +21423,50 @@ NB_ParseTopLevelParents(jsonContent) {
         }
     }
     return states
+}
+
+; ---------------------------------------------------------------------------
+; TEMPLATE SPEED HELPERS (per-template speed settings)
+; ---------------------------------------------------------------------------
+
+NB_RefreshSettingsTplList() {
+    global NB_TemplateDir
+    list := ""
+    Loop, Files, %NB_TemplateDir%\*.json
+    {
+        name := RegExReplace(A_LoopFileName, "\.json$", "")
+        if (list != "")
+            list .= "|"
+        list .= name
+    }
+    GuiControl, 73:, NB_SettingsTplDDL, |%list%
+}
+
+NB_ReadTemplateSpeed(filePath) {
+    FileRead, content, %filePath%
+    if (ErrorLevel)
+        return 300
+    if (RegExMatch(content, """speed"":\s*(\d+)", spdM))
+        return spdM1 + 0
+    return 300
+}
+
+NB_WriteTemplateSpeed(filePath, speed) {
+    FileRead, content, %filePath%
+    if (ErrorLevel)
+        return false
+    if (RegExMatch(content, """speed"":\s*\d+")) {
+        content := RegExReplace(content, """speed"":\s*\d+", """speed"": " . speed)
+    } else {
+        ; Add speed field after "format" line
+        content := RegExReplace(content, "(""format"":\s*\d+),", "$1,`n  ""speed"": " . speed . ",")
+    }
+    f := FileOpen(filePath, "w", "UTF-8")
+    if (!f)
+        return false
+    f.Write(content)
+    f.Close()
+    return true
 }
 
 ; Parse groups array from format-3 JSON
