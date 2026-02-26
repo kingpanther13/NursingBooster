@@ -20424,24 +20424,24 @@ NB_LoadHotkeyConfig:
     if (hkJson = "")
         return
 
-    ; Parse each slot with regex
-    if (RegExMatch(hkJson, """label1"":\s*""((?:[^""\\]|\\.)*)""", m))
+    ; Parse each slot with regex (guard against empty labels — they break dropdown indexing)
+    if (RegExMatch(hkJson, """label1"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
         NB_HK1_Label := m1
     if (RegExMatch(hkJson, """action1"":\s*""((?:[^""\\]|\\.)*)""", m))
         NB_HK1_Action := m1
-    if (RegExMatch(hkJson, """label2"":\s*""((?:[^""\\]|\\.)*)""", m))
+    if (RegExMatch(hkJson, """label2"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
         NB_HK2_Label := m1
     if (RegExMatch(hkJson, """action2"":\s*""((?:[^""\\]|\\.)*)""", m))
         NB_HK2_Action := m1
-    if (RegExMatch(hkJson, """label3"":\s*""((?:[^""\\]|\\.)*)""", m))
+    if (RegExMatch(hkJson, """label3"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
         NB_HK3_Label := m1
     if (RegExMatch(hkJson, """action3"":\s*""((?:[^""\\]|\\.)*)""", m))
         NB_HK3_Action := m1
-    if (RegExMatch(hkJson, """label4"":\s*""((?:[^""\\]|\\.)*)""", m))
+    if (RegExMatch(hkJson, """label4"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
         NB_HK4_Label := m1
     if (RegExMatch(hkJson, """action4"":\s*""((?:[^""\\]|\\.)*)""", m))
         NB_HK4_Action := m1
-    if (RegExMatch(hkJson, """label5"":\s*""((?:[^""\\]|\\.)*)""", m))
+    if (RegExMatch(hkJson, """label5"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
         NB_HK5_Label := m1
     if (RegExMatch(hkJson, """action5"":\s*""((?:[^""\\]|\\.)*)""", m))
         NB_HK5_Action := m1
@@ -21770,8 +21770,9 @@ NB_ResolveParentCBLabel(cbHwnd) {
 
 
 ;============================================================================================
-; NURSING BOOSTER - HOTKEYS
+; NURSING BOOSTER - HOTKEYS (global — not restricted to CPRS window)
 ;============================================================================================
+#If  ; Clear context so these hotkeys work regardless of active window
 
 ^+b::
     gosub NB_TogglePanel
