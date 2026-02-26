@@ -23552,7 +23552,7 @@ CF_BtnSaveTemplate:
     json := "{"
     json .= "`n  ""name"": " . CF_EscJson(cfTemplateName) . ","
     json .= "`n  ""format"": 1,"
-    json .= "`n  ""speed"": 50,"
+    json .= "`n  ""speed"": 300,"
     json .= "`n  ""app"": ""CPFlowsheets"","
     json .= "`n  ""created"": """ . cfNowTime . ""","
     json .= "`n  ""window_title"": " . CF_EscJson(cfWinTitle) . ","
@@ -23689,8 +23689,8 @@ CF_ApplyTemplate(templatePath) {
         return
     }
 
-    ; Determine effective speed: override → main panel, else → template speed (default 50ms for CPFS)
-    cfTplSpeed := 50
+    ; Determine effective speed: override → main panel, else → template speed (default 300ms for CPFS)
+    cfTplSpeed := 300
     if (RegExMatch(content, """speed"":\s*(\d+)", spdM))
         cfTplSpeed := spdM1 + 0
     if (NB_SpeedOverride)
