@@ -770,6 +770,9 @@ GuiControl, 67:Disable, NB_MainSpeedSlider
 NB_BoosterGuiVisible := 0
 NB_SettingsVisible := 0
 
+; Register Ctrl+Shift+B globally via Hotkey command — immune to #If context issues
+Hotkey, ^+b, NB_TogglePanel
+
 ; --- NursingBooster: Build Settings panel (Gui 73) ---
 Gui, 73:Destroy
 Gui, 73:Color, 1a1a2e
@@ -21804,12 +21807,9 @@ NB_ResolveParentCBLabel(cbHwnd) {
 
 ;============================================================================================
 ; NURSING BOOSTER - HOTKEYS (global — not restricted to CPRS window)
+; NOTE: ^+b is registered via Hotkey command in auto-execute (near Gui 67 setup)
 ;============================================================================================
 #If  ; Clear context so these hotkeys work regardless of active window
-
-^+b::
-    gosub NB_TogglePanel
-return
 
 ^+d::
     gosub NB_DumpDialogControls
