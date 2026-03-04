@@ -1,0 +1,65 @@
+F-Key Unassign Fix — How to let users remove F-key assignments
+=================================================================
+
+PROBLEM:
+Once a user assigns an action to an F-key (e.g. F2 = Sign), there
+is no way to unassign it. The dropdown only has action choices — no
+"none" or "blank" option.
+
+FIX (3 small changes):
+
+--------------------------------------------------------------
+1. Add "(Unassigned)" to the dropdown list
+--------------------------------------------------------------
+File: CPRSBooster script
+Search for the droplist variable (around line 6723-6726):
+
+    droplist := "
+    (
+    Sign|Add RN1|Add RN2|Add MSA|...
+    )"
+
+Add "(Unassigned)|" at the very beginning of the list:
+
+    droplist := "
+    (
+    (Unassigned)|Sign|Add RN1|Add RN2|Add MSA|...
+    )"
+
+--------------------------------------------------------------
+2. Handle "(Unassigned)" in the shorten() function
+--------------------------------------------------------------
+Search for "shorten(x)" (around line 4973).
+Add this block at the top of the function, before the first
+"if (x = "Sign")" check:
+
+    if (x = "(Unassigned)")
+     {
+     short := "---"
+     }
+
+This makes the toolbar button show "---" instead of a blank
+label when a key is unassigned.
+
+--------------------------------------------------------------
+3. No change needed in jumpfxn()
+--------------------------------------------------------------
+The jumpfxn() function already has "Else Return" at the bottom
+of its if/else chain. When fxn[N] is "(Unassigned)", none of
+the action branches match, so it just returns and does nothing.
+The F-key press is silently ignored. No code change needed here.
+
+--------------------------------------------------------------
+HOW IT WORKS:
+--------------------------------------------------------------
+- User opens Ctrl+Q (Booster Functions setup screen)
+- Each F-key dropdown now has "(Unassigned)" as the first option
+- Selecting it clears that F-key's assignment
+- The value "(Unassigned)" is saved to CPRSData.txt like any
+  other assignment and persists across restarts
+- On the floating toolbar, unassigned keys show "F2(---)" etc.
+- Pressing an unassigned F-key does nothing (no error, no action)
+
+--------------------------------------------------------------
+TOTAL DIFF: ~5 lines changed, 0 risk of breaking existing
+assignments — all current action names are unchanged.
