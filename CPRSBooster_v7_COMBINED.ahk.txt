@@ -764,7 +764,7 @@ Gui, 67:Font, s7 c00FF88, Segoe UI
 Gui, 67:Add, Checkbox, x5 y200 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans, Override Speed
 Gui, 67:Add, Slider, x108 y198 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range50-1000 TickInterval100 ToolTip, %NB_ApplySpeed%
 Gui, 67:Add, Text, x305 y200 w75 h16 BackgroundTrans vNB_MainSpeedLabel, %NB_ApplySpeed% ms
-Gui, 67:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd
+Gui, 67:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd +E0x08000000  ; WS_EX_NOACTIVATE — panel never steals focus from CPRS
 Gui, 67:Show, x0 y0 w385 h226 Hide, NursingBoosterPanel
 GuiControl, 67:Disable, NB_MainSpeedSlider
 NB_BoosterGuiVisible := 0
