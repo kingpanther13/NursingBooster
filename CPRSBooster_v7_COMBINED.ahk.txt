@@ -5125,6 +5125,11 @@ shorten(x) ; this function ALTERS THE DISPLAY NAME FOR FLOATING FXN CHEAT SHEET
 
 {
 
+if (x = "(Unassigned)")
+ {
+ short := "---"
+ }
+
 if (x = "Sign") 
  {
  short := "Sign"
@@ -6873,7 +6878,7 @@ Gui, 5: Font
 
 droplist := "
 (
-Sign|Add RN1|Add RN2|Add MSA|Add BOTH|Add PHARM|Add Misc|Unflag|Flag|Next Patient|Make Addendum|Edit Note|Find @@@|Quick|Spell Check|Add PROV1|Add PROV2|Phone Clinic|F2F Clinic|VVC Clinic|Add Person1|Add Person2|Add Person3|Add Person4|Add Person5|Add Person6|Add/Flag PCP|
+(Unassigned)|Sign|Add RN1|Add RN2|Add MSA|Add BOTH|Add PHARM|Add Misc|Unflag|Flag|Next Patient|Make Addendum|Edit Note|Find @@@|Quick|Spell Check|Add PROV1|Add PROV2|Phone Clinic|F2F Clinic|VVC Clinic|Add Person1|Add Person2|Add Person3|Add Person4|Add Person5|Add Person6|Add/Flag PCP|
 )"
 
 
@@ -20062,7 +20067,7 @@ NB_TogglePanel:
     }
     else
     {
-        Gui, 67:Show, NoActivate
+        Gui, 67:Show
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
     }
