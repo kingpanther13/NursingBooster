@@ -35,11 +35,11 @@ Add this block at the top of the function, before the first
 
     if (x = "(Unassigned)")
      {
-     short := "---"
+     short := ""
      }
 
-This makes the toolbar button show "---" instead of a blank
-label when a key is unassigned.
+This makes the toolbar button show blank (same as before
+any key was ever assigned).
 
 --------------------------------------------------------------
 3. No change needed in jumpfxn()
@@ -52,12 +52,12 @@ The F-key press is silently ignored. No code change needed here.
 --------------------------------------------------------------
 HOW IT WORKS:
 --------------------------------------------------------------
-- User opens Ctrl+Q (Booster Functions setup screen)
+- User opens Alt+H (Booster Functions setup screen)
 - Each F-key dropdown now has "(Unassigned)" as the first option
 - Selecting it clears that F-key's assignment
 - The value "(Unassigned)" is saved to CPRSData.txt like any
   other assignment and persists across restarts
-- On the floating toolbar, unassigned keys show "F2(---)" etc.
+- On the floating toolbar, unassigned keys show blank (same as before assignment)
 - Pressing an unassigned F-key does nothing (no error, no action)
 
 --------------------------------------------------------------

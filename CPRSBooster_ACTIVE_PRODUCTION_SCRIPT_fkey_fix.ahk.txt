@@ -4976,7 +4976,7 @@ shorten(x) ; this function ALTERS THE DISPLAY NAME FOR FLOATING FXN CHEAT SHEET
 
 if (x = "(Unassigned)")
  {
- short := "---"
+ short := ""
  }
 
 if (x = "Sign") 
