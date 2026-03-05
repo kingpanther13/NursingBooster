@@ -54,3 +54,33 @@ Users should be able to combine templates and macros into multi-step workflows �
 - The runner iterates steps sequentially, calling `NB_ApplyNamedTemplate` or `NB_ExecuteMacro` for each
 - Between steps, wait for CPRS to settle and dismiss any intermediate popups
 - Ties into the section-by-section concept — a workflow could include section sub-templates as individual steps
+
+## CPFS "Add Data" Shortcut
+
+Currently, before using any CPFS quick buttons (like "Calm/Awake"), the user must scroll and search for the "Add Data" button on the CPFS home page. This is tedious since the button can be hard to find.
+
+### Concept
+- Add an "Add Data" shortcut button to the Nursing Booster window, or better yet, incorporate it into the CPFS macro/quick button flow
+- Clicking a CPFS quick button (e.g. "Calm/Awake") from the home page would:
+  1. Automatically find and press "Add Data" to open the data entry page
+  2. Then the existing quick button logic pre-fills the data entry fields
+  3. User manually saves (or auto-saves if that option is enabled)
+- Eliminates the manual scroll/search for "Add Data" — the macro handles it
+
+### Current vs. Proposed Flow
+- **Current**: Navigate to CPFS home → scroll to find "Add Data" → click it → click "Calm/Awake" quick button → it fills out the form
+- **Proposed**: Navigate to CPFS home → click "Calm/Awake" quick button → script presses "Add Data" automatically, data entry page opens, form is pre-filled
+
+## Section-by-Section Charting — Additive/Non-Destructive Mode
+
+Building on the section-by-section assessment concept above, it must be possible to fill in individual sections **after** the initial template has been applied, without disturbing already-filled sections.
+
+### Use Case
+- Nurse clicks "Negative Assessment" button — fills out most sections with WNL defaults, but leaves certain sections (e.g. IV) blank
+- Nurse manually opens the IV section and selects the IV location by hand
+- Nurse then clicks a button (e.g. "IV Details") that fills out only the detail fields for the IV section, leaving everything else untouched
+
+### Key Requirement
+- Section fill actions must be **additive only** — they write to their target fields and ignore everything else
+- Already-charted sections must not be overwritten, cleared, or repositioned
+- This allows mixing manual entry and automated fill freely across sections in any order
