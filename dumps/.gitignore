@@ -1,3 +1,4 @@
-# Ignore locally generated dumps (manually git add -f to track specific ones)
+# Ignore everything except dump files
 *
 !.gitignore
+!*.txt

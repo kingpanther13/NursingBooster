@@ -1,3 +1,4 @@
-# Ignore locally generated logs (manually git add -f to track specific ones)
+# Ignore everything except log files
 *
 !.gitignore
+!*.txt

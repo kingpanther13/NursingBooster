@@ -18,14 +18,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            *.ahk.txt
-            *.ahk
-            tests/
-            tools/
-            NursingAddon/
-            .github/
 
       - name: Init Yunit submodule
         shell: pwsh
@@ -192,14 +184,6 @@ jobs:
     needs: syntax-check
     steps:
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            *.ahk.txt
-            *.ahk
-            tests/
-            tools/
-            NursingAddon/
-            .github/
 
       - name: Init Yunit submodule
         shell: pwsh
