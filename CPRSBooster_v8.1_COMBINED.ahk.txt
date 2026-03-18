@@ -22937,18 +22937,83 @@ CF_FindCPFlowsheetsWindow() {
 }
 
 CF_ClickAddDataButton() {
-    global CF_AppTitle
+    global CF_AppTitle, CF__foundGridToolbarHwnd
     mainHwnd := CF_FindCPFlowsheetsWindow()
     if (!mainHwnd) {
         MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.
         return
     }
 
-    ; TODO: find reliable way to trigger Add Data action
-    ; Tab switching via ShowWindow breaks Delphi's internal state.
-    ; TCM_SETCURSEL doesn't trigger Delphi's change events.
-    ; The button is owner-drawn on a TPanel inside a scrollbox — not targetable.
-    MsgBox, 64, %CF_AppTitle%, Add Data button not yet implemented.`n`nStill figuring out how to trigger this action programmatically.
+    ; Find the visible ToolBar1 inside TfraGridFrame (contains sbtnInsert = Add Data)
+    CF__foundGridToolbarHwnd := 0
+    enumTB := RegisterCallback("CF__FindGridToolbarCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", mainHwnd, "Ptr", enumTB, "Ptr", 0)
+
+    if (!CF__foundGridToolbarHwnd) {
+        MsgBox, 48, %CF_AppTitle%, Could not find the grid toolbar in CP Flowsheets.
+        return
+    }
+
+    ; sbtnInsert is the first TToolButton on this toolbar (index 0)
+    ; TB_PRESSBUTTON = 0x0403 — press button by command ID
+    ; TB_GETBUTTON = 0x0417 — get button info at index
+    ; First get the command ID of button at index 0
+    VarSetCapacity(tbBtn, 32, 0)
+    SendMessage, 0x0417, 0, &tbBtn,, ahk_id %CF__foundGridToolbarHwnd%
+    cmdId := NumGet(tbBtn, 4, "Int")
+
+    if (cmdId) {
+        ; Send WM_COMMAND with the button's command ID to the toolbar's parent
+        parentHwnd := DllCall("GetParent", "Ptr", CF__foundGridToolbarHwnd, "Ptr")
+        ; Walk up to TfraGridFrame — the command handler lives there
+        Loop, 5 {
+            if (!parentHwnd)
+                break
+            VarSetCapacity(pBuf, 256, 0)
+            DllCall("GetClassName", "Ptr", parentHwnd, "Str", pBuf, "Int", 256)
+            if (pBuf = "TfraGridFrame")
+                break
+            parentHwnd := DllCall("GetParent", "Ptr", parentHwnd, "Ptr")
+        }
+        if (parentHwnd) {
+            ; BN_CLICKED = 0, so wParam = (BN_CLICKED << 16) | cmdId = cmdId
+            PostMessage, 0x0111, cmdId, CF__foundGridToolbarHwnd,, ahk_id %parentHwnd%
+        }
+    }
+}
+
+CF__FindGridToolbarCallback(hwnd, lParam) {
+    global CF__foundGridToolbarHwnd
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if (buf != "TToolBar")
+        return 1
+
+    ; Must be visible
+    style := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
+    if !(style & 0x10000000)
+        return 1
+
+    ; Check text is ToolBar1
+    VarSetCapacity(tBuf, 256, 0)
+    DllCall("GetWindowText", "Ptr", hwnd, "Str", tBuf, "Int", 128)
+    if (tBuf != "ToolBar1")
+        return 1
+
+    ; Verify it's inside TfraGridFrame by walking parent chain
+    p := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+    Loop, 5 {
+        if (!p)
+            break
+        VarSetCapacity(pBuf, 256, 0)
+        DllCall("GetClassName", "Ptr", p, "Str", pBuf, "Int", 256)
+        if (pBuf = "TfraGridFrame") {
+            CF__foundGridToolbarHwnd := hwnd
+            return 0
+        }
+        p := DllCall("GetParent", "Ptr", p, "Ptr")
+    }
+    return 1
 }
 
 CF__FindGridPageCtrlCallback(hwnd, lParam) {
