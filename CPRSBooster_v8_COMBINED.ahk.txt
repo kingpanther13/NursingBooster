@@ -23928,10 +23928,12 @@ CF_ApplyTemplate(templatePath) {
         ToolTip, No controls applied - nothing to save
         SetTimer, CF_ClearToolTip, -3000
     } else {
-        ToolTip, Done: %totalApplied% applied`, %totalNotFound% not matched - review before submitting
-        SetTimer, CF_ClearToolTip, -5000
-        if (totalNotFound > 0 && cfNotFoundList != "")
-            MsgBox, 64, %CF_AppTitle% - Unmatched Controls, %totalNotFound% control(s) could not be matched:`n`n%cfNotFoundList%
+        cfUnmatchedTip := "Done: " . totalApplied . " applied, " . totalNotFound . " not matched"
+        if (cfNotFoundList != "")
+            cfUnmatchedTip .= " [" . RTrim(cfNotFoundList, "`n") . "]"
+        cfUnmatchedTip .= " - review before submitting"
+        ToolTip, %cfUnmatchedTip%
+        SetTimer, CF_ClearToolTip, -8000
     }
 
     ; Re-assert AlwaysOnTop on the panel — WinActivate on CPFS dialog strips it
