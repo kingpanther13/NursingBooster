@@ -22956,32 +22956,23 @@ CF_ClickAddDataButton() {
         return
     }
 
-    ; sbtnInsert is the first TToolButton (index 0)
-    ; TB_GETBUTTON needs a buffer in the remote process
-    WinGet, tbPid, PID, ahk_id %CF__foundGridToolbarHwnd%
-    hProc := DllCall("OpenProcess", "UInt", 0x001F0FFF, "Int", 0, "UInt", tbPid, "Ptr")
-    if (!hProc) {
-        MsgBox, 48, %CF_AppTitle%, Could not access CP Flowsheets process.
-        return
+    ; sbtnInsert is at button index 0 on this toolbar.
+    ; Find its command ID by scanning with TB_COMMANDTOINDEX (no cross-process memory needed).
+    ; TB_COMMANDTOINDEX = 0x0419 — returns button index for a command ID, or -1 if not found.
+    cmdId := 0
+    Loop, 200 {
+        SendMessage, 0x0419, A_Index, 0,, ahk_id %CF__foundGridToolbarHwnd%
+        if (ErrorLevel = 0) {  ; index 0 = our first button (Add Data)
+            cmdId := A_Index
+            break
+        }
     }
-    remoteMem := DllCall("VirtualAllocEx", "Ptr", hProc, "Ptr", 0, "UInt", 64, "UInt", 0x1000, "UInt", 0x04, "Ptr")
-
-    ; TB_GETBUTTON = 0x0417 — get TBBUTTON struct for button at index 0
-    SendMessage, 0x0417, 0, remoteMem,, ahk_id %CF__foundGridToolbarHwnd%
-
-    ; Read TBBUTTON from remote process: idCommand is at offset 4
-    VarSetCapacity(localBtn, 32, 0)
-    DllCall("ReadProcessMemory", "Ptr", hProc, "Ptr", remoteMem, "Ptr", &localBtn, "UInt", 32, "Ptr*", 0)
-    cmdId := NumGet(localBtn, 4, "Int")
-
-    DllCall("VirtualFreeEx", "Ptr", hProc, "Ptr", remoteMem, "UInt", 0, "UInt", 0x8000)
-    DllCall("CloseHandle", "Ptr", hProc)
 
     if (cmdId) {
         ; Send WM_COMMAND to the main CPFS window — Delphi routes actions from there
         PostMessage, 0x0111, cmdId, CF__foundGridToolbarHwnd,, ahk_id %mainHwnd%
     } else {
-        MsgBox, 48, %CF_AppTitle%, Found the toolbar but could not read button command ID.
+        MsgBox, 48, %CF_AppTitle%, Found the toolbar but could not determine Add Data command ID.
     }
 }
 
