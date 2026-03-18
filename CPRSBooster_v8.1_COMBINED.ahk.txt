@@ -23947,10 +23947,8 @@ CF_ApplyTemplate(templatePath) {
     global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride
 
     targetHwnd := CF_FindAddDataWindow()
-    if (!targetHwnd)
-        targetHwnd := CF_FindCPFlowsheetsWindow()
     if (!targetHwnd) {
-        MsgBox, 48, %CF_AppTitle%, CP Flowsheets window not found.
+        MsgBox, 48, %CF_AppTitle%, Not on the Add Data screen.`nClick Add Data first`, or check Auto-Add on the Booster panel.
         return
     }
 
