@@ -20326,6 +20326,14 @@ NB_RunHotkeyAction(action, slotName) {
     else if (RegExMatch(action, "^cf_template:(.+)$", m)) {
         templatePath := CF_TemplateDir . "\" . m1 . ".json"
         if (FileExist(templatePath)) {
+            if (CF_ChainAddData) {
+                CF_ClickAddDataButton()
+                Loop, 20 {
+                    Sleep, 250
+                    if (CF_FindAddDataWindow())
+                        break
+                }
+            }
             CF_ApplyTemplate(templatePath)
         } else {
             MsgBox, 48, %NB_AppTitle%, CPFS template "%m1%" not found.`n`nSave a template with that name using CPFS Save first.
