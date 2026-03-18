@@ -22937,7 +22937,7 @@ CF_FindCPFlowsheetsWindow() {
 }
 
 CF_ClickAddDataButton() {
-    global CF_AppTitle, CF__foundGridToolbarHwnd
+    global CF_AppTitle, CF__foundGridToolbarHwnd, CF__debugToolbarInfo
     mainHwnd := CF_FindCPFlowsheetsWindow()
     if (!mainHwnd) {
         MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.
@@ -22948,7 +22948,7 @@ CF_ClickAddDataButton() {
     ; Enumerate all child windows manually instead of using a callback
     CF__foundGridToolbarHwnd := 0
     CF__debugToolbarInfo := ""
-    enumTB := RegisterCallback("CF__FindGridToolbarCallback")
+    enumTB := RegisterCallback("CF__FindGridToolbarCallback", "Fast")
     DllCall("EnumChildWindows", "Ptr", mainHwnd, "Ptr", enumTB, "Ptr", 0)
 
     if (!CF__foundGridToolbarHwnd) {
@@ -22980,6 +22980,8 @@ CF_ClickAddDataButton() {
     if (cmdId) {
         ; Send WM_COMMAND to the main CPFS window — Delphi routes actions from there
         PostMessage, 0x0111, cmdId, CF__foundGridToolbarHwnd,, ahk_id %mainHwnd%
+    } else {
+        MsgBox, 48, %CF_AppTitle%, Found the toolbar but could not read button command ID.
     }
 }
 
