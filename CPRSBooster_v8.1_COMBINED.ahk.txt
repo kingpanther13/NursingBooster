@@ -109,7 +109,6 @@ global NB_ApplySpeed := 300  ; ms delay after parent toggle (slider range 50-100
 global NB_SpeedOverride := 0  ; 1 = use main panel speed, 0 = use per-template speed
 global NB_SettingsTplPathMap := {}  ; maps dropdown display name → full file path
 global NB_DebugLogging := 0  ; 1 = write debug logs for NB and CPFS save/apply
-global NB_SettingsConfigPath := onedrivelocal . "\NursingTemplates\booster_settings.json"
 global NB_CPRSDetected := 0
 global NB_HotkeyConfigPath := onedrivelocal . "\NursingTemplates\hotkey_buttons.json"
 global NB_HK1_Label := "Quick 1"
@@ -436,9 +435,6 @@ If (driveactive= 0)  ; *************we have NO working drives
 			FileCreateDir, %CF_LogDir%
 		}
 	}
-
-	; Load persistent booster settings (debug logging toggle, etc.)
-	NB_LoadBoosterSettings()
 
 ; ------------------- END make directory prn
 
@@ -805,7 +801,8 @@ Gui, 73:Add, Button, x10 y84 w80 h24 gNB_SaveTplSpeed, Save Speed
 Gui, 73:Font, s6 cSilver, Segoe UI
 Gui, 73:Add, Text, x95 y88 w185 h14 BackgroundTrans vNB_TplSpeedStatus, Select a template to edit speed
 Gui, 73:Font, s7 c00FF88, Segoe UI
-Gui, 73:Add, Checkbox, x10 y110 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged BackgroundTrans, Debug Logging (NB + CPFS)
+nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
+Gui, 73:Add, Checkbox, x10 y110 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
 Gui, 73:+AlwaysOnTop +ToolWindow -MinimizeBox
 Gui, 73:Show, x400 y0 w290 h136 Hide, NB Settings
 
@@ -8569,7 +8566,8 @@ OneTimeAddPCPEducation :=Array[77]
 SiteSpecificDownKeysToMedOrderMenu :=Array[78]
 GotRxQOInstructions :=Array[79]
 AmbDictationDone :=Array[80]
-lastprompttype := Array[81] 
+lastprompttype := Array[81]
+NB_DebugLogging := (Array[82] = 1) ? 1 : 0
 
  ; msgbox, %NoShortcut%  ;
 
@@ -8767,7 +8765,7 @@ writeArray[78] := SiteSpecificDownKeysToMedOrderMenu
 writeArray[79] := GotRxQOInstructions
 writeArray[80] := AmbDictationDone
 WriteArray[81] := lastprompttype
-
+WriteArray[82] := NB_DebugLogging
 
 
 
@@ -20224,31 +20222,12 @@ return
 NB_DebugLogChanged:
     GuiControlGet, chkVal, 73:, NB_DebugLogChk
     NB_DebugLogging := chkVal
-    NB_SaveBoosterSettings()
 return
 
 73GuiClose:
     Gui, 73:Hide
     NB_SettingsVisible := 0
 return
-
-NB_LoadBoosterSettings() {
-    global NB_SettingsConfigPath, NB_DebugLogging
-    if (!FileExist(NB_SettingsConfigPath))
-        return
-    FileRead, sJson, %NB_SettingsConfigPath%
-    if (RegExMatch(sJson, """debug_logging"":\s*(true|false)", dm))
-        NB_DebugLogging := (dm1 = "true") ? 1 : 0
-    ; Update checkbox if GUI already built
-    GuiControl, 73:, NB_DebugLogChk, %NB_DebugLogging%
-}
-
-NB_SaveBoosterSettings() {
-    global NB_SettingsConfigPath, NB_DebugLogging
-    sJson := "{`n  ""debug_logging"": " . (NB_DebugLogging ? "true" : "false") . "`n}"
-    FileDelete, %NB_SettingsConfigPath%
-    FileAppend, %sJson%, %NB_SettingsConfigPath%, UTF-8
-}
 
 
 ;============================================================================================
