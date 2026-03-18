@@ -22936,40 +22936,67 @@ CF_FindCPFlowsheetsWindow() {
 }
 
 CF_ClickAddDataButton() {
-    global CF_AppTitle, CF__foundToolbarHwnd
+    global CF_AppTitle, CF__foundPageCtrlHwnd
     mainHwnd := CF_FindCPFlowsheetsWindow()
     if (!mainHwnd) {
         MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.
         return
     }
 
-    ; Find the tBarCommands toolbar via EnumChildWindows
-    CF__foundToolbarHwnd := 0
-    enumTB := RegisterCallback("CF__FindToolbarCallback", "Fast")
-    DllCall("EnumChildWindows", "Ptr", mainHwnd, "Ptr", enumTB, "Ptr", 0)
+    ; Find the TPageControl inside TfraGridView that has the tbshtGrids/tbshtInput tabs
+    CF__foundPageCtrlHwnd := 0
+    enumPC := RegisterCallback("CF__FindGridPageCtrlCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", mainHwnd, "Ptr", enumPC, "Ptr", 0)
 
-    if (!CF__foundToolbarHwnd) {
-        MsgBox, 48, %CF_AppTitle%, Could not find the commands toolbar in CP Flowsheets.
+    if (!CF__foundPageCtrlHwnd) {
+        MsgBox, 48, %CF_AppTitle%, Could not find the grid tab control in CP Flowsheets.
         return
     }
 
-    ; "Add Data" is the first button — click near the left side of the toolbar
-    ControlClick, x24 y24, ahk_id %CF__foundToolbarHwnd%
+    ; Get current tab count to find the input tab
+    ; TCM_GETITEMCOUNT = 0x1304
+    SendMessage, 0x1304, 0, 0,, ahk_id %CF__foundPageCtrlHwnd%
+    tabCount := ErrorLevel
+
+    ; TCM_GETCURSEL = 0x130B
+    SendMessage, 0x130B, 0, 0,, ahk_id %CF__foundPageCtrlHwnd%
+    currentTab := ErrorLevel
+
+    ; The input tab is typically index 1 (tbshtGrids=0, tbshtInput=1)
+    ; TCM_SETCURSEL = 0x130C — selects tab visually
+    SendMessage, 0x130C, 1, 0,, ahk_id %CF__foundPageCtrlHwnd%
+    Sleep, 50
+    ; Delphi TPageControl needs TCN_SELCHANGE notification to actually switch
+    ; Send WM_NOTIFY with TCN_SELCHANGE (-552) to the parent
+    parentHwnd := DllCall("GetParent", "Ptr", CF__foundPageCtrlHwnd, "Ptr")
+    if (parentHwnd) {
+        ; Build NMHDR struct: hwndFrom, idFrom, code
+        ctrlId := DllCall("GetDlgCtrlID", "Ptr", CF__foundPageCtrlHwnd, "Int")
+        VarSetCapacity(nmhdr, 24, 0)  ; 24 bytes for 64-bit safety
+        NumPut(CF__foundPageCtrlHwnd, nmhdr, 0, "Ptr")
+        NumPut(ctrlId, nmhdr, A_PtrSize, "UInt")
+        NumPut(-552, nmhdr, A_PtrSize + 4, "Int")  ; TCN_SELCHANGE
+        SendMessage, 0x004E, ctrlId, &nmhdr,, ahk_id %parentHwnd%  ; WM_NOTIFY
+    }
 }
 
-CF__FindToolbarCallback(hwnd, lParam) {
-    global CF__foundToolbarHwnd
+CF__FindGridPageCtrlCallback(hwnd, lParam) {
+    global CF__foundPageCtrlHwnd
     VarSetCapacity(buf, 256, 0)
     DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
-    if (buf != "TToolBar")
+    if (buf != "TPageControl")
         return 1
 
-    ; Check window text for tBarCommands
-    VarSetCapacity(tBuf, 256, 0)
-    DllCall("GetWindowText", "Ptr", hwnd, "Str", tBuf, "Int", 128)
-    if (tBuf = "tBarCommands") {
-        CF__foundToolbarHwnd := hwnd
-        return 0  ; stop enumerating
+    ; Check if this page control is visible and inside TfraGridView
+    ; by checking if its parent is TfraGridView
+    parentHwnd := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+    if (!parentHwnd)
+        return 1
+    VarSetCapacity(pBuf, 256, 0)
+    DllCall("GetClassName", "Ptr", parentHwnd, "Str", pBuf, "Int", 256)
+    if (pBuf = "TfraGridView") {
+        CF__foundPageCtrlHwnd := hwnd
+        return 0
     }
     return 1
 }
