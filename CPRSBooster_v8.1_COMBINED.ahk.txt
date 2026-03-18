@@ -22956,24 +22956,12 @@ CF_ClickAddDataButton() {
         return
     }
 
-    ; sbtnInsert is at button index 0 on this toolbar.
-    ; Find its command ID by scanning with TB_COMMANDTOINDEX (no cross-process memory needed).
-    ; TB_COMMANDTOINDEX = 0x0419 — returns button index for a command ID, or -1 if not found.
-    cmdId := 0
-    Loop, 200 {
-        SendMessage, 0x0419, A_Index, 0,, ahk_id %CF__foundGridToolbarHwnd%
-        if (ErrorLevel = 0) {  ; index 0 = our first button (Add Data)
-            cmdId := A_Index
-            break
-        }
-    }
-
-    if (cmdId) {
-        ; Send WM_COMMAND to the main CPFS window — Delphi routes actions from there
-        PostMessage, 0x0111, cmdId, CF__foundGridToolbarHwnd,, ahk_id %mainHwnd%
-    } else {
-        MsgBox, 48, %CF_AppTitle%, Found the toolbar but could not determine Add Data command ID.
-    }
+    ; Delphi's TToolBar doesn't respond to standard TB_* messages.
+    ; sbtnInsert (Add Data) is always the first button on this toolbar.
+    ; ControlClick at the first button position — coordinates are relative
+    ; to the toolbar control itself, not the screen, so this works regardless
+    ; of window position, screen size, or scroll state.
+    ControlClick, x40 y25, ahk_id %CF__foundGridToolbarHwnd%
 }
 
 CF__FindGridToolbarCallback(hwnd, lParam) {
