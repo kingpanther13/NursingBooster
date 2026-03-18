@@ -23853,20 +23853,14 @@ CF_ApplyTemplate(templatePath) {
             cfCLIdx := liveControls[bestLiveIdx].checklistIdx
             currentCLChecked := CF_ReadCheckListItemState(cfMatchHwnd, cfCLIdx)
             if (currentCLChecked != cfTplChecked) {
-                ; Focus the listbox and select the item
+                ; Focus the listbox, select the item, then Space to toggle checkbox
                 DllCall("SetFocus", "Ptr", cfMatchHwnd)
-                Sleep, 30
+                Sleep, 50
                 SendMessage, 0x0186, cfCLIdx, 0,, ahk_id %cfMatchHwnd%   ; LB_SETCURSEL
+                Sleep, 50
+                PostMessage, 0x0100, 0x20, 0,, ahk_id %cfMatchHwnd%   ; WM_KEYDOWN VK_SPACE
                 Sleep, 30
-                ; Click on the checkbox area of the item
-                VarSetCapacity(itmRect, 16, 0)
-                SendMessage, 0x0198, cfCLIdx, &itmRect,, ahk_id %cfMatchHwnd%  ; LB_GETITEMRECT
-                itmY := (NumGet(itmRect, 4, "Int") + NumGet(itmRect, 12, "Int")) // 2  ; vertical center of item
-                ; Click at x=8 (checkbox area) within client coords
-                clickLParam := (itmY << 16) | 8
-                PostMessage, 0x0201, 0x0001, clickLParam,, ahk_id %cfMatchHwnd%  ; WM_LBUTTONDOWN
-                Sleep, 30
-                PostMessage, 0x0202, 0, clickLParam,, ahk_id %cfMatchHwnd%  ; WM_LBUTTONUP
+                PostMessage, 0x0101, 0x20, 0,, ahk_id %cfMatchHwnd%   ; WM_KEYUP VK_SPACE
                 totalApplied++
                 Sleep, %cfEffectiveSpeed%
             }
