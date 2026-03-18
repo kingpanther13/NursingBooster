@@ -22944,13 +22944,15 @@ CF_ClickAddDataButton() {
         return
     }
 
-    ; Find the visible ToolBar1 inside TfraGridFrame (contains sbtnInsert = Add Data)
+    ; Find the visible TToolBar inside TfraGridFrame (contains sbtnInsert = Add Data)
+    ; Enumerate all child windows manually instead of using a callback
     CF__foundGridToolbarHwnd := 0
-    enumTB := RegisterCallback("CF__FindGridToolbarCallback", "Fast")
+    CF__debugToolbarInfo := ""
+    enumTB := RegisterCallback("CF__FindGridToolbarCallback")
     DllCall("EnumChildWindows", "Ptr", mainHwnd, "Ptr", enumTB, "Ptr", 0)
 
     if (!CF__foundGridToolbarHwnd) {
-        MsgBox, 48, %CF_AppTitle%, Could not find the grid toolbar in CP Flowsheets.
+        MsgBox, 48, %CF_AppTitle%, Could not find the grid toolbar in CP Flowsheets.`n`nDebug:`n%CF__debugToolbarInfo%
         return
     }
 
@@ -22982,30 +22984,33 @@ CF_ClickAddDataButton() {
 }
 
 CF__FindGridToolbarCallback(hwnd, lParam) {
-    global CF__foundGridToolbarHwnd
+    global CF__foundGridToolbarHwnd, CF__debugToolbarInfo
     VarSetCapacity(buf, 256, 0)
     DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
     if (buf != "TToolBar")
         return 1
 
-    ; Must be visible
+    ; Log every TToolBar we find
     style := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
-    if !(style & 0x10000000)
-        return 1
+    vis := (style & 0x10000000) ? "Y" : "N"
 
-    ; Verify it's inside TfraGridFrame by walking parent chain
+    ; Get parent chain
+    parentChain := ""
     p := DllCall("GetParent", "Ptr", hwnd, "Ptr")
-    Loop, 10 {
+    Loop, 6 {
         if (!p)
             break
         VarSetCapacity(pBuf, 256, 0)
         DllCall("GetClassName", "Ptr", p, "Str", pBuf, "Int", 256)
+        parentChain .= pBuf . " > "
         if (pBuf = "TfraGridFrame") {
             CF__foundGridToolbarHwnd := hwnd
+            CF__debugToolbarInfo .= "MATCH: hwnd=" . hwnd . " vis=" . vis . " parents=" . parentChain . "`n"
             return 0
         }
         p := DllCall("GetParent", "Ptr", p, "Ptr")
     }
+    CF__debugToolbarInfo .= "SKIP: hwnd=" . hwnd . " vis=" . vis . " parents=" . parentChain . "`n"
     return 1
 }
 
