@@ -1,2 +1,3 @@
+# Ignore locally generated logs (manually git add -f to track specific ones)
 *
 !.gitignore
