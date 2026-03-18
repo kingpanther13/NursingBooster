@@ -138,6 +138,7 @@ global CF_LogDir := onedrivelocal . "\CPFSTemplates\Logs"
 global CF_Detected := 0
 global CF_SpyResults := []
 global CF_AutoSave := 0
+global CF_ChainAddData := 0  ; 1 = auto-click Add Data before applying CPFS template
 
 ;****************AI Folder**************
 AIPath := onedrivelocal . "\AI\"
@@ -762,7 +763,8 @@ Gui, 67:Add, Button, x131 y106 w60 h26 gCF_PanelLoad, Load
 Gui, 67:Add, Button, x194 y106 w50 h26 gCF_PanelDelete, Del
 Gui, 67:Add, Button, x247 y106 w70 h26 gCF_PanelAddData, Add Data
 Gui, 67:Font, s7 cRed, Segoe UI
-Gui, 67:Add, Checkbox, x320 y110 w60 h18 vCF_AutoSaveChk gCF_ToggleAutoSave, AutoSave
+Gui, 67:Add, Checkbox, x320 y106 w60 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
+Gui, 67:Add, Checkbox, x320 y120 w60 h14 vCF_AutoSaveChk gCF_ToggleAutoSave, AutoSave
 Gui, 67:Font, s7 cFFD700, Segoe UI
 Gui, 67:Add, Text, x5 y136 w370 h16 Center BackgroundTrans, --- Quick Actions ---
 Gui, 67:Font, s7 cBlack, Segoe UI
@@ -20256,6 +20258,12 @@ CF_PanelAddData:
     CF_ClickAddDataButton()
 return
 
+CF_ToggleAutoAdd:
+    Gui, 67:Submit, NoHide
+    global CF_ChainAddData
+    CF_ChainAddData := CF_AutoAddChk
+return
+
 CF_ToggleAutoSave:
     Gui, 67:Submit, NoHide
     global CF_AutoSave
@@ -23905,6 +23913,20 @@ CF_DoLoadTemplate:
     }
     templatePath := CF_TemplateDir . "\" . CF_SanitizeFilename(CF_LoadSelection) . ".json"
     if (FileExist(templatePath)) {
+        if (CF_ChainAddData) {
+            CF_ClickAddDataButton()
+            ; Wait for the input screen to appear
+            Loop, 20 {
+                Sleep, 250
+                addDataHwnd := CF_FindAddDataWindow()
+                if (addDataHwnd)
+                    break
+            }
+            if (!addDataHwnd) {
+                MsgBox, 48, %CF_AppTitle%, Add Data screen did not open. Try clicking Add Data manually first.
+                return
+            }
+        }
         CF_ApplyTemplate(templatePath)
     }
 return
