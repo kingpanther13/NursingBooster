@@ -20223,6 +20223,7 @@ return
 NB_DebugLogChanged:
     GuiControlGet, chkVal, 73:, NB_DebugLogChk
     NB_DebugLogging := chkVal
+    gosub, writeit
 return
 
 73GuiClose:
@@ -22936,50 +22937,99 @@ CF_FindCPFlowsheetsWindow() {
 }
 
 CF_ClickAddDataButton() {
-    global CF_AppTitle, CF__foundPageCtrlHwnd
+    global CF_AppTitle, CF__foundScrollBoxHwnd
     mainHwnd := CF_FindCPFlowsheetsWindow()
     if (!mainHwnd) {
         MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.
         return
     }
 
-    ; Find the TPageControl inside TfraGridView that has the tbshtGrids/tbshtInput tabs
-    CF__foundPageCtrlHwnd := 0
-    enumPC := RegisterCallback("CF__FindGridPageCtrlCallback", "Fast")
-    DllCall("EnumChildWindows", "Ptr", mainHwnd, "Ptr", enumPC, "Ptr", 0)
+    ; Find the TScrollBox inside TfraGridView > TPageControl > TTabSheet(tbshtGrids)
+    CF__foundScrollBoxHwnd := 0
+    enumSB := RegisterCallback("CF__FindGridScrollBoxCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", mainHwnd, "Ptr", enumSB, "Ptr", 0)
 
-    if (!CF__foundPageCtrlHwnd) {
-        MsgBox, 48, %CF_AppTitle%, Could not find the grid tab control in CP Flowsheets.
+    if (!CF__foundScrollBoxHwnd) {
+        MsgBox, 48, %CF_AppTitle%, Could not find the grid scroll area in CP Flowsheets.
         return
     }
 
-    ; Get current tab count to find the input tab
-    ; TCM_GETITEMCOUNT = 0x1304
-    SendMessage, 0x1304, 0, 0,, ahk_id %CF__foundPageCtrlHwnd%
-    tabCount := ErrorLevel
+    ; Scroll to top so the Add Data bar is visible
+    ; WM_VSCROLL with SB_TOP (6)
+    SendMessage, 0x0115, 6, 0,, ahk_id %CF__foundScrollBoxHwnd%
+    Sleep, 100
 
-    ; TCM_GETCURSEL = 0x130B
-    SendMessage, 0x130B, 0, 0,, ahk_id %CF__foundPageCtrlHwnd%
-    currentTab := ErrorLevel
+    ; Now find the TPanel that holds the Add Data buttons
+    ; It's inside TfraGridFrame > TPanel (the bar at the top of the grid)
+    ; From the dump: the right-side TPanel (630x60) contains the buttons
+    ; Add Data is at roughly x=80, y=15 from the left edge of that panel
+    CF__foundAddDataPanel := 0
+    enumAD := RegisterCallback("CF__FindAddDataPanelCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", CF__foundScrollBoxHwnd, "Ptr", enumAD, "Ptr", 0)
 
-    ; The input tab is typically index 1 (tbshtGrids=0, tbshtInput=1)
-    ; TCM_SETCURSEL = 0x130C — selects tab visually
-    SendMessage, 0x130C, 1, 0,, ahk_id %CF__foundPageCtrlHwnd%
-    Sleep, 50
-    ; Delphi TPageControl needs TCN_SELCHANGE notification to actually switch
-    ; Send WM_NOTIFY with TCN_SELCHANGE (-552) to the parent
-    parentHwnd := DllCall("GetParent", "Ptr", CF__foundPageCtrlHwnd, "Ptr")
-    if (parentHwnd) {
-        ; Build NMHDR struct: hwndFrom, idFrom, code
-        ctrlId := DllCall("GetDlgCtrlID", "Ptr", CF__foundPageCtrlHwnd, "Int")
-        VarSetCapacity(nmhdr, 24, 0)  ; 24 bytes for 64-bit safety
-        NumPut(CF__foundPageCtrlHwnd, nmhdr, 0, "Ptr")
-        NumPut(ctrlId, nmhdr, A_PtrSize, "UInt")
-        NumPut(-552, nmhdr, A_PtrSize + 4, "Int")  ; TCN_SELCHANGE
-        SendMessage, 0x004E, ctrlId, &nmhdr,, ahk_id %parentHwnd%  ; WM_NOTIFY
+    if (CF__foundAddDataPanel) {
+        ControlClick, x80 y15, ahk_id %CF__foundAddDataPanel%
+    } else {
+        MsgBox, 48, %CF_AppTitle%, Could not find the Add Data button area.
     }
 }
 
+CF__FindGridScrollBoxCallback(hwnd, lParam) {
+    global CF__foundScrollBoxHwnd
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if (buf != "TScrollBox")
+        return 1
+
+    ; Check if visible
+    style := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
+    if !(style & 0x10000000)
+        return 1
+
+    ; Check parent chain for TTabSheet > TPageControl > TfraGridView
+    parentHwnd := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+    if (!parentHwnd)
+        return 1
+    VarSetCapacity(pBuf, 256, 0)
+    DllCall("GetClassName", "Ptr", parentHwnd, "Str", pBuf, "Int", 256)
+    if (pBuf = "TTabSheet") {
+        CF__foundScrollBoxHwnd := hwnd
+        return 0
+    }
+    return 1
+}
+
+CF__FindAddDataPanelCallback(hwnd, lParam) {
+    global CF__foundAddDataPanel
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if (buf != "TPanel")
+        return 1
+
+    ; Look for a visible TPanel roughly 630 wide and 50-70 tall
+    ; (the right-side panel containing Add Data/Pivot/Scroll/Settings)
+    style := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
+    if !(style & 0x10000000)
+        return 1
+
+    VarSetCapacity(rc, 16, 0)
+    DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", &rc)
+    w := NumGet(rc, 8, "Int") - NumGet(rc, 0, "Int")
+    h := NumGet(rc, 12, "Int") - NumGet(rc, 4, "Int")
+    if (w >= 600 && w <= 700 && h >= 50 && h <= 70) {
+        ; Verify parent is also a TPanel (the bar container)
+        parentHwnd := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+        VarSetCapacity(pBuf, 256, 0)
+        DllCall("GetClassName", "Ptr", parentHwnd, "Str", pBuf, "Int", 256)
+        if (pBuf = "TPanel") {
+            CF__foundAddDataPanel := hwnd
+            return 0
+        }
+    }
+    return 1
+}
+
+; Legacy callback kept for reference
 CF__FindGridPageCtrlCallback(hwnd, lParam) {
     global CF__foundPageCtrlHwnd
     VarSetCapacity(buf, 256, 0)
