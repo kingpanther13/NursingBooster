@@ -22937,68 +22937,18 @@ CF_FindCPFlowsheetsWindow() {
 }
 
 CF_ClickAddDataButton() {
-    global CF_AppTitle, CF__foundInputTabHwnd, CF__foundGridsTabHwnd
+    global CF_AppTitle
     mainHwnd := CF_FindCPFlowsheetsWindow()
     if (!mainHwnd) {
         MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.
         return
     }
 
-    ; Find tbshtInput and tbshtGrids tab sheets
-    CF__foundInputTabHwnd := 0
-    CF__foundGridsTabHwnd := 0
-    enumTab := RegisterCallback("CF__FindTabSheetCallback", "Fast")
-    DllCall("EnumChildWindows", "Ptr", mainHwnd, "Ptr", enumTab, "Ptr", 0)
-
-    if (!CF__foundInputTabHwnd) {
-        MsgBox, 48, %CF_AppTitle%, Could not find the input tab in CP Flowsheets.
-        return
-    }
-
-    ; Show the input tab and hide the grids tab
-    DllCall("ShowWindow", "Ptr", CF__foundInputTabHwnd, "Int", 5)  ; SW_SHOW
-    if (CF__foundGridsTabHwnd)
-        DllCall("ShowWindow", "Ptr", CF__foundGridsTabHwnd, "Int", 0)  ; SW_HIDE
-
-    ; Bring focus to the input tab
-    DllCall("SetForegroundWindow", "Ptr", mainHwnd)
-}
-
-CF__FindTabSheetCallback(hwnd, lParam) {
-    global CF__foundInputTabHwnd, CF__foundGridsTabHwnd
-    VarSetCapacity(buf, 256, 0)
-    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
-    if (buf != "TTabSheet")
-        return 1
-
-    ; Check parent is TPageControl inside TfraGridView
-    parentHwnd := DllCall("GetParent", "Ptr", hwnd, "Ptr")
-    if (!parentHwnd)
-        return 1
-    VarSetCapacity(pBuf, 256, 0)
-    DllCall("GetClassName", "Ptr", parentHwnd, "Str", pBuf, "Int", 256)
-    if (pBuf != "TPageControl")
-        return 1
-    gpHwnd := DllCall("GetParent", "Ptr", parentHwnd, "Ptr")
-    if (!gpHwnd)
-        return 1
-    VarSetCapacity(gpBuf, 256, 0)
-    DllCall("GetClassName", "Ptr", gpHwnd, "Str", gpBuf, "Int", 256)
-    if (gpBuf != "TfraGridView")
-        return 1
-
-    ; Read tab text to identify which sheet this is
-    VarSetCapacity(tBuf, 256, 0)
-    DllCall("GetWindowText", "Ptr", hwnd, "Str", tBuf, "Int", 128)
-    if (tBuf = "tbshtInput")
-        CF__foundInputTabHwnd := hwnd
-    else if (tBuf = "tbshtGrids")
-        CF__foundGridsTabHwnd := hwnd
-
-    ; Keep enumerating until we find both
-    if (CF__foundInputTabHwnd && CF__foundGridsTabHwnd)
-        return 0
-    return 1
+    ; TODO: find reliable way to trigger Add Data action
+    ; Tab switching via ShowWindow breaks Delphi's internal state.
+    ; TCM_SETCURSEL doesn't trigger Delphi's change events.
+    ; The button is owner-drawn on a TPanel inside a scrollbox — not targetable.
+    MsgBox, 64, %CF_AppTitle%, Add Data button not yet implemented.`n`nStill figuring out how to trigger this action programmatically.
 }
 
 CF__FindGridPageCtrlCallback(hwnd, lParam) {
