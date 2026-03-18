@@ -756,10 +756,11 @@ Gui, 67:Add, Button, x245 y58 w130 h26 gNB_PanelRecordMacro, Record Macro
 Gui, 67:Font, s7 c00BFFF, Segoe UI
 Gui, 67:Add, Text, x5 y88 w370 h16 Center BackgroundTrans, --- CP Flowsheets ---
 Gui, 67:Font, s8 cBlack, Segoe UI
-Gui, 67:Add, Button, x5   y106 w75 h26 gCF_PanelSpy, CPFS Spy
-Gui, 67:Add, Button, x83  y106 w75 h26 gCF_PanelSave, CPFS Save
-Gui, 67:Add, Button, x161 y106 w75 h26 gCF_PanelLoad, CPFS Load
-Gui, 67:Add, Button, x239 y106 w75 h26 gCF_PanelDelete, CPFS Del
+Gui, 67:Add, Button, x5   y106 w60 h26 gCF_PanelSpy, Spy
+Gui, 67:Add, Button, x68  y106 w60 h26 gCF_PanelSave, Save
+Gui, 67:Add, Button, x131 y106 w60 h26 gCF_PanelLoad, Load
+Gui, 67:Add, Button, x194 y106 w50 h26 gCF_PanelDelete, Del
+Gui, 67:Add, Button, x247 y106 w70 h26 gCF_PanelAddData, Add Data
 Gui, 67:Font, s7 cRed, Segoe UI
 Gui, 67:Add, Checkbox, x320 y110 w60 h18 vCF_AutoSaveChk gCF_ToggleAutoSave, AutoSave
 Gui, 67:Font, s7 cFFD700, Segoe UI
@@ -20250,6 +20251,10 @@ CF_PanelDelete:
     gosub CF_BtnDeleteTemplate
 return
 
+CF_PanelAddData:
+    CF_ClickAddDataButton()
+return
+
 CF_ToggleAutoSave:
     Gui, 67:Submit, NoHide
     global CF_AutoSave
@@ -22928,6 +22933,113 @@ CF_FindCPFlowsheetsWindow() {
     if (hwnd)
         return hwnd
     return 0
+}
+
+CF_ClickAddDataButton() {
+    global CF_AppTitle
+    mainHwnd := CF_FindCPFlowsheetsWindow()
+    if (!mainHwnd) {
+        MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.
+        return
+    }
+
+    ; Find the tBarCommands toolbar
+    toolbarHwnd := 0
+    WinGet, ctrlList, ControlList, ahk_id %mainHwnd%
+    Loop, Parse, ctrlList, `n
+    {
+        ControlGet, tbHwnd, Hwnd,, %A_LoopField%, ahk_id %mainHwnd%
+        if (!tbHwnd)
+            continue
+        VarSetCapacity(clsBuf, 256, 0)
+        DllCall("GetClassName", "Ptr", tbHwnd, "Str", clsBuf, "Int", 256)
+        if (clsBuf != "TToolBar")
+            continue
+        ; Check if this toolbar's text is tBarCommands
+        tLen := DllCall("GetWindowTextLengthW", "Ptr", tbHwnd, "Int")
+        if (tLen > 0) {
+            VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+            DllCall("GetWindowTextW", "Ptr", tbHwnd, "Ptr", &tBuf, "Int", tLen + 1)
+            tbText := StrGet(&tBuf, "UTF-16")
+            if (tbText = "tBarCommands") {
+                toolbarHwnd := tbHwnd
+                break
+            }
+        }
+    }
+
+    if (!toolbarHwnd) {
+        MsgBox, 48, %CF_AppTitle%, Could not find the commands toolbar in CP Flowsheets.
+        return
+    }
+
+    ; Enumerate toolbar buttons to find "Add Data" (tooltip: "insert a set of data into this grid")
+    ; TB_BUTTONCOUNT = 0x0418
+    SendMessage, 0x0418, 0, 0,, ahk_id %toolbarHwnd%
+    btnCount := ErrorLevel
+    if (btnCount <= 0) {
+        MsgBox, 48, %CF_AppTitle%, No buttons found in toolbar.
+        return
+    }
+
+    ; Get the process ID for ReadProcessMemory (toolbar stores button info in its process)
+    WinGet, tbPid, PID, ahk_id %toolbarHwnd%
+    hProc := DllCall("OpenProcess", "UInt", 0x001F0FFF, "Int", 0, "UInt", tbPid, "Ptr")
+    if (!hProc) {
+        MsgBox, 48, %CF_AppTitle%, Could not access CP Flowsheets process.
+        return
+    }
+
+    ; Allocate memory in the remote process for TBBUTTON struct (32 bytes is enough)
+    remoteMem := DllCall("VirtualAllocEx", "Ptr", hProc, "Ptr", 0, "UInt", 256, "UInt", 0x1000, "UInt", 0x04, "Ptr")
+
+    addDataIdx := -1
+    Loop, %btnCount%
+    {
+        btnIdx := A_Index - 1
+        ; TB_GETBUTTON = 0x0417 — copies TBBUTTON struct to remote buffer
+        SendMessage, 0x0417, btnIdx, remoteMem,, ahk_id %toolbarHwnd%
+
+        ; Read TBBUTTON struct from remote process
+        ; TBBUTTON (32-bit): iBitmap(4), idCommand(4), fsState(1), fsStyle(1), bReserved(2), dwData(4), iString(4) = 20 bytes
+        VarSetCapacity(localBtn, 32, 0)
+        DllCall("ReadProcessMemory", "Ptr", hProc, "Ptr", remoteMem, "Ptr", &localBtn, "UInt", 32, "Ptr*", 0)
+        cmdId := NumGet(localBtn, 4, "Int")
+
+        ; TB_GETBUTTONTEXT = 0x044B — get button text
+        SendMessage, 0x044B, cmdId, remoteMem,, ahk_id %toolbarHwnd%
+        textLen := ErrorLevel
+        if (textLen > 0 && textLen < 200) {
+            VarSetCapacity(localText, (textLen + 1) * 2, 0)
+            DllCall("ReadProcessMemory", "Ptr", hProc, "Ptr", remoteMem, "Ptr", &localText, "UInt", (textLen + 1) * 2, "Ptr*", 0)
+            btnText := StrGet(&localText, "UTF-16")
+            if (InStr(btnText, "Add Data") || InStr(btnText, "add data")) {
+                addDataIdx := btnIdx
+                break
+            }
+        }
+    }
+
+    DllCall("VirtualFreeEx", "Ptr", hProc, "Ptr", remoteMem, "UInt", 0, "UInt", 0x8000)
+    DllCall("CloseHandle", "Ptr", hProc)
+
+    if (addDataIdx >= 0) {
+        ; Get button rect and click it
+        ; TB_GETITEMRECT = 0x041D
+        VarSetCapacity(btnRect, 16, 0)
+        SendMessage, 0x041D, addDataIdx, &btnRect,, ahk_id %toolbarHwnd%
+        bx := NumGet(btnRect, 0, "Int")
+        by := NumGet(btnRect, 4, "Int")
+        bw := NumGet(btnRect, 8, "Int") - bx
+        bh := NumGet(btnRect, 12, "Int") - by
+        clickX := bx + bw // 2
+        clickY := by + bh // 2
+        ControlClick, x%clickX% y%clickY%, ahk_id %toolbarHwnd%
+    } else {
+        ; Fallback: try clicking by command ID via TB_PRESSBUTTON on each button
+        ; Or just use ControlClick on the toolbar at a reasonable position
+        MsgBox, 48, %CF_AppTitle%, Could not find "Add Data" button in the toolbar.`n`nTry running CPFS Spy on the main screen to verify the toolbar layout.
+    }
 }
 
 CF_FindAddDataWindow() {
