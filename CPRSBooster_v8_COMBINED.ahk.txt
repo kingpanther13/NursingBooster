@@ -23861,7 +23861,7 @@ CF_ApplyTemplate(templatePath) {
                 ; Click on the checkbox area of the item
                 VarSetCapacity(itmRect, 16, 0)
                 SendMessage, 0x0198, cfCLIdx, &itmRect,, ahk_id %cfMatchHwnd%  ; LB_GETITEMRECT
-                itmY := NumGet(itmRect, 4, "Int") + 5  ; middle of item vertically
+                itmY := (NumGet(itmRect, 4, "Int") + NumGet(itmRect, 12, "Int")) // 2  ; vertical center of item
                 ; Click at x=8 (checkbox area) within client coords
                 clickLParam := (itmY << 16) | 8
                 PostMessage, 0x0201, 0x0001, clickLParam,, ahk_id %cfMatchHwnd%  ; WM_LBUTTONDOWN
