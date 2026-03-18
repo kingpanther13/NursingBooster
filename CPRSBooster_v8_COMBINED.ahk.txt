@@ -23550,6 +23550,31 @@ CF_ReadCheckListItemState(listBoxHwnd, itemIdx) {
     return result
 }
 
+CF_WriteCheckListItemState(listBoxHwnd, itemIdx, newChecked) {
+    ; Write the check state of a single TCheckListBox item via WriteProcessMemory
+    ; Same memory layout as CF_ReadCheckListItemState: FState at dataPtr + 8
+    WinGet, pid, PID, ahk_id %listBoxHwnd%
+    hProc := DllCall("OpenProcess", "UInt", 0x0030, "Int", 0, "UInt", pid, "Ptr")  ; PROCESS_VM_READ | PROCESS_VM_WRITE
+    if (!hProc)
+        return false
+
+    SendMessage, 0x0199, itemIdx, 0,, ahk_id %listBoxHwnd%   ; LB_GETITEMDATA
+    dataPtr := ErrorLevel
+    result := false
+    if (dataPtr && dataPtr != 0xFFFFFFFF && dataPtr != -1) {
+        ; FState: 0=unchecked, 1=checked
+        newState := newChecked ? 1 : 0
+        VarSetCapacity(stateVal, 4, 0)
+        NumPut(newState, stateVal, 0, "Int")
+        bytesWritten := 0
+        DllCall("WriteProcessMemory", "Ptr", hProc, "Ptr", dataPtr + 8
+            , "Ptr", &stateVal, "UInt", 4, "Ptr*", bytesWritten)
+        result := (bytesWritten > 0)
+    }
+    DllCall("CloseHandle", "Ptr", hProc)
+    return result
+}
+
 
 ;============================================================================================
 ; CF - SAVE TEMPLATE
@@ -23849,18 +23874,13 @@ CF_ApplyTemplate(templatePath) {
             }
         }
         else if (cfTplType = "checklist") {
-            ; TCheckListBox item: toggle by selecting + Space
+            ; TCheckListBox item: write check state directly via WriteProcessMemory
             cfCLIdx := liveControls[bestLiveIdx].checklistIdx
             currentCLChecked := CF_ReadCheckListItemState(cfMatchHwnd, cfCLIdx)
             if (currentCLChecked != cfTplChecked) {
-                ; Focus the listbox, select the item, then Space to toggle checkbox
-                DllCall("SetFocus", "Ptr", cfMatchHwnd)
-                Sleep, 50
-                SendMessage, 0x0186, cfCLIdx, 0,, ahk_id %cfMatchHwnd%   ; LB_SETCURSEL
-                Sleep, 50
-                PostMessage, 0x0100, 0x20, 0,, ahk_id %cfMatchHwnd%   ; WM_KEYDOWN VK_SPACE
-                Sleep, 30
-                PostMessage, 0x0101, 0x20, 0,, ahk_id %cfMatchHwnd%   ; WM_KEYUP VK_SPACE
+                CF_WriteCheckListItemState(cfMatchHwnd, cfCLIdx, cfTplChecked)
+                ; Invalidate the listbox so it redraws with new check state
+                DllCall("InvalidateRect", "Ptr", cfMatchHwnd, "Ptr", 0, "Int", 1)
                 totalApplied++
                 Sleep, %cfEffectiveSpeed%
             }
