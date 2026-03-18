@@ -23554,7 +23554,7 @@ CF_WriteCheckListItemState(listBoxHwnd, itemIdx, newChecked) {
     ; Write the check state of a single TCheckListBox item via WriteProcessMemory
     ; Same memory layout as CF_ReadCheckListItemState: FState at dataPtr + 8
     WinGet, pid, PID, ahk_id %listBoxHwnd%
-    hProc := DllCall("OpenProcess", "UInt", 0x0030, "Int", 0, "UInt", pid, "Ptr")  ; PROCESS_VM_READ | PROCESS_VM_WRITE
+    hProc := DllCall("OpenProcess", "UInt", 0x0038, "Int", 0, "UInt", pid, "Ptr")  ; PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION
     if (!hProc)
         return false
 
