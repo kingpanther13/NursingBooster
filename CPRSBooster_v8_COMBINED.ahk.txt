@@ -23770,6 +23770,7 @@ CF_ApplyTemplate(templatePath) {
     ; Use "claimed" tracking so duplicate labels (Yes/No) match by position order
     totalApplied := 0
     totalNotFound := 0
+    cfNotFoundList := ""
     cfClaimed := {}  ; track which live indices are already matched
     cfAutoSaveCancelled := false
 
@@ -23851,6 +23852,7 @@ CF_ApplyTemplate(templatePath) {
 
         if (bestLiveIdx = 0 || bestScore < 30) {
             totalNotFound++
+            cfNotFoundList .= ti . ": " . cfTplType . " """ . cfTplLabel . """ (score=" . bestScore . ")`n"
             continue
         }
 
@@ -23928,6 +23930,8 @@ CF_ApplyTemplate(templatePath) {
     } else {
         ToolTip, Done: %totalApplied% applied`, %totalNotFound% not matched - review before submitting
         SetTimer, CF_ClearToolTip, -5000
+        if (totalNotFound > 0 && cfNotFoundList != "")
+            MsgBox, 64, %CF_AppTitle% - Unmatched Controls, %totalNotFound% control(s) could not be matched:`n`n%cfNotFoundList%
     }
 
     ; Re-assert AlwaysOnTop on the panel — WinActivate on CPFS dialog strips it
