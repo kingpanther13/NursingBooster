@@ -24492,6 +24492,71 @@ return
 return
 
 
+;============================================================================================
+; CTRL+SHIFT+I - Control Inspector (Window Spy replacement)
+; Hover mouse over any control and press Ctrl+Shift+I to see its info.
+;============================================================================================
+
+^+i::
+    CoordMode, Mouse, Screen
+    MouseGetPos, mX, mY, winUnderMouse, ctrlHwnd, 2  ; 2 = get HWND
+    if (!ctrlHwnd)
+        ctrlHwnd := winUnderMouse
+
+    ; Control class
+    VarSetCapacity(clsBuf, 256, 0)
+    DllCall("GetClassName", "Ptr", ctrlHwnd, "Str", clsBuf, "Int", 256)
+
+    ; Control text
+    VarSetCapacity(txtBuf, 512, 0)
+    DllCall("GetWindowText", "Ptr", ctrlHwnd, "Str", txtBuf, "Int", 256)
+
+    ; Control rect
+    VarSetCapacity(rc, 16, 0)
+    DllCall("GetWindowRect", "Ptr", ctrlHwnd, "Ptr", &rc)
+    rcX := NumGet(rc, 0, "Int"), rcY := NumGet(rc, 4, "Int")
+    rcW := NumGet(rc, 8, "Int") - rcX, rcH := NumGet(rc, 12, "Int") - rcY
+
+    ; Parent info
+    parentHwnd := DllCall("GetParent", "Ptr", ctrlHwnd, "Ptr")
+    VarSetCapacity(pClsBuf, 256, 0)
+    VarSetCapacity(pTxtBuf, 512, 0)
+    if (parentHwnd) {
+        DllCall("GetClassName", "Ptr", parentHwnd, "Str", pClsBuf, "Int", 256)
+        DllCall("GetWindowText", "Ptr", parentHwnd, "Str", pTxtBuf, "Int", 256)
+    }
+
+    ; Window info
+    VarSetCapacity(wClsBuf, 256, 0)
+    VarSetCapacity(wTxtBuf, 512, 0)
+    DllCall("GetClassName", "Ptr", winUnderMouse, "Str", wClsBuf, "Int", 256)
+    DllCall("GetWindowText", "Ptr", winUnderMouse, "Str", wTxtBuf, "Int", 256)
+
+    ; Style
+    style := DllCall("GetWindowLong", "Ptr", ctrlHwnd, "Int", -16, "UInt")
+    visible := (style & 0x10000000) ? "Y" : "N"
+
+    info := "=== Control Inspector ===`n"
+    info .= "Mouse: " . mX . ", " . mY . "`n"
+    info .= "---`n"
+    info .= "Control HWND: " . ctrlHwnd . " (0x" . Format("{:x}", ctrlHwnd) . ")`n"
+    info .= "Control Class: " . clsBuf . "`n"
+    info .= "Control Text: " . (txtBuf != "" ? txtBuf : "(empty)") . "`n"
+    info .= "Pos: " . rcX . "," . rcY . " Size: " . rcW . "x" . rcH . "`n"
+    info .= "Visible: " . visible . "`n"
+    info .= "---`n"
+    info .= "Parent HWND: " . parentHwnd . "`n"
+    info .= "Parent Class: " . pClsBuf . "`n"
+    info .= "Parent Text: " . (pTxtBuf != "" ? pTxtBuf : "(empty)") . "`n"
+    info .= "---`n"
+    info .= "Window HWND: " . winUnderMouse . "`n"
+    info .= "Window Class: " . wClsBuf . "`n"
+    info .= "Window Title: " . wTxtBuf
+
+    MsgBox, 64, Control Inspector, %info%
+return
+
+
 ;############################################################################################
 ;################### END CP FLOWSHEETS BOOSTER ###############################################
 ;############################################################################################
