@@ -1,4 +1,5 @@
 name: AHK Syntax Check & Build
+# CI skips dumps/ and logs/ via sparse-checkout
 
 on:
   push:
