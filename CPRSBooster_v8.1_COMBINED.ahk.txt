@@ -20791,6 +20791,16 @@ NB_ApplyTemplate(templatePath) {
         SetTimer, NB_ClearV6Warning, -5000
     }
 
+    ; Check if template was saved from a different dialogue type
+    if (RegExMatch(content, """source_dialogue"":\s*""((?:[^""\\]|\\.)*)""", sdM)) {
+        WinGetTitle, currentDlgTitle, ahk_id %dlgHwnd%
+        if (sdM1 != "" && currentDlgTitle != "" && sdM1 != currentDlgTitle) {
+            MsgBox, 308, %NB_AppTitle% - Dialogue Mismatch, This template was saved from:`n%sdM1%`n`nBut you are applying it to:`n%currentDlgTitle%`n`nAre you sure you want to continue?
+            IfMsgBox, No
+                return
+        }
+    }
+
     ; Parse flat checkbox list from template
     tplItems := NB_ParseFlatCheckboxes(content)
     if (tplItems.Length() = 0) {
