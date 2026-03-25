@@ -20808,13 +20808,17 @@ NB_ApplyTemplate(templatePath) {
 
     ; Check version mismatch (only if same dialogue — different dialogue already warned)
     if (dialogueMatched) {
+        currentVersion := NB_GetDialogVersion(dlgHwnd)
         if (RegExMatch(content, """source_version"":\s*""([\d.]+)""", svM)) {
-            currentVersion := NB_GetDialogVersion(dlgHwnd)
             if (currentVersion != "" && svM1 != "" && currentVersion != svM1) {
                 MsgBox, 308, %NB_AppTitle% - Version Mismatch, This template was saved on version %svM1% but this dialogue is now version %currentVersion%.`n`nCheckboxes may have changed. The template may not apply correctly.`n`nAre you sure you want to continue?
                 IfMsgBox, No
                     return
             }
+        } else if (currentVersion != "") {
+            MsgBox, 308, %NB_AppTitle% - Version Unknown, This template has no version info (saved before v8.2).`nThe current dialogue is version %currentVersion%.`n`nRe-save the template to enable version tracking.`nApply anyway?
+            IfMsgBox, No
+                return
         }
     }
 
