@@ -20799,7 +20799,7 @@ return
 ;============================================================================================
 
 NB_ApplyTemplate(templatePath) {
-    global NB_AppTitle, NB_TemplateDir, NB_ApplySpeed, NB_LeafSpeed, NB_SpeedOverride
+    global NB_AppTitle, NB_TemplateDir, NB_ApplySpeed, NB_LeafSpeed, NB_SpeedOverride, NB_ApplyCancelled
     dlgHwnd := NB_FindActiveDialogWindow()
     if (!dlgHwnd)
         return
