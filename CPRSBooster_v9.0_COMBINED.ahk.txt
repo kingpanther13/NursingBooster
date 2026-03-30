@@ -734,22 +734,22 @@ Gui, 67:Color, 1a1a2e
 Gui, 67:Font, s9 cWhite, Segoe UI
 Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster  |  Ctrl+Shift+B to toggle
 Gui, 67:Font, s8 cBlack, Segoe UI
-Gui, 67:Add, Button, x5   y28 w75 h26 gNB_PanelSave, Save Tpl
-Gui, 67:Add, Button, x83  y28 w75 h26 gNB_PanelLoad, Load Tpl
-Gui, 67:Add, Button, x161 y28 w80 h26 gNB_PanelDelete, Delete Tpl
-Gui, 67:Add, Button, x244 y28 w70 h26 gNB_PanelSettings, Settings
-Gui, 67:Add, Button, x317 y28 w63 h26 gNB_ShowBothBars, Show Bars
-; Advanced-only controls (Dump button)
-Gui, 67:Add, Button, x244 y28 w70 h26 gNB_PanelDump vNB_AdvDumpBtn +HwndNB_AdvDumpHwnd, Dump
+Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
+Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
+Gui, 67:Add, Button, x151 y28 w70 h26 gNB_PanelDelete, Del Tpl
+Gui, 67:Add, Button, x224 y28 w63 h26 gNB_PanelSettings, Settings
+Gui, 67:Add, Button, x290 y28 w90 h26 gNB_ShowBothBars, Show Bars
+; Advanced-only: NB Dump (hidden in non-advanced)
+Gui, 67:Add, Button, x5   y28 w60 h26 gNB_PanelDump vNB_AdvDumpBtn, NB Dump
 Gui, 67:Font, s7 c00BFFF, Segoe UI
 Gui, 67:Add, Text, x5 y58 w370 h16 Center BackgroundTrans, --- CP Flowsheets ---
 Gui, 67:Font, s8 cBlack, Segoe UI
-; Advanced-only: Spy button
-Gui, 67:Add, Button, x5   y76 w60 h26 gCF_PanelSpy vCF_AdvSpyBtn +HwndCF_AdvSpyHwnd, Spy
-Gui, 67:Add, Button, x68  y76 w60 h26 gCF_PanelSave, Save
-Gui, 67:Add, Button, x131 y76 w60 h26 gCF_PanelLoad, Load
-Gui, 67:Add, Button, x194 y76 w50 h26 gCF_PanelDelete, Del
-Gui, 67:Add, Button, x247 y76 w70 h26 gCF_PanelAddData, Add Data
+Gui, 67:Add, Button, x5   y76 w60 h26 gCF_PanelSave, Save
+Gui, 67:Add, Button, x68  y76 w60 h26 gCF_PanelLoad, Load
+Gui, 67:Add, Button, x131 y76 w50 h26 gCF_PanelDelete, Del
+Gui, 67:Add, Button, x184 y76 w70 h26 gCF_PanelAddData, Add Data
+; Advanced-only: CPFS Dump (hidden in non-advanced)
+Gui, 67:Add, Button, x257 y76 w80 h26 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
 Gui, 67:Font, s7 cRed, Segoe UI
 Gui, 67:Add, Checkbox, x320 y76 w60 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
 ; Advanced-only: AutoSave checkbox
@@ -1538,7 +1538,7 @@ modnotelist := "   New Notes   ||  |EDIT LIST BELOW:|   CLICK HERE|  | "  .  not
 gui, 14: Add, DropdownList, gdropdownbutton y0 w100 -Tabstop altsubmit vnotefornow , %modnotelist%
 
 ; --- NursingBooster Dropdown Menu on toolbar ---
-NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Show Both Bars|Settings"
+NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
 gui, 14: Add, DropdownList, gNB_DropdownAction y0 w130 -Tabstop altsubmit vNB_DropdownChoice , %NB_MenuList%
 
 ; Gui 14: +AlwaysOnTop -Caption HWNDGui_Hwnd  +ToolWindow ;   +LastFound
@@ -20079,9 +20079,7 @@ NB_DropdownAction:
         gosub NB_BtnDeleteTemplate
     else if (NB_DropdownChoice = 10)  ; Toggle Panel
         gosub NB_TogglePanel
-    else if (NB_DropdownChoice = 11)  ; Show Both Bars
-        gosub NB_ShowBothBars
-    else if (NB_DropdownChoice = 12)  ; Settings
+    else if (NB_DropdownChoice = 11)  ; Settings
         gosub NB_ToggleSettings
     ; Reset dropdown back to header
     GuiControl, 14:Choose, NB_DropdownChoice, 1
@@ -20089,7 +20087,7 @@ return
 
 NB_RebuildDropdown() {
     global NB_HK1_Label, NB_HK2_Label, NB_HK3_Label, NB_HK4_Label, NB_HK5_Label
-    newList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Show Both Bars|Settings"
+    newList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
     GuiControl, 14:, NB_DropdownChoice, |%newList%
     GuiControl, 14:Choose, NB_DropdownChoice, 1
 }
@@ -20157,8 +20155,13 @@ NB_ToggleSettings:
 return
 
 NB_ShowBothBars:
-    ; Force-show both top toolbar (!+h) and bottom booster panel
+    ; Force-show both top CPRSBooster toolbar and bottom Nursing Booster panel
+    ; Top toolbar: save FBO, clear it so !+h doesn't skip, then restore
+    savedFBO := FBO
+    FBO := 0
     gosub !+h
+    FBO := savedFBO
+    ; Bottom panel
     if (NB_BoosterGuiVisible != 1) {
         Gui, 67:Show
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
