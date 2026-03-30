@@ -20172,12 +20172,6 @@ NB_ShowBarsDeferred:
     FBO := 0
     gosub !+h
     FBO := savedFBO
-    ; NursingBooster panel (Gui 67)
-    if (NB_BoosterGuiVisible != 1) {
-        Gui, 67:Show
-        WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
-        NB_BoosterGuiVisible := 1
-    }
 return
 
 NB_AdvancedModeChanged:
