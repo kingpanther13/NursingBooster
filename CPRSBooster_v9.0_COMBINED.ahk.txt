@@ -404,8 +404,6 @@ If (driveactive= 0)  ; *************we have NO working drives
 		}
 	}
 
-	; Make NursingBooster key macro directory
-
 	; Make CP Flowsheets template directory
 	try
 	{
@@ -773,8 +771,9 @@ Gui, 67:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd +E0x08000000  ; WS_E
 Gui, 67:Show, x0 y0 w385 h218 Hide, NursingBoosterPanel
 GuiControl, 67:Disable, NB_MainSpeedSlider
 GuiControl, 67:Disable, NB_LeafSpeedSlider
-; Apply advanced mode visibility
+; Apply advanced mode visibility, then re-hide panel (Show resizes make it visible)
 gosub NB_ApplyAdvancedMode
+Gui, 67:Hide
 NB_BoosterGuiVisible := 0
 NB_SettingsVisible := 0
 
@@ -20195,11 +20194,13 @@ NB_ApplyAdvancedMode:
     GuiControl, 73:%showCmd%, NB_AdvDumpBtn
     GuiControl, 73:%showCmd%, CF_AdvSpyBtn
     GuiControl, 73:%showCmd%, NB_DebugLogChk
-    ; Resize main panel: advanced = full height, simple = compact
+    ; Resize panels: advanced = full height, simple = compact
     if (NB_AdvancedMode) {
         Gui, 67:Show, w385 h218 NA
+        Gui, 73:Show, w290 h210 NA
     } else {
         Gui, 67:Show, w385 h172 NA
+        Gui, 73:Show, w290 h160 NA
     }
 return
 
@@ -20881,7 +20882,7 @@ NB_ApplyTemplate(templatePath) {
     tplCount := tplItems.Length()
 
     ; Determine effective speed: override checkbox → main panel speed, else → template speed
-    tplSpeed := 300
+    tplSpeed := 600
     if (RegExMatch(content, """speed"":\s*(\d+)", spdM))
         tplSpeed := spdM1 + 0
     tplLeafSpd := 50
@@ -21658,10 +21659,10 @@ NB_RefreshSettingsTplList() {
 NB_ReadTemplateSpeed(filePath) {
     FileRead, content, %filePath%
     if (ErrorLevel)
-        return 300
+        return 600
     if (RegExMatch(content, """speed"":\s*(\d+)", spdM))
         return spdM1 + 0
-    return 300
+    return 600
 }
 
 NB_WriteTemplateSpeed(filePath, speed) {
