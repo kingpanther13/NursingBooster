@@ -738,9 +738,7 @@ Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
 Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
 Gui, 67:Add, Button, x151 y28 w70 h26 gNB_PanelDelete, Del Tpl
 Gui, 67:Add, Button, x224 y28 w63 h26 gNB_PanelSettings, Settings
-Gui, 67:Add, Button, x290 y28 w90 h26 gNB_ShowBothBars, Show Bars
-; Advanced-only: NB Dump (hidden in non-advanced)
-Gui, 67:Add, Button, x5   y28 w60 h26 gNB_PanelDump vNB_AdvDumpBtn, NB Dump
+Gui, 67:Add, Button, x290 y28 w90 h26 gNB_ShowBothBars, Show All Bars
 Gui, 67:Font, s7 c00BFFF, Segoe UI
 Gui, 67:Add, Text, x5 y58 w370 h16 Center BackgroundTrans, --- CP Flowsheets ---
 Gui, 67:Font, s8 cBlack, Segoe UI
@@ -748,8 +746,6 @@ Gui, 67:Add, Button, x5   y76 w60 h26 gCF_PanelSave, Save
 Gui, 67:Add, Button, x68  y76 w60 h26 gCF_PanelLoad, Load
 Gui, 67:Add, Button, x131 y76 w50 h26 gCF_PanelDelete, Del
 Gui, 67:Add, Button, x184 y76 w70 h26 gCF_PanelAddData, Add Data
-; Advanced-only: CPFS Dump (hidden in non-advanced)
-Gui, 67:Add, Button, x257 y76 w80 h26 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
 Gui, 67:Font, s7 cRed, Segoe UI
 Gui, 67:Add, Checkbox, x320 y76 w60 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
 ; Advanced-only: AutoSave checkbox
@@ -805,10 +801,15 @@ Gui, 73:Add, Text, x95 y112 w185 h14 BackgroundTrans vNB_TplSpeedStatus, Select 
 Gui, 73:Font, s7 c00FF88, Segoe UI
 nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
 Gui, 73:Add, Checkbox, x10 y134 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
+; Advanced-only: Dump buttons and Debug Logging
+Gui, 73:Font, s8 cBlack, Segoe UI
+Gui, 73:Add, Button, x10 y156 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
+Gui, 73:Add, Button, x145 y156 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
+Gui, 73:Font, s7 c00FF88, Segoe UI
 nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
-Gui, 73:Add, Checkbox, x10 y154 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+Gui, 73:Add, Checkbox, x10 y184 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
 Gui, 73:+AlwaysOnTop +ToolWindow -MinimizeBox
-Gui, 73:Show, x400 y0 w290 h180 Hide, NB Settings
+Gui, 73:Show, x400 y0 w290 h210 Hide, NB Settings
 
 ; --- NursingBooster: Start CPRS detection timer ---
 SetTimer, NB_CheckCPRS, 3000
@@ -20155,13 +20156,23 @@ NB_ToggleSettings:
 return
 
 NB_ShowBothBars:
-    ; Force-show both top CPRSBooster toolbar and bottom Nursing Booster panel
-    ; Top toolbar: save FBO, clear it so !+h doesn't skip, then restore
+    ; Force-show top Hyperdrive bar (!+z), bottom function bar (!+h), and NursingBooster panel
+    ; Use SetTimer to avoid GUI thread context issues
+    SetTimer, NB_ShowBarsDeferred, -10
+return
+
+NB_ShowBarsDeferred:
+    ; Top bar (Hyperdrive, Gui 7/8)
+    savedHBO := HBO
+    HBO := 0
+    gosub !+z
+    HBO := savedHBO
+    ; Bottom bar (Function keys, Gui 14)
     savedFBO := FBO
     FBO := 0
     gosub !+h
     FBO := savedFBO
-    ; Bottom panel
+    ; NursingBooster panel (Gui 67)
     if (NB_BoosterGuiVisible != 1) {
         Gui, 67:Show
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
@@ -20178,16 +20189,19 @@ return
 NB_ApplyAdvancedMode:
     ; Show or hide advanced-only controls based on NB_AdvancedMode
     showCmd := NB_AdvancedMode ? "Show" : "Hide"
-    GuiControl, 67:%showCmd%, NB_AdvDumpBtn
+    ; Gui 67 (main panel): speed sliders and autosave
     GuiControl, 67:%showCmd%, NB_SpeedOverrideChk
     GuiControl, 67:%showCmd%, NB_MainSpeedSlider
     GuiControl, 67:%showCmd%, NB_MainSpeedLabel
     GuiControl, 67:%showCmd%, NB_LeafSpeedLbl
     GuiControl, 67:%showCmd%, NB_LeafSpeedSlider
     GuiControl, 67:%showCmd%, NB_LeafSpeedLabel
-    GuiControl, 67:%showCmd%, CF_AdvSpyBtn
     GuiControl, 67:%showCmd%, CF_AutoSaveChk
-    ; Resize panel: advanced = full height, simple = compact
+    ; Gui 73 (settings): dump buttons and debug logging
+    GuiControl, 73:%showCmd%, NB_AdvDumpBtn
+    GuiControl, 73:%showCmd%, CF_AdvSpyBtn
+    GuiControl, 73:%showCmd%, NB_DebugLogChk
+    ; Resize main panel: advanced = full height, simple = compact
     if (NB_AdvancedMode) {
         Gui, 67:Show, w385 h218 NA
     } else {
