@@ -771,9 +771,8 @@ Gui, 67:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd +E0x08000000  ; WS_E
 Gui, 67:Show, x0 y0 w385 h218 Hide, NursingBoosterPanel
 GuiControl, 67:Disable, NB_MainSpeedSlider
 GuiControl, 67:Disable, NB_LeafSpeedSlider
-; Apply advanced mode visibility, then re-hide panel (Show resizes make it visible)
+; Apply advanced mode visibility (resize skipped at startup since panels not visible yet)
 gosub NB_ApplyAdvancedMode
-Gui, 67:Hide
 NB_BoosterGuiVisible := 0
 NB_SettingsVisible := 0
 
@@ -20194,13 +20193,18 @@ NB_ApplyAdvancedMode:
     GuiControl, 73:%showCmd%, NB_AdvDumpBtn
     GuiControl, 73:%showCmd%, CF_AdvSpyBtn
     GuiControl, 73:%showCmd%, NB_DebugLogChk
-    ; Resize panels: advanced = full height, simple = compact
-    if (NB_AdvancedMode) {
-        Gui, 67:Show, w385 h218 NA
-        Gui, 73:Show, w290 h210 NA
-    } else {
-        Gui, 67:Show, w385 h172 NA
-        Gui, 73:Show, w290 h160 NA
+    ; Resize panels only if they are currently visible (avoid showing them at startup)
+    if (NB_BoosterGuiVisible) {
+        if (NB_AdvancedMode)
+            Gui, 67:Show, w385 h218 NA
+        else
+            Gui, 67:Show, w385 h172 NA
+    }
+    if (NB_SettingsVisible) {
+        if (NB_AdvancedMode)
+            Gui, 73:Show, w290 h210 NA
+        else
+            Gui, 73:Show, w290 h160 NA
     }
 return
 
