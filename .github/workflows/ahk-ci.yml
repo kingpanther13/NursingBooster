@@ -333,6 +333,15 @@ jobs:
             git add *.ahk.txt
             git commit -m "ci: stamp version ${SHORT_SHA}"
             git push
+
+            # Mark the stamp commit with a green check (CI won't re-trigger on bot pushes)
+            STAMP_SHA=$(git rev-parse HEAD)
+            curl -s -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/statuses/${STAMP_SHA}" \
+              -d "{\"state\":\"success\",\"context\":\"AHK Syntax Check & Build\",\"description\":\"Version stamp of ${SHORT_SHA} (CI passed on parent)\"}"
+            echo "Stamped and marked: ${STAMP_SHA}"
           else
             echo "Already stamped or no unstamped files, skipping"
           fi
