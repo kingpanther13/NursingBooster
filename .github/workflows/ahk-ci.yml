@@ -331,8 +331,8 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add *.ahk.txt
-            git commit -m "ci: stamp version ${SHORT_SHA} [skip ci]"
+            git commit -m "ci: stamp version ${SHORT_SHA}"
             git push
           else
-            echo "No unstamped files found, skipping"
+            echo "Already stamped or no unstamped files, skipping"
           fi
