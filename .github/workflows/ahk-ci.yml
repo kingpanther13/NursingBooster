@@ -321,10 +321,15 @@ jobs:
 
           CHANGED=false
           for f in *.ahk.txt; do
-            if grep -q 'v9\.0 | dev | unstamped' "$f"; then
-              sed -i "s/v9\.0 | dev | unstamped/v9.0 | ${SHORT_SHA} | ${COMMIT_DATE}/" "$f"
-              CHANGED=true
-              echo "Stamped: $f"
+            if grep -q 'v9\.0 | .* | ' "$f"; then
+              CURRENT=$(grep -oP 'v9\.0 \| \K[^ |]+' "$f" | head -1)
+              if [ "$CURRENT" != "$SHORT_SHA" ]; then
+                sed -i "s/v9\.0 | [^,]* | [0-9-]*/v9.0 | ${SHORT_SHA} | ${COMMIT_DATE}/" "$f"
+                CHANGED=true
+                echo "Stamped: $f (was: $CURRENT)"
+              else
+                echo "Already current: $f"
+              fi
             fi
           done
 
