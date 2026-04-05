@@ -730,7 +730,7 @@ gosub NB_LoadSettings
 Gui, 67:Destroy
 Gui, 67:Color, 1a1a2e
 Gui, 67:Font, s9 cWhite, Segoe UI
-Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster  |  Ctrl+Shift+B to toggle
+Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0  |  Ctrl+Shift+B to toggle
 Gui, 67:Font, s8 cBlack, Segoe UI
 Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
 Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -784,30 +784,32 @@ Gui, 73:Destroy
 Gui, 73:Color, 1a1a2e
 Gui, 73:Font, s9 cWhite, Segoe UI
 Gui, 73:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
-Gui, 73:Font, s7 c00FF88, Segoe UI
-Gui, 73:Add, Text, x10 y30 w65 h16 BackgroundTrans, Template:
-Gui, 73:Add, DropDownList, x80 y27 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
-Gui, 73:Add, Text, x10 y58 w65 h16 BackgroundTrans, Parent Spd:
-Gui, 73:Add, Slider, x80 y56 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range50-1000 TickInterval100 ToolTip, 600
-Gui, 73:Add, Text, x215 y58 w55 h16 BackgroundTrans vNB_TplSpeedLabel, 600 ms
-Gui, 73:Add, Text, x10 y82 w65 h16 BackgroundTrans, Leaf Spd:
-Gui, 73:Add, Slider, x80 y80 w130 h22 vNB_TplLeafSlider gNB_TplLeafChanged Range10-500 TickInterval50 ToolTip, 50
-Gui, 73:Add, Text, x215 y82 w55 h16 BackgroundTrans vNB_TplLeafLabel, 50 ms
-Gui, 73:Add, Button, x10 y108 w80 h24 gNB_SaveTplSpeed, Save Speed
 Gui, 73:Font, s6 cSilver, Segoe UI
-Gui, 73:Add, Text, x95 y112 w185 h14 BackgroundTrans vNB_TplSpeedStatus, Select a template to edit speed
+Gui, 73:Add, Text, x10 y24 w270 h12 BackgroundTrans, v9.0 | 09d31dc | 2026-04-05
+Gui, 73:Font, s7 c00FF88, Segoe UI
+Gui, 73:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
+Gui, 73:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
+Gui, 73:Add, Text, x10 y68 w65 h16 BackgroundTrans, Parent Spd:
+Gui, 73:Add, Slider, x80 y66 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range50-1000 TickInterval100 ToolTip, 600
+Gui, 73:Add, Text, x215 y68 w55 h16 BackgroundTrans vNB_TplSpeedLabel, 600 ms
+Gui, 73:Add, Text, x10 y92 w65 h16 BackgroundTrans, Leaf Spd:
+Gui, 73:Add, Slider, x80 y90 w130 h22 vNB_TplLeafSlider gNB_TplLeafChanged Range10-500 TickInterval50 ToolTip, 50
+Gui, 73:Add, Text, x215 y92 w55 h16 BackgroundTrans vNB_TplLeafLabel, 50 ms
+Gui, 73:Add, Button, x10 y118 w80 h24 gNB_SaveTplSpeed, Save Speed
+Gui, 73:Font, s6 cSilver, Segoe UI
+Gui, 73:Add, Text, x95 y122 w185 h14 BackgroundTrans vNB_TplSpeedStatus, Select a template to edit speed
 Gui, 73:Font, s7 c00FF88, Segoe UI
 nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
-Gui, 73:Add, Checkbox, x10 y134 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
+Gui, 73:Add, Checkbox, x10 y144 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
 ; Advanced-only: Dump buttons and Debug Logging
 Gui, 73:Font, s8 cBlack, Segoe UI
-Gui, 73:Add, Button, x10 y156 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
-Gui, 73:Add, Button, x145 y156 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
+Gui, 73:Add, Button, x10 y166 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
+Gui, 73:Add, Button, x145 y166 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
 Gui, 73:Font, s7 c00FF88, Segoe UI
 nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
-Gui, 73:Add, Checkbox, x10 y184 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+Gui, 73:Add, Checkbox, x10 y194 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
 Gui, 73:+AlwaysOnTop +ToolWindow -MinimizeBox
-Gui, 73:Show, x400 y0 w290 h210 Hide, NB Settings
+Gui, 73:Show, x400 y0 w290 h220 Hide, NB Settings
 
 ; --- NursingBooster: Start CPRS detection timer ---
 SetTimer, NB_CheckCPRS, 3000
@@ -20202,9 +20204,9 @@ NB_ApplyAdvancedMode:
     }
     if (NB_SettingsVisible) {
         if (NB_AdvancedMode)
-            Gui, 73:Show, w290 h210 NA
+            Gui, 73:Show, w290 h220 NA
         else
-            Gui, 73:Show, w290 h160 NA
+            Gui, 73:Show, w290 h170 NA
     }
 return
 
