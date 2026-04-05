@@ -301,3 +301,38 @@ jobs:
             Write-Host "::warning::No executables produced. This may be expected if .ahk.txt files need renaming."
             Write-Host "Syntax validation is the primary check — compilation is a bonus."
           }
+
+  stamp-version:
+    name: Stamp Version Info
+    runs-on: ubuntu-latest
+    needs: [syntax-check, unit-tests, compile-check]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stamp commit hash and date into scripts
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          COMMIT_DATE=$(git log -1 --format=%cs)
+          echo "Stamping: $SHORT_SHA | $COMMIT_DATE"
+
+          CHANGED=false
+          for f in *.ahk.txt; do
+            if grep -q 'v9\.0 | dev | unstamped' "$f"; then
+              sed -i "s/v9\.0 | dev | unstamped/v9.0 | ${SHORT_SHA} | ${COMMIT_DATE}/" "$f"
+              CHANGED=true
+              echo "Stamped: $f"
+            fi
+          done
+
+          if [ "$CHANGED" = true ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add *.ahk.txt
+            git commit -m "ci: stamp version ${SHORT_SHA} [skip ci]"
+            git push
+          else
+            echo "No unstamped files found, skipping"
+          fi
