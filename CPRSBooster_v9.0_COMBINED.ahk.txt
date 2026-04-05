@@ -96,8 +96,6 @@ Global Listening := false
 Global hAnchorEdit
 Global ADPrompts := {}  ; ambient dictation
 
-; >>> INTENTIONAL BREAK — DELETE THIS LINE TO FIX <<<
-}{{{SYNTAX_ERROR_FOR_CI_TEST
 ;############################################################################################
 ;################### NURSING BOOSTER VARIABLES ##############################################
 ;############################################################################################
