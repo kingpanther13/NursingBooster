@@ -133,6 +133,7 @@ global CF_Detected := 0
 global CF_SpyResults := []
 global CF_AutoSave := 0
 global CF_ChainAddData := 0  ; 1 = auto-click Add Data before applying CPFS template
+global CF_AddDataDelay := 500  ; ms to wait after Add Data opens before applying template
 
 ;****************AI Folder**************
 AIPath := onedrivelocal . "\AI\"
@@ -801,15 +802,18 @@ Gui, 73:Add, Text, x95 y122 w185 h14 BackgroundTrans vNB_TplSpeedStatus, Select 
 Gui, 73:Font, s7 c00FF88, Segoe UI
 nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
 Gui, 73:Add, Checkbox, x10 y144 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
-; Advanced-only: Dump buttons and Debug Logging
+; Advanced-only: Add Data delay, Dump buttons, Debug Logging
+Gui, 73:Add, Text, x10 y166 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
+Gui, 73:Add, Slider, x95 y164 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
+Gui, 73:Add, Text, x230 y166 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
 Gui, 73:Font, s8 cBlack, Segoe UI
-Gui, 73:Add, Button, x10 y166 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
-Gui, 73:Add, Button, x145 y166 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
+Gui, 73:Add, Button, x10 y190 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
+Gui, 73:Add, Button, x145 y190 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
 Gui, 73:Font, s7 c00FF88, Segoe UI
 nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
-Gui, 73:Add, Checkbox, x10 y194 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+Gui, 73:Add, Checkbox, x10 y218 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
 Gui, 73:+AlwaysOnTop +ToolWindow -MinimizeBox
-Gui, 73:Show, x400 y0 w290 h220 Hide, NB Settings
+Gui, 73:Show, x400 y0 w290 h244 Hide, NB Settings
 
 ; --- NursingBooster: Start CPRS detection timer ---
 SetTimer, NB_CheckCPRS, 3000
@@ -20191,7 +20195,10 @@ NB_ApplyAdvancedMode:
     GuiControl, 67:%showCmd%, NB_LeafSpeedSlider
     GuiControl, 67:%showCmd%, NB_LeafSpeedLabel
     GuiControl, 67:%showCmd%, CF_AutoSaveChk
-    ; Gui 73 (settings): dump buttons and debug logging
+    ; Gui 73 (settings): add data delay, dump buttons, debug logging
+    GuiControl, 73:%showCmd%, CF_AdvDelayLbl
+    GuiControl, 73:%showCmd%, CF_AddDataDelaySlider
+    GuiControl, 73:%showCmd%, CF_AddDataDelayLabel
     GuiControl, 73:%showCmd%, NB_AdvDumpBtn
     GuiControl, 73:%showCmd%, CF_AdvSpyBtn
     GuiControl, 73:%showCmd%, NB_DebugLogChk
@@ -20204,7 +20211,7 @@ NB_ApplyAdvancedMode:
     }
     if (NB_SettingsVisible) {
         if (NB_AdvancedMode)
-            Gui, 73:Show, w290 h220 NA
+            Gui, 73:Show, w290 h244 NA
         else
             Gui, 73:Show, w290 h170 NA
     }
@@ -20284,6 +20291,12 @@ NB_SaveTplSpeed:
     } else {
         GuiControl, 73:, NB_TplSpeedStatus, Error saving speed!
     }
+return
+
+CF_AddDataDelayChanged:
+    GuiControlGet, CF_AddDataDelay, 73:, CF_AddDataDelaySlider
+    GuiControl, 73:, CF_AddDataDelayLabel, %CF_AddDataDelay% ms
+    gosub NB_SaveSettings
 return
 
 NB_DebugLogChanged:
@@ -20398,6 +20411,7 @@ NB_RunHotkeyAction(action, slotName) {
                     if (CF_FindAddDataWindow())
                         break
                 }
+                Sleep, %CF_AddDataDelay%
             }
             CF_ApplyTemplate(templatePath)
         } else {
@@ -20597,15 +20611,17 @@ NB_SaveHotkeyConfig:
 return
 
 NB_LoadSettings:
-    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging
+    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay
     IniRead, NB_AdvancedMode, %NB_SettingsIniPath%, General, AdvancedMode, 0
     IniRead, NB_DebugLogging, %NB_SettingsIniPath%, General, DebugLogging, 0
+    IniRead, CF_AddDataDelay, %NB_SettingsIniPath%, CPFS, AddDataDelay, 500
 return
 
 NB_SaveSettings:
-    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging
+    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay
     IniWrite, %NB_AdvancedMode%, %NB_SettingsIniPath%, General, AdvancedMode
     IniWrite, %NB_DebugLogging%, %NB_SettingsIniPath%, General, DebugLogging
+    IniWrite, %CF_AddDataDelay%, %NB_SettingsIniPath%, CPFS, AddDataDelay
 return
 
 
@@ -23067,6 +23083,8 @@ CF_DoLoadTemplate:
                 MsgBox, 48, %CF_AppTitle%, Add Data screen did not open. Try clicking Add Data manually first.
                 return
             }
+            ; Extra delay for controls to fully load
+            Sleep, %CF_AddDataDelay%
         }
         CF_ApplyTemplate(templatePath)
     }
