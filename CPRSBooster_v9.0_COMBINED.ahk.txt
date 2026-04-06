@@ -134,6 +134,7 @@ global CF_SpyResults := []
 global CF_AutoSave := 0
 global CF_ChainAddData := 0  ; 1 = auto-click Add Data before applying CPFS template
 global CF_AddDataDelay := 50  ; ms to wait after Add Data opens before applying template
+global CF_AutoSaveDelay := 500  ; ms to wait after apply finishes before clicking Save
 
 ;****************AI Folder**************
 AIPath := onedrivelocal . "\AI\"
@@ -806,14 +807,17 @@ Gui, 73:Add, Checkbox, x10 y144 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeCha
 Gui, 73:Add, Text, x10 y166 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
 Gui, 73:Add, Slider, x95 y164 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
 Gui, 73:Add, Text, x230 y166 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
+Gui, 73:Add, Text, x10 y190 w80 h16 BackgroundTrans vCF_AdvSaveDelayLbl, AutoSave Delay:
+Gui, 73:Add, Slider, x95 y188 w130 h22 vCF_AutoSaveDelaySlider gCF_AutoSaveDelayChanged Range50-3000 TickInterval500 ToolTip, %CF_AutoSaveDelay%
+Gui, 73:Add, Text, x230 y190 w55 h16 BackgroundTrans vCF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
 Gui, 73:Font, s8 cBlack, Segoe UI
-Gui, 73:Add, Button, x10 y190 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
-Gui, 73:Add, Button, x145 y190 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
+Gui, 73:Add, Button, x10 y214 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
+Gui, 73:Add, Button, x145 y214 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
 Gui, 73:Font, s7 c00FF88, Segoe UI
 nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
-Gui, 73:Add, Checkbox, x10 y218 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+Gui, 73:Add, Checkbox, x10 y242 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
 Gui, 73:+AlwaysOnTop +ToolWindow -MinimizeBox
-Gui, 73:Show, x400 y0 w290 h244 Hide, NB Settings
+Gui, 73:Show, x400 y0 w290 h268 Hide, NB Settings
 
 ; --- NursingBooster: Start CPRS detection timer ---
 SetTimer, NB_CheckCPRS, 3000
@@ -20199,6 +20203,9 @@ NB_ApplyAdvancedMode:
     GuiControl, 73:%showCmd%, CF_AdvDelayLbl
     GuiControl, 73:%showCmd%, CF_AddDataDelaySlider
     GuiControl, 73:%showCmd%, CF_AddDataDelayLabel
+    GuiControl, 73:%showCmd%, CF_AdvSaveDelayLbl
+    GuiControl, 73:%showCmd%, CF_AutoSaveDelaySlider
+    GuiControl, 73:%showCmd%, CF_AutoSaveDelayLabel
     GuiControl, 73:%showCmd%, NB_AdvDumpBtn
     GuiControl, 73:%showCmd%, CF_AdvSpyBtn
     GuiControl, 73:%showCmd%, NB_DebugLogChk
@@ -20211,7 +20218,7 @@ NB_ApplyAdvancedMode:
     }
     if (NB_SettingsVisible) {
         if (NB_AdvancedMode)
-            Gui, 73:Show, w290 h244 NA
+            Gui, 73:Show, w290 h268 NA
         else
             Gui, 73:Show, w290 h170 NA
     }
@@ -20296,6 +20303,12 @@ return
 CF_AddDataDelayChanged:
     GuiControlGet, CF_AddDataDelay, 73:, CF_AddDataDelaySlider
     GuiControl, 73:, CF_AddDataDelayLabel, %CF_AddDataDelay% ms
+    gosub NB_SaveSettings
+return
+
+CF_AutoSaveDelayChanged:
+    GuiControlGet, CF_AutoSaveDelay, 73:, CF_AutoSaveDelaySlider
+    GuiControl, 73:, CF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
     gosub NB_SaveSettings
 return
 
@@ -20611,17 +20624,19 @@ NB_SaveHotkeyConfig:
 return
 
 NB_LoadSettings:
-    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay
+    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay, CF_AutoSaveDelay
     IniRead, NB_AdvancedMode, %NB_SettingsIniPath%, General, AdvancedMode, 0
     IniRead, NB_DebugLogging, %NB_SettingsIniPath%, General, DebugLogging, 0
-    IniRead, CF_AddDataDelay, %NB_SettingsIniPath%, CPFS, AddDataDelay, 500
+    IniRead, CF_AddDataDelay, %NB_SettingsIniPath%, CPFS, AddDataDelay, 50
+    IniRead, CF_AutoSaveDelay, %NB_SettingsIniPath%, CPFS, AutoSaveDelay, 500
 return
 
 NB_SaveSettings:
-    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay
+    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay, CF_AutoSaveDelay
     IniWrite, %NB_AdvancedMode%, %NB_SettingsIniPath%, General, AdvancedMode
     IniWrite, %NB_DebugLogging%, %NB_SettingsIniPath%, General, DebugLogging
     IniWrite, %CF_AddDataDelay%, %NB_SettingsIniPath%, CPFS, AddDataDelay
+    IniWrite, %CF_AutoSaveDelay%, %NB_SettingsIniPath%, CPFS, AutoSaveDelay
 return
 
 
@@ -23095,7 +23110,7 @@ CF_CancelLoad:
 return
 
 CF_ApplyTemplate(templatePath) {
-    global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride
+    global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride, CF_AutoSaveDelay
 
     targetHwnd := CF_FindAddDataWindow()
     if (!targetHwnd) {
@@ -23308,7 +23323,15 @@ CF_ApplyTemplate(templatePath) {
             SetTimer, CF_ClearToolTip, -3000
             return
         }
-        ; Find and click the Save button
+        ; Wait before saving, then click Save
+        ToolTip, %totalApplied% applied - saving in %CF_AutoSaveDelay% ms...
+        Sleep, %CF_AutoSaveDelay%
+        ; Re-check cancel in case user hit Esc during delay
+        if (GetKeyState("Escape", "P")) {
+            ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
+            SetTimer, CF_ClearToolTip, -3000
+            return
+        }
         CF_ClickSaveButton(targetHwnd)
         ToolTip, %totalApplied% applied and saved
         SetTimer, CF_ClearToolTip, -3000
