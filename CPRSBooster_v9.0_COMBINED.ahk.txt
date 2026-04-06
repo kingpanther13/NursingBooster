@@ -23110,7 +23110,7 @@ CF_CancelLoad:
 return
 
 CF_ApplyTemplate(templatePath) {
-    global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride, CF_AutoSaveDelay
+    global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride, CF_AutoSaveDelay, NB_ApplyCancelled
 
     targetHwnd := CF_FindAddDataWindow()
     if (!targetHwnd) {
@@ -23317,17 +23317,17 @@ CF_ApplyTemplate(templatePath) {
     }
 
     if (CF_AutoSave && totalApplied > 0) {
-        ; Check if Esc was pressed at any point during apply, or right now
-        if (cfAutoSaveCancelled || GetKeyState("Escape", "P")) {
+        ; Check if Esc/right-click was pressed at any point during apply
+        if (cfAutoSaveCancelled || NB_ApplyCancelled || GetKeyState("Escape", "P")) {
             ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
             SetTimer, CF_ClearToolTip, -3000
             return
         }
-        ; Wait before saving, then click Save
-        ToolTip, %totalApplied% applied - saving in %CF_AutoSaveDelay% ms...
+        ; Wait before saving, then click Save (right-click or Esc cancels during delay)
+        ToolTip, %totalApplied% applied - saving in %CF_AutoSaveDelay% ms... (right-click or Esc to cancel)
         Sleep, %CF_AutoSaveDelay%
-        ; Re-check cancel in case user hit Esc during delay
-        if (GetKeyState("Escape", "P")) {
+        ; Re-check cancel after delay
+        if (NB_ApplyCancelled || GetKeyState("Escape", "P")) {
             ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
             SetTimer, CF_ClearToolTip, -3000
             return
