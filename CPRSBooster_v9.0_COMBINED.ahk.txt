@@ -23144,7 +23144,23 @@ CF_ApplyTemplate(templatePath) {
     WinActivate, ahk_id %targetHwnd%
     Sleep, 300
 
-    liveControls := CF_EnumFormControls(targetHwnd)
+    ; Wait for controls to stabilize (poll until count stops changing)
+    prevCount := 0
+    stableRounds := 0
+    Loop, 20 {
+        liveControls := CF_EnumFormControls(targetHwnd)
+        curCount := liveControls.Length()
+        if (curCount > 0 && curCount = prevCount) {
+            stableRounds++
+            if (stableRounds >= 2)
+                break
+        } else {
+            stableRounds := 0
+        }
+        prevCount := curCount
+        Sleep, 50
+    }
+
     if (liveControls.Length() = 0) {
         MsgBox, 48, %CF_AppTitle%, No controls found in the current window.
         return
