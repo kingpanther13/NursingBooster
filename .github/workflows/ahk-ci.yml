@@ -319,19 +319,30 @@ jobs:
           COMMIT_DATE=$(git log -1 --format=%cs)
           echo "Stamping: $SHORT_SHA | $COMMIT_DATE"
 
+          # Find the latest version file only (highest version number)
+          LATEST=$(ls -1 CPRSBooster_v*.ahk.txt 2>/dev/null | sort -V | tail -1)
           CHANGED=false
-          for f in *.ahk.txt; do
-            if grep -qP 'v9\.[0-9]+ \| .* \| ' "$f"; then
-              CURRENT=$(grep -oP 'v9\.[0-9]+ \| \K[^ |]+' "$f" | head -1)
-              if [ "$CURRENT" != "$SHORT_SHA" ]; then
-                sed -i -E "s/v9\.[0-9]+ \| [^,]* \| [0-9-]*/$(grep -oP 'v9\.\d+' "$f" | head -1) | ${SHORT_SHA} | ${COMMIT_DATE}/" "$f"
-                CHANGED=true
-                echo "Stamped: $f (was: $CURRENT)"
-              else
-                echo "Already current: $f"
-              fi
+          if [ -n "$LATEST" ]; then
+            # Extract current version and hash from the NB_VersionLine
+            VER=$(grep -oP 'v\d+\.\d+(?= \| )' "$LATEST" | head -1)
+            CURRENT=$(grep -oP 'v\d+\.\d+ \| \K\S+' "$LATEST" | head -1)
+            if [ -n "$VER" ] && [ "$CURRENT" != "$SHORT_SHA" ]; then
+              # Use python for reliable replacement (avoid sed escaping issues)
+              python3 -c "
+          import re, sys
+          with open('$LATEST', 'r') as f: content = f.read()
+          content = re.sub(
+              r'(v\d+\.\d+) \| \S+ \| \S+',
+              r'\1 | ${SHORT_SHA} | ${COMMIT_DATE}',
+              content, count=1)
+          with open('$LATEST', 'w') as f: f.write(content)
+          "
+              CHANGED=true
+              echo "Stamped: $LATEST ($VER: $CURRENT -> $SHORT_SHA)"
+            else
+              echo "Already current: $LATEST"
             fi
-          done
+          fi
 
           if [ "$CHANGED" = true ]; then
             git config user.name "github-actions[bot]"
