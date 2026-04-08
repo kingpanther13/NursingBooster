@@ -764,7 +764,7 @@ Gui, 67:Add, Text, x5 y151 w370 h16 Center BackgroundTrans vNB_PanelStatus, Read
 ; Advanced-only controls: Override Speed + Leaf Speed
 Gui, 67:Font, s7 c00FF88, Segoe UI
 Gui, 67:Add, Checkbox, x5 y170 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans +HwndNB_AdvOverrideHwnd, Override Speed
-Gui, 67:Add, Slider, x108 y168 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range0-1000 TickInterval100 ToolTip +HwndNB_AdvParentSliderHwnd, %NB_ApplySpeed%
+Gui, 67:Add, Slider, x108 y168 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range0-600 TickInterval100 ToolTip +HwndNB_AdvParentSliderHwnd, %NB_ApplySpeed%
 Gui, 67:Add, Text, x305 y170 w75 h16 BackgroundTrans vNB_MainSpeedLabel +HwndNB_AdvParentLblHwnd, %NB_ApplySpeed% ms
 Gui, 67:Add, Text, x5 y192 w100 h16 BackgroundTrans vNB_LeafSpeedLbl +HwndNB_AdvLeafLblHwnd, Leaf Speed:
 Gui, 67:Add, Slider, x108 y190 w192 h22 vNB_LeafSpeedSlider gNB_LeafSpeedChanged Range0-600 TickInterval50 ToolTip +HwndNB_AdvLeafSliderHwnd, %NB_LeafSpeed%
@@ -792,7 +792,7 @@ Gui, 73:Font, s7 c00FF88, Segoe UI
 Gui, 73:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
 Gui, 73:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
 Gui, 73:Add, Text, x10 y68 w65 h16 BackgroundTrans, Parent Spd:
-Gui, 73:Add, Slider, x80 y66 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range0-1000 TickInterval100 ToolTip, 600
+Gui, 73:Add, Slider, x80 y66 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range0-600 TickInterval100 ToolTip, 600
 Gui, 73:Add, Text, x215 y68 w55 h16 BackgroundTrans vNB_TplSpeedLabel, 600 ms
 Gui, 73:Add, Text, x10 y92 w65 h16 BackgroundTrans, Leaf Spd:
 Gui, 73:Add, Slider, x80 y90 w130 h22 vNB_TplLeafSlider gNB_TplLeafChanged Range0-600 TickInterval50 ToolTip, 50
