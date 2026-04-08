@@ -20669,7 +20669,12 @@ NB_CheckCPRS:
     IfWinExist, ahk_exe CPFlowsheets.exe
     {
         CF_Detected := 1
-        cfStatus := "CPFS: Detected"
+        ; Try to read last entry time from TDateTimePicker
+        cfLastTime := CF_ReadLastEntryTime()
+        if (cfLastTime != "")
+            cfStatus := "CPFS: Last entry " . cfLastTime
+        else
+            cfStatus := "CPFS: Detected"
     }
     else
     {
@@ -22127,6 +22132,23 @@ return
 ;============================================================================================
 ; CF - WINDOW DETECTION
 ;============================================================================================
+
+CF_ReadLastEntryTime() {
+    ; Read the time from the TDateTimePicker control in CP Flowsheets.
+    ; This shows the last saved entry time, not the current clock.
+    cfHwnd := WinExist("ahk_exe CPFlowsheets.exe")
+    if (!cfHwnd)
+        return ""
+    ; Find TDateTimePicker with a time value (HH:MM format)
+    ControlGetText, dtText, TDateTimePicker1, ahk_id %cfHwnd%
+    if (RegExMatch(dtText, "^\d{1,2}:\d{2}"))
+        return dtText
+    ; Try second instance if first is the date
+    ControlGetText, dtText2, TDateTimePicker2, ahk_id %cfHwnd%
+    if (RegExMatch(dtText2, "^\d{1,2}:\d{2}"))
+        return dtText2
+    return ""
+}
 
 CF_FindCPFlowsheetsWindow() {
     ; Find the main CP Flowsheets window
