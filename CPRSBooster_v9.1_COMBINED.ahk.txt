@@ -20958,7 +20958,9 @@ NB_ApplyTemplate(templatePath) {
     ; Walk the template top-to-bottom, one item at a time.
     ; After each toggle, re-enumerate to stay in sync. If the count
     ; changed (parent expanded/collapsed children), wait for stabilization.
+    ; liveOffset tracks cumulative drift between template and live positions.
     tplPos := 1
+    liveOffset := 0
     while (tplPos <= tplCount)
     {
         ; Cancel on right-click
@@ -20977,7 +20979,60 @@ NB_ApplyTemplate(templatePath) {
         }
 
         tplCb := tplItems[tplPos]
-        liveCb := liveItems[tplPos]
+
+        ; --- Drift detection: find the correct live checkbox for this template position ---
+        ; Use a tracked offset (liveOffset) that adjusts when drift is detected.
+        ; liveIdx = tplPos + liveOffset
+        liveIdx := tplPos + liveOffset
+        if (liveIdx < 1)
+            liveIdx := 1
+        if (liveIdx > liveCount) {
+            totalNotFound++
+            tplPos++
+            continue
+        }
+        liveCb := liveItems[liveIdx]
+
+        tplLabel := tplCb.label
+        tplDepth := tplCb.depth
+
+        ; If template has a label, verify the live checkbox matches
+        ; If not, search nearby to find it and adjust offset
+        if (tplLabel != "" && liveCb.label != tplLabel) {
+            foundIdx := 0
+            ; Search ±5 from expected position
+            Loop, 11 {
+                tryOff := A_Index - 6  ; -5 to +5
+                if (tryOff = 0)
+                    continue
+                tryIdx := liveIdx + tryOff
+                if (tryIdx >= 1 && tryIdx <= liveCount) {
+                    if (liveItems[tryIdx].label = tplLabel) {
+                        foundIdx := tryIdx
+                        break
+                    }
+                }
+            }
+            if (foundIdx > 0) {
+                liveOffset := liveOffset + (foundIdx - liveIdx)
+                liveIdx := foundIdx
+                liveCb := liveItems[liveIdx]
+            }
+        }
+        ; Secondary check: depth mismatch without label (weaker signal)
+        ; Only correct by ±1 to avoid over-correcting on unlabeled items
+        else if (tplLabel = "" && tplDepth != liveCb.depth) {
+            ; Check if shifting by 1 in either direction gives a depth match
+            if (liveIdx + 1 <= liveCount && liveItems[liveIdx + 1].depth = tplDepth) {
+                liveOffset++
+                liveIdx++
+                liveCb := liveItems[liveIdx]
+            } else if (liveIdx - 1 >= 1 && liveItems[liveIdx - 1].depth = tplDepth) {
+                liveOffset--
+                liveIdx--
+                liveCb := liveItems[liveIdx]
+            }
+        }
 
         nb_tmpHwnd := liveCb.hwnd
         if (DllCall("IsWindow", "Ptr", nb_tmpHwnd)) {
