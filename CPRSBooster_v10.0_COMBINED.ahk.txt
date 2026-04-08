@@ -20669,12 +20669,10 @@ NB_CheckCPRS:
     IfWinExist, ahk_exe CPFlowsheets.exe
     {
         CF_Detected := 1
-        ; Try to read last entry time from TDateTimePicker
+        cfStatus := "CPFS: Detected"
         cfLastTime := CF_ReadLastEntryTime()
         if (cfLastTime != "")
-            cfStatus := "CPFS: Last entry " . cfLastTime
-        else
-            cfStatus := "CPFS: Detected"
+            cfStatus .= " | Last entry " . cfLastTime
     }
     else
     {
