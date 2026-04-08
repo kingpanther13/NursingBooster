@@ -1,0 +1,311 @@
+﻿============================================================
+  NURSING BOOSTER APPLY LOG
+============================================================
+Timestamp:    2026-04-08 17:25:38
+Action:       APPLY
+Template:     C:\Users\VHAORLCrameA\OneDrive - Department of Veterans Affairs\CPRSBooster\NursingTemplates\Neg2.json
+Dialog:       Reminder Dialog Template: VAAES ACUTE INPATIENT NSG SHIFT ASSESSMENT
+User:         VHAORLCrameA
+Groups found: 14
+Toggled: 83  |  Not found: 20
+============================================================
+
+--- Group 1/14 (3 checkboxes) ---
+  [X] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 2/14 (4 checkboxes) ---
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 3/14 (3 checkboxes) ---
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+
+--- Group 4/14 (17 checkboxes) ---
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=2 PARENT (unlabeled)
+  [ ] depth=4 PARENT (unlabeled)
+  [ ] depth=4 PARENT (unlabeled)
+  [X] depth=4 PARENT (unlabeled)
+  [X] depth=4 PARENT (unlabeled)
+  [ ] depth=4 PARENT (unlabeled)
+  [ ] depth=4 PARENT (unlabeled)
+  [X] depth=4 PARENT (unlabeled)
+  [ ] depth=4 PARENT (unlabeled)
+  [X] depth=4 PARENT (unlabeled)
+  [ ] depth=4 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+
+--- Group 5/14 (4 checkboxes) ---
+  [X] depth=0 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 6/14 (25 checkboxes) ---
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [X] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [X] depth=2 PARENT (unlabeled)
+  [X] depth=4 PARENT (unlabeled)
+  [ ] depth=4 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 7/14 (44 checkboxes) ---
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 LEAF   Strong
+  [ ] depth=1 LEAF   Moderate
+  [ ] depth=1 LEAF   Weak
+  [ ] depth=1 LEAF   Unable to grip
+  [ ] depth=2 PARENT (unlabeled)
+  [X] depth=1 LEAF   Full strength
+  [ ] depth=1 LEAF   Flaccid
+  [ ] depth=1 LEAF   Moves against gravity
+  [ ] depth=1 LEAF   Moves against some resistance
+  [ ] depth=2 PARENT (unlabeled)
+  [X] depth=1 LEAF   Full strength
+  [ ] depth=1 LEAF   Flaccid
+  [ ] depth=1 LEAF   Moves against gravity
+  [ ] depth=1 LEAF   Moves against some resistance
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 LEAF   Intact
+  [ ] depth=1 LEAF   Absent
+  [ ] depth=1 LEAF   Decreased
+  [ ] depth=1 LEAF   Numbness
+  [ ] depth=1 LEAF   Unable to detect pressure
+  [ ] depth=2 PARENT (unlabeled)
+  [X] depth=1 LEAF   Intact
+  [ ] depth=1 LEAF   Absent
+  [ ] depth=1 LEAF   Decreased
+  [ ] depth=1 LEAF   Numbness
+  [ ] depth=1 LEAF   Unable to detect pressure
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 LEAF   Warm
+  [ ] depth=1 LEAF   Cold
+  [ ] depth=1 LEAF   Cool
+  [ ] depth=1 LEAF   Hot
+  [ ] depth=2 PARENT (unlabeled)
+  [X] depth=1 LEAF   Warm
+  [ ] depth=1 LEAF   Cold
+  [ ] depth=1 LEAF   Cool
+  [ ] depth=1 LEAF   Hot
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 8/14 (44 checkboxes) ---
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [X] depth=2 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 9/14 (29 checkboxes) ---
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 LEAF   Anterior and posterior
+  [ ] depth=1 LEAF   Anterior only
+  [ ] depth=1 LEAF   Posterior only
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 10/14 (28 checkboxes) ---
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [X] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [X] depth=0 PARENT Other:
+  [X] depth=0 LEAF   Soft
+  [X] depth=0 LEAF   Non-tender
+  [ ] depth=0 LEAF   Firm
+  [ ] depth=0 LEAF   Guarding
+  [ ] depth=0 LEAF   Other:
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 11/14 (16 checkboxes) ---
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 12/14 (22 checkboxes) ---
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [X] depth=2 PARENT (unlabeled)
+  [X] depth=3 PARENT (unlabeled)
+  [ ] depth=3 PARENT (unlabeled)
+  [ ] depth=3 PARENT (unlabeled)
+  [ ] depth=3 PARENT (unlabeled)
+  [ ] depth=3 PARENT (unlabeled)
+  [ ] depth=3 PARENT (unlabeled)
+  [ ] depth=3 PARENT (unlabeled)
+  [X] depth=3 PARENT (unlabeled)
+  [ ] depth=3 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 13/14 (11 checkboxes) ---
+  [ ] depth=0 LEAF   1:1 discussion
+  [ ] depth=0 LEAF   Family conference
+  [ ] depth=0 LEAF   Anticipated outcomes
+  [ ] depth=0 LEAF   Coping skills discussion
+  [ ] depth=0 LEAF   Disease process discussion
+  [ ] depth=0 LEAF   Grieving process discussion
+  [ ] depth=0 LEAF   Hospitalization discussion
+  [ ] depth=0 LEAF   Medical directives discussion
+  [ ] depth=0 LEAF   Treatment discussion
+  [ ] depth=0 LEAF   Ventilation of feelings encouraged
+  [ ] depth=0 PARENT (unlabeled)
+
+--- Group 14/14 (18 checkboxes) ---
+  [X] depth=0 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [X] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=1 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [X] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+  [X] depth=1 PARENT (unlabeled)
+  [ ] depth=2 LEAF   Yes
+  [ ] depth=2 LEAF   No
+  [ ] depth=2 PARENT (unlabeled)
+  [ ] depth=2 PARENT (unlabeled)
+
+============================================================
+TOTALS: 70 checked out of 268 checkboxes in 14 groups
+============================================================
