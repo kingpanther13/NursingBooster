@@ -1,0 +1,933 @@
+﻿=== CPRS Dialog Control Dump ===
+Time: 2026-04-08 16:05:24
+Dialog Title: Reminder Dialog Template: VAAES ACUTE INPATIENT NSG SHIFT ASSESSMENT
+Dialog Class: TfrmRemDlg
+Dialog HWND: 0x130d4a
+
+TPanel hwnd=266738 text='' vis=Y parent=TfrmRemDlg
+  TPanel hwnd=1248236 text='' vis=Y parent=TPanel
+    TGridPanel hwnd=1182656 text='' vis=Y parent=TPanel
+      TButton hwnd=920652 text='Cancel' vis=Y parent=TGridPanel
+      TButton hwnd=724796 text='Finish' vis=Y parent=TGridPanel
+      TButton hwnd=1641288 text='&Visit Info' vis=Y parent=TGridPanel
+    TRichEdit hwnd=724710 text='' vis=Y parent=TPanel
+    TRichEdit hwnd=1444772 text='' vis=Y parent=TPanel
+TScrollBox hwnd=1510734 text='' vis=N parent=TfrmRemDlg
+TScrollBox hwnd=1641112 text='' vis=Y parent=TfrmRemDlg
+  TGroupBox hwnd=790308 text='' vis=Y parent=TScrollBox
+    TDlgFieldPanel hwnd=528480 text='' vis=Y parent=TGroupBox
+      TCPRSDialogRichEdit hwnd=1771160 text='' vis=Y parent=TDlgFieldPanel
+    TCPRSDialogParentCheckBox hwnd=594052 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=526676 text='' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=201018 text='' vis=Y parent=TGroupBox
+      TCPRSTemplateFieldLabel hwnd=855322 text='' vis=Y parent=TDlgFieldPanel
+    TCPRSDialogParentCheckBox hwnd=1706860 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=724722 text='' vis=Y parent=TGroupBox
+    TGroupBox hwnd=790650 text='' vis=Y parent=TGroupBox
+      TGroupBox hwnd=1117742 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=201022 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=201020 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=201026 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=332096 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=725062 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=201028 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=1511608 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1903520 text='' vis=Y parent=TGroupBox CHECKED=YES
+        TDlgFieldPanel hwnd=987228 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=856262 text='' vis=Y parent=TGroupBox CHECKED=YES
+        TDlgFieldPanel hwnd=2429016 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=594046 text='' vis=Y parent=TGroupBox CHECKED=YES
+        TDlgFieldPanel hwnd=594050 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=987214 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=790232 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=591748 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=659532 text='' vis=Y parent=TGroupBox
+    TGroupBox hwnd=921002 text='' vis=Y parent=TGroupBox
+      TGroupBox hwnd=724530 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=986372 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1116310 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=790074 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=790072 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=462642 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=462640 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=462638 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=462636 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=462634 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=528168 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=528166 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1182596 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=921328 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1379044 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=1313688 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1117530 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=921130 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1248082 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=723860 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=527934 text='' vis=Y parent=TGroupBox CHECKED=YES
+      TDlgFieldPanel hwnd=920792 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=790178 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=1117556 text='' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=2034882 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=855896 text='' vis=Y parent=TGroupBox CHECKED=NO
+  TGroupBox hwnd=1248522 text='' vis=Y parent=TScrollBox
+    TDlgFieldPanel hwnd=1379142 text='' vis=Y parent=TGroupBox
+      TCPRSDialogRichEdit hwnd=1052128 text='' vis=Y parent=TDlgFieldPanel
+    TCPRSDialogParentCheckBox hwnd=1837778 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=266502 text='' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=1313626 text='' vis=Y parent=TGroupBox
+      TCPRSDialogCheckBox hwnd=266500 text='Ventilation of feelings encouraged' vis=Y parent=TDlgFieldPanel CHECKED=YES
+      TCPRSDialogCheckBox hwnd=266498 text='Treatment discussion' vis=Y parent=TDlgFieldPanel CHECKED=NO
+      TCPRSDialogCheckBox hwnd=593680 text='Medical directives discussion' vis=Y parent=TDlgFieldPanel CHECKED=NO
+      TCPRSDialogCheckBox hwnd=1051488 text='Hospitalization discussion' vis=Y parent=TDlgFieldPanel CHECKED=YES
+      TCPRSDialogCheckBox hwnd=1576910 text='Grieving process discussion' vis=Y parent=TDlgFieldPanel CHECKED=NO
+      TCPRSDialogCheckBox hwnd=1511320 text='Disease process discussion' vis=Y parent=TDlgFieldPanel CHECKED=YES
+      TCPRSDialogCheckBox hwnd=593686 text='Coping skills discussion' vis=Y parent=TDlgFieldPanel CHECKED=YES
+      TCPRSDialogCheckBox hwnd=1904592 text='Anticipated outcomes' vis=Y parent=TDlgFieldPanel CHECKED=YES
+      TCPRSDialogCheckBox hwnd=331926 text='Family conference' vis=Y parent=TDlgFieldPanel CHECKED=NO
+      TCPRSDialogCheckBox hwnd=331924 text='1:1 discussion' vis=Y parent=TDlgFieldPanel CHECKED=NO
+  TGroupBox hwnd=200916 text='' vis=Y parent=TScrollBox
+    TDlgFieldPanel hwnd=332082 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=332080 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TGroupBox hwnd=200924 text='' vis=Y parent=TGroupBox
+      TGroupBox hwnd=1379380 text='' vis=Y parent=TGroupBox
+        TGroupBox hwnd=1182766 text='' vis=Y parent=TGroupBox
+          TCPRSDialogFieldEdit hwnd=986914 text='' vis=Y parent=TGroupBox
+          TCPRSDialogFieldEdit hwnd=1117084 text='' vis=Y parent=TGroupBox
+          TDlgFieldPanel hwnd=266508 text='' vis=Y parent=TGroupBox
+          TCPRSDialogParentCheckBox hwnd=266506 text='' vis=Y parent=TGroupBox CHECKED=NO
+          TDlgFieldPanel hwnd=266512 text='' vis=Y parent=TGroupBox
+          TDlgFieldPanel hwnd=266510 text='' vis=Y parent=TGroupBox
+          TCPRSDialogParentCheckBox hwnd=266516 text='' vis=Y parent=TGroupBox CHECKED=YES
+          TDlgFieldPanel hwnd=463122 text='' vis=Y parent=TGroupBox
+          TDlgFieldPanel hwnd=986398 text='' vis=Y parent=TGroupBox
+          TCPRSDialogParentCheckBox hwnd=266518 text='' vis=Y parent=TGroupBox CHECKED=NO
+          TDlgFieldPanel hwnd=920860 text='' vis=Y parent=TGroupBox
+          TCPRSDialogParentCheckBox hwnd=789818 text='' vis=Y parent=TGroupBox CHECKED=NO
+          TDlgFieldPanel hwnd=1117038 text='' vis=Y parent=TGroupBox
+          TCPRSDialogParentCheckBox hwnd=1117046 text='' vis=Y parent=TGroupBox CHECKED=NO
+          TDlgFieldPanel hwnd=1051924 text='' vis=Y parent=TGroupBox
+          TCPRSDialogParentCheckBox hwnd=1248088 text='' vis=Y parent=TGroupBox CHECKED=NO
+          TDlgFieldPanel hwnd=1968822 text='' vis=Y parent=TGroupBox
+          TDlgFieldPanel hwnd=266472 text='' vis=Y parent=TGroupBox
+          TCPRSDialogParentCheckBox hwnd=921770 text='' vis=Y parent=TGroupBox CHECKED=NO
+          TDlgFieldPanel hwnd=1314452 text='' vis=Y parent=TGroupBox
+          TCPRSDialogParentCheckBox hwnd=855682 text='' vis=Y parent=TGroupBox CHECKED=NO
+          TDlgFieldPanel hwnd=1051636 text='' vis=Y parent=TGroupBox
+          TCPRSDialogParentCheckBox hwnd=266504 text='' vis=Y parent=TGroupBox CHECKED=YES
+          TDlgFieldPanel hwnd=1510668 text='' vis=Y parent=TGroupBox
+          TDlgFieldPanel hwnd=1248304 text='' vis=Y parent=TGroupBox
+          TDlgFieldPanel hwnd=2493434 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=1182034 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1510742 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=987264 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1772274 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=1118024 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=2099824 text='' vis=Y parent=TGroupBox CHECKED=YES
+      TDlgFieldPanel hwnd=332076 text='' vis=Y parent=TGroupBox
+        TCPRSDialogRichEdit hwnd=463150 text='' vis=Y parent=TDlgFieldPanel
+      TCPRSDialogParentCheckBox hwnd=397610 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332072 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=332070 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332068 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=332066 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=397600 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=332062 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332060 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=332058 text='' vis=Y parent=TGroupBox CHECKED=YES
+      TDlgFieldPanel hwnd=725086 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1118316 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=790056 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=659158 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332056 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=200930 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=200928 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=200926 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=200922 text='' vis=Y parent=TGroupBox
+    TCPRSDialogButton hwnd=200920 text='ADL Level of Assistance Reference' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=200918 text='' vis=Y parent=TGroupBox
+  TGroupBox hwnd=528096 text='' vis=Y parent=TScrollBox
+    TGroupBox hwnd=1442594 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=1182812 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1773544 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1772270 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=463160 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332030 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=463156 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332026 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=332032 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332022 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=332028 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332018 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=397560 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332014 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=332020 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332010 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=332016 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=332004 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=332012 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=463158 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=332006 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=200914 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=593452 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=921478 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=593474 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=528064 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=266394 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1444644 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724690 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1444702 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1443526 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=528090 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1444788 text='' vis=Y parent=TGroupBox CHECKED=YES
+  TGroupBox hwnd=724220 text='' vis=Y parent=TScrollBox
+    TGroupBox hwnd=266386 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=528154 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=528152 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=266378 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=266376 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=266382 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=266380 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=528148 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=528146 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=528142 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=528138 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TGroupBox hwnd=659084 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=659008 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=593672 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=528134 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=659090 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=659096 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=659094 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=659056 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=659054 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=1051532 text='' vis=Y parent=TGroupBox
+      TCPRSDialogFieldEdit hwnd=790132 text='' vis=Y parent=TDlgFieldPanel
+      TCPRSDialogCheckBox hwnd=1116810 text='Other:' vis=Y parent=TDlgFieldPanel CHECKED=NO
+      TCPRSDialogCheckBox hwnd=2689630 text='Guarding' vis=Y parent=TDlgFieldPanel CHECKED=NO
+      TCPRSDialogCheckBox hwnd=920264 text='Firm' vis=Y parent=TDlgFieldPanel CHECKED=NO
+      TCPRSDialogCheckBox hwnd=920248 text='Non-tender' vis=Y parent=TDlgFieldPanel CHECKED=YES
+      TCPRSDialogCheckBox hwnd=1115852 text='Soft' vis=Y parent=TDlgFieldPanel CHECKED=YES
+    TCPRSDialogParentCheckBox hwnd=1312418 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=920218 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=920232 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=920272 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=789864 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=920798 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=789652 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1180418 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=920256 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=856026 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1249226 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=790560 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=528186 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=528184 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1051258 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=920482 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=593546 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=593544 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=593540 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=659052 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724614 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=789766 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724362 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=658824 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=658816 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=724226 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724224 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=724222 text='' vis=Y parent=TGroupBox
+  TGroupBox hwnd=1051472 text='' vis=Y parent=TScrollBox
+    TGroupBox hwnd=986324 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=593616 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1313758 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=593606 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=986064 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=986066 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1051366 text='' vis=Y parent=TGroupBox CHECKED=YES
+      TDlgFieldPanel hwnd=1904312 text='' vis=Y parent=TGroupBox
+        TCPRSDialogCheckBox hwnd=1182522 text='Posterior only' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1183284 text='Anterior only' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1051416 text='Anterior and posterior' vis=Y parent=TDlgFieldPanel CHECKED=YES
+    TGroupBox hwnd=1180420 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=659254 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=528180 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=985728 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1116690 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1116904 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1902262 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=985762 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1182316 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=920258 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=985770 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1051280 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1051322 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TGroupBox hwnd=920204 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=1116818 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1182364 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=855678 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=921212 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=920806 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1051912 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=658982 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=658980 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=658978 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=920242 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=920196 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=920212 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1050972 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=855004 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=920252 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=920206 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=1443518 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1182234 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=920214 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=920236 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1313080 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724512 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=593438 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=593436 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=593432 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=593430 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=593514 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=593512 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1509028 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1051302 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=1182334 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724208 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=789520 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=986024 text='' vis=Y parent=TGroupBox CHECKED=YES
+  TGroupBox hwnd=986534 text='' vis=Y parent=TScrollBox
+    TGroupBox hwnd=855110 text='' vis=Y parent=TGroupBox
+      TGroupBox hwnd=920732 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=986056 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1051414 text='' vis=Y parent=TGroupBox CHECKED=YES
+      TDlgFieldPanel hwnd=986284 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=789674 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=789672 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=855172 text='' vis=Y parent=TGroupBox CHECKED=YES
+      TDlgFieldPanel hwnd=855068 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=855066 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=855106 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=855070 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TGroupBox hwnd=986136 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=855108 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=920650 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=920648 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=855048 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=855046 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=920594 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TGroupBox hwnd=855278 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=855062 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=855124 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=789724 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=920812 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=920802 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=920808 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TGroupBox hwnd=593424 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=725042 text='' vis=Y parent=TGroupBox
+        TCPRSDialogFieldEdit hwnd=1511040 text='' vis=Y parent=TDlgFieldPanel
+      TCPRSDialogParentCheckBox hwnd=1772464 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=986340 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=724178 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=724176 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1248212 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TGroupBox hwnd=593426 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=985874 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=724822 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=724174 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=724172 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=724170 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=593510 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=593508 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=593506 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=593504 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=593502 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=593500 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=593498 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=593496 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=593494 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=593492 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=593490 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=593488 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=593486 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=593484 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=593482 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=593596 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=593428 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TGroupBox hwnd=593406 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=593422 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=593420 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=593418 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=593416 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=658950 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=593412 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=593410 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=593408 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TGroupBox hwnd=723526 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=593404 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=593402 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=593400 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=593398 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=658932 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=986610 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1247960 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=3540722 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=918272 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=854648 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1116504 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=723528 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=723524 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724168 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=724166 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724164 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=724160 text='' vis=Y parent=TGroupBox
+    TGroupBox hwnd=1246920 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=724158 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=789632 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=920550 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=920546 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=724156 text='' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=724154 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724152 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=724150 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724148 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=1182422 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724146 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=724144 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=724142 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=1115840 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=855024 text='' vis=Y parent=TGroupBox CHECKED=YES
+  TGroupBox hwnd=986514 text='' vis=Y parent=TScrollBox
+    TGroupBox hwnd=1576070 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=659058 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=659064 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TGroupBox hwnd=1245882 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=659062 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=723522 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=789008 text='' vis=Y parent=TGroupBox
+        TCPRSDialogCheckBox hwnd=921792 text='Hot' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=854590 text='Cool' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=789052 text='Cold' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=723514 text='Warm' vis=Y parent=TDlgFieldPanel CHECKED=YES
+      TGroupBox hwnd=854576 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=723508 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=723510 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=790284 text='' vis=Y parent=TGroupBox
+        TCPRSDialogCheckBox hwnd=921570 text='Hot' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1837824 text='Cool' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=528092 text='Cold' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1313754 text='Warm' vis=Y parent=TDlgFieldPanel CHECKED=YES
+    TGroupBox hwnd=987234 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=723506 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=723502 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TGroupBox hwnd=723494 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=723500 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=723498 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=723530 text='' vis=Y parent=TGroupBox
+        TCPRSDialogCheckBox hwnd=723496 text='Unable to detect pressure' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1246806 text='Numbness' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1050286 text='Decreased' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=723490 text='Absent' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=723492 text='Intact' vis=Y parent=TDlgFieldPanel CHECKED=YES
+      TGroupBox hwnd=1575540 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=789096 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=920174 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=2690292 text='' vis=Y parent=TGroupBox
+        TCPRSDialogCheckBox hwnd=723558 text='Unable to detect pressure' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=789092 text='Numbness' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=723554 text='Decreased' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=723552 text='Absent' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=723540 text='Intact' vis=Y parent=TDlgFieldPanel CHECKED=YES
+    TGroupBox hwnd=921072 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=723548 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=723546 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TGroupBox hwnd=986212 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=1639210 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=986146 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=855474 text='' vis=Y parent=TGroupBox
+        TCPRSDialogCheckBox hwnd=1117224 text='Moves against some resistance' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=855036 text='Moves against gravity' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1051408 text='Flaccid' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=920552 text='Full strength' vis=Y parent=TDlgFieldPanel CHECKED=YES
+      TGroupBox hwnd=1117918 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=855038 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=854616 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1051420 text='' vis=Y parent=TGroupBox
+        TCPRSDialogCheckBox hwnd=1116758 text='Moves against some resistance' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=855406 text='Moves against gravity' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1051422 text='Flaccid' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1052018 text='Full strength' vis=Y parent=TDlgFieldPanel CHECKED=YES
+      TGroupBox hwnd=1116924 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=1051576 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=920950 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1182490 text='' vis=Y parent=TGroupBox
+        TCPRSDialogCheckBox hwnd=921070 text='Unable to grip' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1117006 text='Weak' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=855528 text='Moderate' vis=Y parent=TDlgFieldPanel CHECKED=NO
+        TCPRSDialogCheckBox hwnd=1052072 text='Strong' vis=Y parent=TDlgFieldPanel CHECKED=YES
+    TDlgFieldPanel hwnd=1051460 text='' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=921062 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1052016 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=920144 text='' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=1313386 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=920146 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=855428 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=855532 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=1773620 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1314224 text='' vis=Y parent=TGroupBox CHECKED=YES
+  TGroupBox hwnd=1313516 text='' vis=Y parent=TScrollBox
+    TDlgFieldPanel hwnd=1052132 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=921066 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1510830 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1052026 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TGroupBox hwnd=1379028 text='' vis=Y parent=TGroupBox
+      TGroupBox hwnd=987242 text='' vis=Y parent=TGroupBox
+        TGroupBox hwnd=1510188 text='' vis=Y parent=TGroupBox
+          TGroupBox hwnd=985386 text='' vis=Y parent=TGroupBox
+            TGroupBox hwnd=2034726 text='' vis=Y parent=TGroupBox
+              TDlgFieldPanel hwnd=1248076 text='' vis=Y parent=TGroupBox
+            TDlgFieldPanel hwnd=1968862 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=1968838 text='' vis=Y parent=TGroupBox CHECKED=NO
+            TDlgFieldPanel hwnd=1312660 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=1444806 text='' vis=Y parent=TGroupBox CHECKED=YES
+          TDlgFieldPanel hwnd=1117656 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=985656 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=790242 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=790632 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1117596 text='' vis=Y parent=TGroupBox CHECKED=YES
+      TGroupBox hwnd=1444376 text='' vis=Y parent=TGroupBox
+        TGroupBox hwnd=1837924 text='' vis=Y parent=TGroupBox
+          TDlgFieldPanel hwnd=1444658 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=790652 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=790228 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=1379310 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1117756 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=985676 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=920142 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=1052046 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1180022 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=855426 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1117560 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=790648 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1052048 text='' vis=Y parent=TGroupBox CHECKED=YES
+        TDlgFieldPanel hwnd=986502 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1183102 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=1116846 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1116906 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=1313578 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=2035036 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=1575728 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1379126 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1116892 text='' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=1116862 text='' vis=Y parent=TGroupBox
+    TGroupBox hwnd=1117114 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=1117116 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1116890 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1116896 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1445244 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1445292 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1837770 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1510012 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1772212 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=1051606 text='' vis=Y parent=TGroupBox
+    TGroupBox hwnd=1118186 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=1313582 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1116836 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1379110 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1705668 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1051608 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1117124 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1314372 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1379112 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1380018 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1183602 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=920940 text='' vis=Y parent=TGroupBox
+  TGroupBox hwnd=659086 text='' vis=Y parent=TScrollBox
+    TGroupBox hwnd=659204 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=659194 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=659200 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=659198 text='' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=1118384 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1969302 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1313456 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1249458 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1247948 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1445558 text='' vis=Y parent=TGroupBox CHECKED=YES
+  TGroupBox hwnd=1379128 text='' vis=Y parent=TScrollBox
+    TGroupBox hwnd=920566 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=920630 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=855160 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TGroupBox hwnd=855166 text='' vis=Y parent=TGroupBox
+        TGroupBox hwnd=855156 text='' vis=Y parent=TGroupBox
+          TGroupBox hwnd=1510248 text='' vis=Y parent=TGroupBox
+            TDlgFieldPanel hwnd=528106 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=1314358 text='' vis=Y parent=TGroupBox CHECKED=NO
+            TDlgFieldPanel hwnd=856270 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=920800 text='' vis=Y parent=TGroupBox CHECKED=YES
+            TDlgFieldPanel hwnd=1313570 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=724290 text='' vis=Y parent=TGroupBox CHECKED=NO
+            TDlgFieldPanel hwnd=856166 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=986168 text='' vis=Y parent=TGroupBox CHECKED=YES
+            TDlgFieldPanel hwnd=724288 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=2362610 text='' vis=Y parent=TGroupBox CHECKED=NO
+            TDlgFieldPanel hwnd=659202 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=724726 text='' vis=Y parent=TGroupBox CHECKED=NO
+            TDlgFieldPanel hwnd=789798 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=724724 text='' vis=Y parent=TGroupBox CHECKED=YES
+            TDlgFieldPanel hwnd=986098 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=920618 text='' vis=Y parent=TGroupBox CHECKED=YES
+            TDlgFieldPanel hwnd=659196 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=855154 text='' vis=Y parent=TGroupBox CHECKED=NO
+            TDlgFieldPanel hwnd=1444714 text='' vis=Y parent=TGroupBox
+            TCPRSDialogParentCheckBox hwnd=789796 text='' vis=Y parent=TGroupBox CHECKED=NO
+          TDlgFieldPanel hwnd=986162 text='' vis=Y parent=TGroupBox
+        TDlgFieldPanel hwnd=855158 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=855164 text='' vis=Y parent=TGroupBox CHECKED=NO
+        TDlgFieldPanel hwnd=855162 text='' vis=Y parent=TGroupBox
+        TCPRSDialogParentCheckBox hwnd=1116932 text='' vis=Y parent=TGroupBox CHECKED=YES
+      TDlgFieldPanel hwnd=920568 text='' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=986114 text='' vis=Y parent=TGroupBox
+      TCPRSDialogHyperlinkLabel hwnd=986116 text='' vis=Y parent=TDlgFieldPanel
+    TCPRSDialogParentCheckBox hwnd=724286 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TGroupBox hwnd=986172 text='Select MORSE Result Category' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=855148 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=920576 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=855152 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=855150 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=1379136 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=920666 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1117066 text='' vis=Y parent=TGroupBox
+      TCPRSTemplateFieldLabel hwnd=1181584 text='' vis=Y parent=TDlgFieldPanel
+      TCPRSTemplateFieldLabel hwnd=855328 text='' vis=Y parent=TDlgFieldPanel
+    TCPRSDialogButton hwnd=920634 text='Perform MORSE FALL SCALE *' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=920640 text='' vis=Y parent=TGroupBox
+    TCPRSDialogButton hwnd=920638 text='Morse Fall Scoring Information' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=920608 text='' vis=Y parent=TGroupBox
+    TDlgFieldPanel hwnd=920682 text='' vis=Y parent=TGroupBox
+  TGroupBox hwnd=1444660 text='' vis=Y parent=TScrollBox
+    TDlgFieldPanel hwnd=789794 text='' vis=Y parent=TGroupBox
+    TGroupBox hwnd=856154 text='' vis=Y parent=TGroupBox
+      TGroupBox hwnd=1117062 text='' vis=Y parent=TGroupBox
+        TCPRSDialogComboBox hwnd=1443522 text='' vis=Y parent=TGroupBox
+          TORComboEdit hwnd=724284 text='' vis=Y parent=TCPRSDialogComboBox
+            TBitBtn hwnd=920656 text='' vis=Y parent=TORComboEdit
+        TDlgFieldPanel hwnd=920654 text='' vis=Y parent=TGroupBox
+      TDlgFieldPanel hwnd=1248008 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=2032416 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=790600 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1052010 text='' vis=Y parent=TGroupBox CHECKED=NO
+      TDlgFieldPanel hwnd=855716 text='' vis=Y parent=TGroupBox
+      TCPRSDialogParentCheckBox hwnd=1248662 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=921254 text='' vis=Y parent=TGroupBox
+  TGroupBox hwnd=1116926 text='' vis=Y parent=TScrollBox
+    TDlgFieldPanel hwnd=1117050 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=789816 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1117048 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1117054 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=789800 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1051516 text='' vis=Y parent=TGroupBox CHECKED=YES
+    TDlgFieldPanel hwnd=1117058 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1117056 text='' vis=Y parent=TGroupBox CHECKED=YES
+  TDlgFieldPanel hwnd=1182556 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=1052604 text='' vis=Y parent=TScrollBox CHECKED=NO
+  TDlgFieldPanel hwnd=724800 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=724712 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=2230108 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=1444762 text='' vis=Y parent=TScrollBox CHECKED=NO
+  TDlgFieldPanel hwnd=1313476 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=790244 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=790342 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=984680 text='' vis=Y parent=TScrollBox CHECKED=NO
+  TDlgFieldPanel hwnd=657744 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=789814 text='' vis=Y parent=TScrollBox CHECKED=NO
+  TDlgFieldPanel hwnd=856098 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=1248224 text='' vis=Y parent=TScrollBox CHECKED=NO
+  TDlgFieldPanel hwnd=921538 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=592222 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=1182476 text='' vis=Y parent=TScrollBox
+  TDlgFieldPanel hwnd=920620 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=1247874 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=1313414 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=789808 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=855318 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=1117002 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=1313524 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=2232226 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=659284 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=1313602 text='' vis=Y parent=TScrollBox CHECKED=NO
+  TDlgFieldPanel hwnd=723210 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=789810 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=724802 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=1248032 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=659278 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=789812 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=724804 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=1313546 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=1510046 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=1248006 text='' vis=Y parent=TScrollBox CHECKED=NO
+  TDlgFieldPanel hwnd=659282 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=657710 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TDlgFieldPanel hwnd=986208 text='' vis=Y parent=TScrollBox
+  TCPRSDialogParentCheckBox hwnd=920856 text='' vis=Y parent=TScrollBox CHECKED=YES
+  TGroupBox hwnd=1314130 text='' vis=Y parent=TScrollBox
+    TDlgFieldPanel hwnd=724798 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1510258 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=1510322 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1182458 text='' vis=Y parent=TGroupBox CHECKED=NO
+    TDlgFieldPanel hwnd=659280 text='' vis=Y parent=TGroupBox
+    TCPRSDialogParentCheckBox hwnd=1510334 text='' vis=Y parent=TGroupBox CHECKED=YES
+  TDlgFieldPanel hwnd=789804 text='' vis=Y parent=TScrollBox
+  TDlgFieldPanel hwnd=592226 text='' vis=Y parent=TScrollBox
+  TDlgFieldPanel hwnd=920670 text='' vis=Y parent=TScrollBox
+    TCPRSDialogHyperlinkLabel hwnd=723290 text='' vis=Y parent=TDlgFieldPanel
+  TDlgFieldPanel hwnd=789806 text='' vis=Y parent=TScrollBox
+
+=== Parent Checkboxes ===
+(Parent CB labels use non-windowed TLabel - may not be readable)
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='Other:'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=NO label='(not accessible)'
+  CHECKED=YES label='(not accessible)'
+
+=== Summary ===
+Total controls: 676
+Checkboxes: 292
