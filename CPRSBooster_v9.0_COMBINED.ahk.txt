@@ -787,7 +787,7 @@ Gui, 73:Color, 1a1a2e
 Gui, 73:Font, s9 cWhite, Segoe UI
 Gui, 73:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
 Gui, 73:Font, s6 cSilver, Segoe UI
-Gui, 73:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, v9.0 | 25ea486 | 2026-04-08
+Gui, 73:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, v9.0 | fde7dfe | 2026-04-08
 Gui, 73:Font, s7 c00FF88, Segoe UI
 Gui, 73:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
 Gui, 73:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
