@@ -1,0 +1,61 @@
+﻿============================================================
+  CP FLOWSHEETS SAVE LOG
+============================================================
+Timestamp:    2026-03-18 10:54:46
+Action:       SAVE
+Template:     calmcooperativesleeping
+Window:       CP Flowsheets
+User:         VHAORLCrameA
+Controls:     45
+Total saved:  45
+============================================================
+
+  (O) RADIO  Patient's Room
+  ( ) RADIO  Hall
+  ( ) RADIO  Quiet Room
+  ( ) RADIO  Smoking Area
+  ( ) RADIO  Medication Room
+  ( ) RADIO  Bathroom
+  ( ) RADIO  Day Room
+  ( ) RADIO  Group Room
+  ( ) RADIO  Smoking Porch
+  ( ) RADIO  Nursing Station
+  [v] COMBO  1:1 OBSERVATION = 1:1 OBSERVATION
+  [X] CHECKBOX  Verified
+  [ ] CHECKBOX  Corrected
+  [ ] CHECKBOX  Synchronize
+  ( ) RADIO  Walking Or Pacing
+  ( ) RADIO  Quiet Or Resting
+  ( ) RADIO  With Physician
+  ( ) RADIO  Geri-Chair
+  [v] COMBO  15 Minutes = 15 Minutes
+  ( ) RADIO  10:30
+  [v] COMBO  4WM = 4WM
+  ( ) RADIO  Lying Or Sitting
+  (O) RADIO  Sleeping
+  ( ) RADIO  With Therapist
+  [X] CHECKLIST idx=0  Cooperative
+  [ ] CHECKLIST idx=6  Withdrawn
+  [ ] CHECKLIST idx=12  Alert
+  [X] CHECKLIST idx=1  Calm
+  [ ] CHECKLIST idx=7  Uncooperative
+  [ ] CHECKLIST idx=13  Drowsy
+  [ ] CHECKLIST idx=2  Anxious
+  [ ] CHECKLIST idx=8  Sleeps Poorly
+  [ ] CHECKLIST idx=14  Lethargic
+  [ ] CHECKLIST idx=3  Hostile
+  [ ] CHECKLIST idx=9  Agitated
+  [ ] CHECKLIST idx=4  Combative
+  [ ] CHECKLIST idx=10  Sedated
+  [ ] CHECKLIST idx=5  Ineffective Coping
+  [ ] CHECKLIST idx=11  Restless
+  ( ) RADIO  No
+  (O) RADIO  Yes
+  ( ) RADIO  No
+  (O) RADIO  Yes
+  ( ) RADIO  No
+  (O) RADIO  Yes
+
+============================================================
+TOTALS: 3 checkboxes, 15 checklist items, 24 radios, 3 combos
+============================================================

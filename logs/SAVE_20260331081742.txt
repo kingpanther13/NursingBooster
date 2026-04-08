@@ -1,0 +1,69 @@
+﻿============================================================
+  CP FLOWSHEETS SAVE LOG
+============================================================
+Timestamp:    2026-03-31 08:17:42
+Action:       SAVE
+Template:     RestraintConfused
+Window:       CP Flowsheets
+User:         VHAORLCrameA
+Controls:     53
+Total saved:  53
+============================================================
+
+  [v] COMBO  Non-Behavioral Restraints = Non-Behavioral Restraints
+  [X] CHECKBOX  Verified
+  [ ] CHECKBOX  Corrected
+  [ ] CHECKBOX  Synchronize
+  [v] COMBO  2 Hours = 2 Hours
+  ( ) RADIO  08:00
+  [v] COMBO  4WMSD = 4WMSD
+  [ ] CHECKLIST idx=0  Oriented To Time
+  [ ] CHECKLIST idx=6  Disoriented To Person
+  [ ] CHECKLIST idx=1  Oriented To Place
+  [X] CHECKLIST idx=7  Disoriented To Situation
+  [ ] CHECKLIST idx=2  Oriented To Person
+  [ ] CHECKLIST idx=3  Oriented To Situation
+  [X] CHECKLIST idx=4  Disoriented To Time
+  [X] CHECKLIST idx=5  Disoriented To Place
+  [ ] CHECKLIST idx=0  Cooperative
+  [ ] CHECKLIST idx=6  Withdrawn
+  [ ] CHECKLIST idx=12  Alert
+  [ ] CHECKLIST idx=1  Calm
+  [X] CHECKLIST idx=7  Uncooperative
+  [ ] CHECKLIST idx=13  Drowsy
+  [ ] CHECKLIST idx=2  Anxious
+  [ ] CHECKLIST idx=8  Sleeps Poorly
+  [ ] CHECKLIST idx=14  Lethargic
+  [ ] CHECKLIST idx=3  Hostile
+  [ ] CHECKLIST idx=9  Agitated
+  [ ] CHECKLIST idx=4  Combative
+  [ ] CHECKLIST idx=10  Sedated
+  [ ] CHECKLIST idx=5  Ineffective Coping
+  [ ] CHECKLIST idx=11  Restless
+  [X] CHECKLIST idx=0  Regular
+  [ ] CHECKLIST idx=6  Abdominal
+  [ ] CHECKLIST idx=1  Irregular
+  [ ] CHECKLIST idx=7  Cheyne-Stokes
+  [ ] CHECKLIST idx=2  Deep
+  [ ] CHECKLIST idx=8  Kussmaul
+  [ ] CHECKLIST idx=3  Shallow
+  [ ] CHECKLIST idx=9  Agonal
+  [ ] CHECKLIST idx=4  Dyspenic
+  [ ] CHECKLIST idx=10  Ventilator
+  [ ] CHECKLIST idx=5  Orthopneic
+  ( ) RADIO  No
+  (O) RADIO  Yes
+  ( ) RADIO  No
+  (O) RADIO  Yes
+  ( ) RADIO  No
+  (O) RADIO  Yes
+  ( ) RADIO  No
+  (O) RADIO  Yes
+  ( ) RADIO  No
+  (O) RADIO  Yes
+  ( ) RADIO  No
+  (O) RADIO  Yes
+
+============================================================
+TOTALS: 3 checkboxes, 34 checklist items, 13 radios, 3 combos
+============================================================
