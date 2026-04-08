@@ -104,8 +104,8 @@ global NB_TemplateDir := onedrivelocal . "\NursingTemplates"
 global NB_LogDir := onedrivelocal . "\NursingTemplates\Logs"
 global NB_BoosterGuiVisible := 0
 global NB_SignWasVisible := 0
-global NB_ApplySpeed := 600  ; ms delay after parent toggle (slider range 50-1000)
-global NB_LeafSpeed := 50    ; ms delay after leaf checkbox toggle (slider range 10-500)
+global NB_ApplySpeed := 0  ; ms delay after parent toggle (slider range 0-600)
+global NB_LeafSpeed := 0    ; ms delay after leaf checkbox toggle (slider range 0-600)
 global NB_AdvancedMode := 0  ; 1 = show advanced controls, 0 = simplified UI
 global NB_SettingsIniPath := onedrivelocal . "\NursingTemplates\booster_settings.ini"
 global NB_SpeedOverride := 0  ; 1 = use main panel speed, 0 = use per-template speed
