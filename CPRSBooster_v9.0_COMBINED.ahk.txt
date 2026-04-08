@@ -732,7 +732,7 @@ gosub NB_LoadSettings
 Gui, 67:Destroy
 Gui, 67:Color, 1a1a2e
 Gui, 67:Font, s9 cWhite, Segoe UI
-Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0  |  Ctrl+Shift+B to toggle
+Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0-layers  |  Ctrl+Shift+B to toggle
 Gui, 67:Font, s8 cBlack, Segoe UI
 Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
 Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -20946,74 +20946,132 @@ NB_ApplyTemplate(templatePath) {
     totalApplied := 0
     totalNotFound := 0
 
-    ; Enumerate ALL checkboxes in the scroll box (flat, Y-sorted)
-    liveItems := NB_EnumDescendantCheckboxes(scrollBox)
-    needReEnum := false
-
     ToolTip, Applying %tplCount% items... (Right-click to cancel)
 
     ; Register right-click hotkey to set cancel flag
     NB_ApplyCancelled := false
     Hotkey, ~RButton, NB_CancelApplyHotkey, On
 
-    ; Walk the template top-to-bottom, one item at a time.
-    ; After toggling any parent, re-enumerate the entire scroll box
-    ; so dynamically created children appear at the correct positions.
-    tplPos := 1
-    while (tplPos <= tplCount)
+    ; --- LAYER-BY-LAYER APPLY ---
+    ; Instead of walking top-to-bottom, process one depth layer at a time.
+    ; Layer 0 first (top-level parents), then layer 1 (their children), etc.
+    ; This ensures parent expansions complete before we touch children.
+
+    ; Find max depth in template
+    maxDepth := 0
+    Loop, %tplCount% {
+        if (tplItems[A_Index].depth > maxDepth)
+            maxDepth := tplItems[A_Index].depth
+    }
+
+    ; Process each depth layer
+    currentDepth := 0
+    while (currentDepth <= maxDepth)
     {
-        ; Cancel on right-click
+        ; Cancel check
         if (NB_ApplyCancelled) {
             Hotkey, ~RButton, NB_CancelApplyHotkey, Off
-            ToolTip, Template apply cancelled at item %tplPos%/%tplCount%.
+            ToolTip, Template apply cancelled at depth %currentDepth%.
             SetTimer, NB_ClearToolTip, -3000
             return
         }
 
-        ; Re-enumerate if a parent toggle changed the dialog structure
-        if (needReEnum) {
-            liveItems := NB_EnumDescendantCheckboxes(scrollBox)
-            needReEnum := false
-        }
-
+        ; Enumerate current live state
+        liveItems := NB_EnumDescendantCheckboxes(scrollBox)
         liveCount := liveItems.Length()
-        if (tplPos > liveCount) {
-            totalNotFound++
-            tplPos++
-            continue
+
+        ToolTip, Applying depth %currentDepth%/%maxDepth%...
+
+        ; Collect template items at this depth (in order)
+        tplAtDepth := []
+        Loop, %tplCount% {
+            if (tplItems[A_Index].depth = currentDepth)
+                tplAtDepth.Push(tplItems[A_Index])
         }
 
-        tplCb := tplItems[tplPos]
-        liveCb := liveItems[tplPos]
+        ; Collect live items at this depth (in order)
+        liveAtDepth := []
+        Loop, %liveCount% {
+            if (liveItems[A_Index].depth = currentDepth)
+                liveAtDepth.Push(liveItems[A_Index])
+        }
 
-        nb_tmpHwnd := liveCb.hwnd
-        if (DllCall("IsWindow", "Ptr", nb_tmpHwnd)) {
-            ; Fresh state read right before toggle decision
+        ; Match template items to live items at this depth by position order
+        tplDepthCount := tplAtDepth.Length()
+        liveDepthCount := liveAtDepth.Length()
+        liveDepthIdx := 1
+
+        Loop, %tplDepthCount% {
+            ; Cancel check
+            if (NB_ApplyCancelled) {
+                Hotkey, ~RButton, NB_CancelApplyHotkey, Off
+                ToolTip, Template apply cancelled.
+                SetTimer, NB_ClearToolTip, -3000
+                return
+            }
+
+            tplCb := tplAtDepth[A_Index]
+
+            if (liveDepthIdx > liveDepthCount) {
+                totalNotFound++
+                continue
+            }
+
+            ; Try to match by label if available
+            matchIdx := 0
+            if (tplCb.label != "") {
+                ; Search from current position forward for label match
+                searchIdx := liveDepthIdx
+                while (searchIdx <= liveDepthCount) {
+                    if (liveAtDepth[searchIdx].label = tplCb.label) {
+                        matchIdx := searchIdx
+                        break
+                    }
+                    searchIdx++
+                }
+            }
+            ; No label or label not found — use positional match
+            if (matchIdx = 0)
+                matchIdx := liveDepthIdx
+
+            if (matchIdx > liveDepthCount) {
+                totalNotFound++
+                continue
+            }
+
+            liveCb := liveAtDepth[matchIdx]
+            liveDepthIdx := matchIdx + 1  ; advance past this match
+
+            nb_tmpHwnd := liveCb.hwnd
+            if (!DllCall("IsWindow", "Ptr", nb_tmpHwnd))
+                continue
+
+            ; Read current state
             SendMessage, 0x00F0, 0, 0,, ahk_id %nb_tmpHwnd%
             currentState := ErrorLevel ? true : false
+
             if (currentState != tplCb.checked) {
                 PostMessage, 0x00F5, 0, 0,, ahk_id %nb_tmpHwnd%
                 totalApplied++
 
-                ; Parent toggles create/destroy children — must re-enumerate
+                ; Wait after toggle — parent speed for parents, leaf for leaves
                 if (liveCb.className = "TCPRSDialogParentCheckBox") {
                     Sleep, %effectiveSpeed%
-                    needReEnum := true
                 } else {
                     Sleep, %effectiveLeafSpeed%
                 }
             }
+
+            ; Progress tooltip
+            if (Mod(totalApplied, 10) = 0)
+                ToolTip, Depth %currentDepth%/%maxDepth%: %totalApplied% toggled...
         }
 
-        tplPos++
+        ; After processing a layer, dismiss popups and let CPRS settle
+        NB_DismissIntermediatePopups()
+        Sleep, %effectiveSpeed%
 
-        ; Progress tooltip every 20 items
-        if (Mod(tplPos, 20) = 0)
-            ToolTip, Applying item %tplPos%/%tplCount%...
-
-        ; Dismiss popups periodically
-        if (Mod(totalApplied, 15) = 0)
-            NB_DismissIntermediatePopups()
+        currentDepth++
     }
 
     Hotkey, ~RButton, NB_CancelApplyHotkey, Off
