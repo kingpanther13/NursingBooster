@@ -732,7 +732,7 @@ gosub NB_LoadSettings
 Gui, 67:Destroy
 Gui, 67:Color, 1a1a2e
 Gui, 67:Font, s9 cWhite, Segoe UI
-Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0  |  Ctrl+Shift+B to toggle
+Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0-combo  |  Ctrl+Shift+B to toggle
 Gui, 67:Font, s8 cBlack, Segoe UI
 Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
 Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -20956,10 +20956,13 @@ NB_ApplyTemplate(templatePath) {
     NB_ApplyCancelled := false
     Hotkey, ~RButton, NB_CancelApplyHotkey, On
 
-    ; Walk the template top-to-bottom, one item at a time.
-    ; After toggling any parent, re-enumerate the entire scroll box
-    ; so dynamically created children appear at the correct positions.
+    ; Walk template and live list with separate cursors.
+    ; tplPos advances through template items. liveIdx advances through live items.
+    ; After a parent toggle + re-enum, find our last-toggled HWND in the new list
+    ; to resume at the correct position. Only check boxes, never uncheck.
     tplPos := 1
+    liveIdx := 1
+    lastToggledHwnd := 0
     while (tplPos <= tplCount)
     {
         ; Cancel on right-click
@@ -20970,39 +20973,58 @@ NB_ApplyTemplate(templatePath) {
             return
         }
 
-        ; Re-enumerate if a parent toggle changed the dialog structure
-        if (needReEnum) {
-            liveItems := NB_EnumDescendantCheckboxes(scrollBox)
-            needReEnum := false
-        }
-
         liveCount := liveItems.Length()
-        if (tplPos > liveCount) {
+        if (liveIdx > liveCount) {
             totalNotFound++
             tplPos++
             continue
         }
 
         tplCb := tplItems[tplPos]
-        liveCb := liveItems[tplPos]
+        liveCb := liveItems[liveIdx]
 
         nb_tmpHwnd := liveCb.hwnd
         if (DllCall("IsWindow", "Ptr", nb_tmpHwnd)) {
             ; Fresh state read right before toggle decision
             SendMessage, 0x00F0, 0, 0,, ahk_id %nb_tmpHwnd%
             currentState := ErrorLevel ? true : false
-            if (currentState != tplCb.checked) {
+            ; Only CHECK unchecked boxes — never uncheck
+            if (!currentState && tplCb.checked) {
                 PostMessage, 0x00F5, 0, 0,, ahk_id %nb_tmpHwnd%
                 totalApplied++
+                lastToggledHwnd := nb_tmpHwnd
 
-                ; Parent toggles create/destroy children — must re-enumerate
+                ; Parent toggles may create/destroy children — re-enumerate
                 if (liveCb.className = "TCPRSDialogParentCheckBox") {
                     Sleep, %effectiveSpeed%
-                    needReEnum := true
+
+                    ; Re-enumerate and find where we are using the HWND we just toggled
+                    liveItems := NB_EnumDescendantCheckboxes(scrollBox)
+                    liveCount := liveItems.Length()
+
+                    ; Find our last toggled HWND in the new list
+                    foundPos := 0
+                    Loop, %liveCount% {
+                        if (liveItems[A_Index].hwnd = lastToggledHwnd) {
+                            foundPos := A_Index
+                            break
+                        }
+                    }
+                    ; Resume from the item AFTER the one we just toggled
+                    if (foundPos > 0)
+                        liveIdx := foundPos + 1
+                    else
+                        liveIdx++
                 } else {
                     Sleep, %effectiveLeafSpeed%
+                    liveIdx++
                 }
+            } else {
+                ; No toggle needed (already checked, or template says unchecked) — advance
+                liveIdx++
             }
+        } else {
+            liveIdx++
         }
 
         tplPos++
