@@ -20873,7 +20873,7 @@ NB_ApplyTemplate(templatePath) {
     isV7 := InStr(content, """format"": 7") || InStr(content, """format"":7")
     isV6 := InStr(content, """format"": 6") || InStr(content, """format"":6")
     if !(isV7 || isV6) {
-        MsgBox, 48, %NB_AppTitle%, This template must be re-saved with the updated Nursing Booster (v7).`n`n1. Open the reminder dialog in CPRS and fill it out`n2. Select 'Save Template' to create a new version
+        MsgBox, 262192, %NB_AppTitle%, This template must be re-saved with the updated Nursing Booster (v7).`n`n1. Open the reminder dialog in CPRS and fill it out`n2. Select 'Save Template' to create a new version
         return
     }
     if (isV6 && !isV7) {
@@ -20887,7 +20887,7 @@ NB_ApplyTemplate(templatePath) {
         WinGetTitle, currentDlgTitle, ahk_id %dlgHwnd%
         if (sdM1 != "" && currentDlgTitle != "" && sdM1 != currentDlgTitle) {
             dialogueMatched := false
-            MsgBox, 308, %NB_AppTitle% - Dialogue Mismatch, This template was saved from:`n%sdM1%`n`nBut you are applying it to:`n%currentDlgTitle%`n`nAre you sure you want to continue?
+            MsgBox, 262452, %NB_AppTitle% - Dialogue Mismatch, This template was saved from:`n%sdM1%`n`nBut you are applying it to:`n%currentDlgTitle%`n`nAre you sure you want to continue?
             IfMsgBox, No
                 return
         }
@@ -20898,12 +20898,12 @@ NB_ApplyTemplate(templatePath) {
         currentVersion := NB_GetDialogVersion(dlgHwnd)
         if (RegExMatch(content, """source_version"":\s*""([\d.]+)""", svM)) {
             if (currentVersion != "" && svM1 != "" && currentVersion != svM1) {
-                MsgBox, 308, %NB_AppTitle% - Version Mismatch, This template was saved on version %svM1% but this dialogue is now version %currentVersion%.`n`nCheckboxes may have changed. The template may not apply correctly.`n`nAre you sure you want to continue?
+                MsgBox, 262452, %NB_AppTitle% - Version Mismatch, This template was saved on version %svM1% but this dialogue is now version %currentVersion%.`n`nCheckboxes may have changed. The template may not apply correctly.`n`nAre you sure you want to continue?
                 IfMsgBox, No
                     return
             }
         } else if (currentVersion != "") {
-            MsgBox, 308, %NB_AppTitle% - Version Unknown, This template has no version info (saved before v8.2).`nThe current dialogue is version %currentVersion%.`n`nRe-save the template to enable version tracking.`nApply anyway?
+            MsgBox, 262452, %NB_AppTitle% - Version Unknown, This template has no version info (saved before v8.2).`nThe current dialogue is version %currentVersion%.`n`nRe-save the template to enable version tracking.`nApply anyway?
             IfMsgBox, No
                 return
         }
