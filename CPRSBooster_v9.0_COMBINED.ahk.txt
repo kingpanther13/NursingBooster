@@ -104,8 +104,8 @@ global NB_TemplateDir := onedrivelocal . "\NursingTemplates"
 global NB_LogDir := onedrivelocal . "\NursingTemplates\Logs"
 global NB_BoosterGuiVisible := 0
 global NB_SignWasVisible := 0
-global NB_ApplySpeed := 600  ; ms delay after parent toggle (slider range 50-1000)
-global NB_LeafSpeed := 50    ; ms delay after leaf checkbox toggle (slider range 10-500)
+global NB_ApplySpeed := 0  ; ms delay after parent toggle (slider range 0-600)
+global NB_LeafSpeed := 0    ; ms delay after leaf checkbox toggle (slider range 0-600)
 global NB_AdvancedMode := 0  ; 1 = show advanced controls, 0 = simplified UI
 global NB_SettingsIniPath := onedrivelocal . "\NursingTemplates\booster_settings.ini"
 global NB_SpeedOverride := 0  ; 1 = use main panel speed, 0 = use per-template speed
@@ -732,7 +732,7 @@ gosub NB_LoadSettings
 Gui, 67:Destroy
 Gui, 67:Color, 1a1a2e
 Gui, 67:Font, s9 cWhite, Segoe UI
-Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0  |  Ctrl+Shift+B to toggle
+Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0-sync  |  Ctrl+Shift+B to toggle
 Gui, 67:Font, s8 cBlack, Segoe UI
 Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
 Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -764,10 +764,10 @@ Gui, 67:Add, Text, x5 y151 w370 h16 Center BackgroundTrans vNB_PanelStatus, Read
 ; Advanced-only controls: Override Speed + Leaf Speed
 Gui, 67:Font, s7 c00FF88, Segoe UI
 Gui, 67:Add, Checkbox, x5 y170 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans +HwndNB_AdvOverrideHwnd, Override Speed
-Gui, 67:Add, Slider, x108 y168 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range50-1000 TickInterval100 ToolTip +HwndNB_AdvParentSliderHwnd, %NB_ApplySpeed%
+Gui, 67:Add, Slider, x108 y168 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range0-600 TickInterval100 ToolTip +HwndNB_AdvParentSliderHwnd, %NB_ApplySpeed%
 Gui, 67:Add, Text, x305 y170 w75 h16 BackgroundTrans vNB_MainSpeedLabel +HwndNB_AdvParentLblHwnd, %NB_ApplySpeed% ms
 Gui, 67:Add, Text, x5 y192 w100 h16 BackgroundTrans vNB_LeafSpeedLbl +HwndNB_AdvLeafLblHwnd, Leaf Speed:
-Gui, 67:Add, Slider, x108 y190 w192 h22 vNB_LeafSpeedSlider gNB_LeafSpeedChanged Range10-500 TickInterval50 ToolTip +HwndNB_AdvLeafSliderHwnd, %NB_LeafSpeed%
+Gui, 67:Add, Slider, x108 y190 w192 h22 vNB_LeafSpeedSlider gNB_LeafSpeedChanged Range0-600 TickInterval50 ToolTip +HwndNB_AdvLeafSliderHwnd, %NB_LeafSpeed%
 Gui, 67:Add, Text, x305 y192 w75 h16 BackgroundTrans vNB_LeafSpeedLabel +HwndNB_AdvLeafValHwnd, %NB_LeafSpeed% ms
 Gui, 67:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd +E0x08000000  ; WS_EX_NOACTIVATE — panel never steals focus from CPRS
 Gui, 67:Show, x0 y0 w385 h218 Hide, NursingBoosterPanel
@@ -792,10 +792,10 @@ Gui, 73:Font, s7 c00FF88, Segoe UI
 Gui, 73:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
 Gui, 73:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
 Gui, 73:Add, Text, x10 y68 w65 h16 BackgroundTrans, Parent Spd:
-Gui, 73:Add, Slider, x80 y66 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range50-1000 TickInterval100 ToolTip, 600
+Gui, 73:Add, Slider, x80 y66 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range0-600 TickInterval100 ToolTip, 600
 Gui, 73:Add, Text, x215 y68 w55 h16 BackgroundTrans vNB_TplSpeedLabel, 600 ms
 Gui, 73:Add, Text, x10 y92 w65 h16 BackgroundTrans, Leaf Spd:
-Gui, 73:Add, Slider, x80 y90 w130 h22 vNB_TplLeafSlider gNB_TplLeafChanged Range10-500 TickInterval50 ToolTip, 50
+Gui, 73:Add, Slider, x80 y90 w130 h22 vNB_TplLeafSlider gNB_TplLeafChanged Range0-600 TickInterval50 ToolTip, 50
 Gui, 73:Add, Text, x215 y92 w55 h16 BackgroundTrans vNB_TplLeafLabel, 50 ms
 Gui, 73:Add, Button, x10 y118 w80 h24 gNB_SaveTplSpeed, Save Speed
 Gui, 73:Font, s6 cSilver, Segoe UI
@@ -20948,7 +20948,6 @@ NB_ApplyTemplate(templatePath) {
 
     ; Enumerate ALL checkboxes in the scroll box (flat, Y-sorted)
     liveItems := NB_EnumDescendantCheckboxes(scrollBox)
-    needReEnum := false
 
     ToolTip, Applying %tplCount% items... (Right-click to cancel)
 
@@ -20957,8 +20956,10 @@ NB_ApplyTemplate(templatePath) {
     Hotkey, ~RButton, NB_CancelApplyHotkey, On
 
     ; Walk the template top-to-bottom, one item at a time.
-    ; After toggling any parent, re-enumerate the entire scroll box
-    ; so dynamically created children appear at the correct positions.
+    ; Uses synchronous SendMessage BM_SETCHECK + WM_COMMAND instead of
+    ; async PostMessage BM_CLICK to eliminate race conditions.
+    ; Only re-enumerates when the checkbox count actually changes
+    ; (real parent expansion/collapse), not after every toggle.
     tplPos := 1
     while (tplPos <= tplCount)
     {
@@ -20968,12 +20969,6 @@ NB_ApplyTemplate(templatePath) {
             ToolTip, Template apply cancelled at item %tplPos%/%tplCount%.
             SetTimer, NB_ClearToolTip, -3000
             return
-        }
-
-        ; Re-enumerate if a parent toggle changed the dialog structure
-        if (needReEnum) {
-            liveItems := NB_EnumDescendantCheckboxes(scrollBox)
-            needReEnum := false
         }
 
         liveCount := liveItems.Length()
@@ -20991,16 +20986,42 @@ NB_ApplyTemplate(templatePath) {
             ; Fresh state read right before toggle decision
             SendMessage, 0x00F0, 0, 0,, ahk_id %nb_tmpHwnd%
             currentState := ErrorLevel ? true : false
-            if (currentState != tplCb.checked) {
-                PostMessage, 0x00F5, 0, 0,, ahk_id %nb_tmpHwnd%
+
+            ; Only check unchecked boxes — never uncheck
+            if (!currentState && tplCb.checked) {
+                desiredState := 1
+
+                ; Synchronous: set check state directly
+                SendMessage, 0x00F1, %desiredState%, 0,, ahk_id %nb_tmpHwnd%  ; BM_SETCHECK
+
+                ; Synchronous: notify parent that checkbox was clicked
+                ; This triggers CPRS's child creation/destruction logic
+                ; and does not return until CPRS finishes processing.
+                nb_ctrlID := DllCall("GetDlgCtrlID", "Ptr", nb_tmpHwnd, "Int")
+                nb_parentHwnd := DllCall("GetParent", "Ptr", nb_tmpHwnd, "Ptr")
+                SendMessage, 0x0111, (nb_ctrlID & 0xFFFF), nb_tmpHwnd,, ahk_id %nb_parentHwnd%  ; WM_COMMAND + BN_CLICKED
+
+                ; Verify the toggle took
+                SendMessage, 0x00F0, 0, 0,, ahk_id %nb_tmpHwnd%
+                if (!(ErrorLevel)) {
+                    ; Retry once
+                    SendMessage, 0x00F1, %desiredState%, 0,, ahk_id %nb_tmpHwnd%
+                    SendMessage, 0x0111, (nb_ctrlID & 0xFFFF), nb_tmpHwnd,, ahk_id %nb_parentHwnd%
+                }
+
                 totalApplied++
 
-                ; Parent toggles create/destroy children — must re-enumerate
-                if (liveCb.className = "TCPRSDialogParentCheckBox") {
-                    Sleep, %effectiveSpeed%
-                    needReEnum := true
+                ; Check if structure changed (children created/destroyed)
+                ; Only re-enumerate if count actually changed
+                Sleep, %effectiveLeafSpeed%
+                newItems := NB_EnumDescendantCheckboxes(scrollBox)
+                if (newItems.Length() != liveCount) {
+                    ; Structure changed — use new list
+                    liveItems := newItems
                 } else {
-                    Sleep, %effectiveLeafSpeed%
+                    ; Count unchanged — this was a leaf toggle, no re-enum needed
+                    ; But update liveItems to keep Y-sort fresh
+                    liveItems := newItems
                 }
             }
         }
