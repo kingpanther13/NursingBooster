@@ -732,7 +732,7 @@ gosub NB_LoadSettings
 Gui, 67:Destroy
 Gui, 67:Color, 1a1a2e
 Gui, 67:Font, s9 cWhite, Segoe UI
-Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0  |  Ctrl+Shift+B to toggle
+Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0-sync  |  Ctrl+Shift+B to toggle
 Gui, 67:Font, s8 cBlack, Segoe UI
 Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
 Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -20948,7 +20948,6 @@ NB_ApplyTemplate(templatePath) {
 
     ; Enumerate ALL checkboxes in the scroll box (flat, Y-sorted)
     liveItems := NB_EnumDescendantCheckboxes(scrollBox)
-    needReEnum := false
 
     ToolTip, Applying %tplCount% items... (Right-click to cancel)
 
@@ -20957,8 +20956,10 @@ NB_ApplyTemplate(templatePath) {
     Hotkey, ~RButton, NB_CancelApplyHotkey, On
 
     ; Walk the template top-to-bottom, one item at a time.
-    ; After toggling any parent, re-enumerate the entire scroll box
-    ; so dynamically created children appear at the correct positions.
+    ; Uses synchronous SendMessage BM_SETCHECK + WM_COMMAND instead of
+    ; async PostMessage BM_CLICK to eliminate race conditions.
+    ; Only re-enumerates when the checkbox count actually changes
+    ; (real parent expansion/collapse), not after every toggle.
     tplPos := 1
     while (tplPos <= tplCount)
     {
@@ -20968,12 +20969,6 @@ NB_ApplyTemplate(templatePath) {
             ToolTip, Template apply cancelled at item %tplPos%/%tplCount%.
             SetTimer, NB_ClearToolTip, -3000
             return
-        }
-
-        ; Re-enumerate if a parent toggle changed the dialog structure
-        if (needReEnum) {
-            liveItems := NB_EnumDescendantCheckboxes(scrollBox)
-            needReEnum := false
         }
 
         liveCount := liveItems.Length()
@@ -20991,16 +20986,42 @@ NB_ApplyTemplate(templatePath) {
             ; Fresh state read right before toggle decision
             SendMessage, 0x00F0, 0, 0,, ahk_id %nb_tmpHwnd%
             currentState := ErrorLevel ? true : false
-            if (currentState != tplCb.checked) {
-                PostMessage, 0x00F5, 0, 0,, ahk_id %nb_tmpHwnd%
+
+            ; Only check unchecked boxes — never uncheck
+            if (!currentState && tplCb.checked) {
+                desiredState := 1
+
+                ; Synchronous: set check state directly
+                SendMessage, 0x00F1, %desiredState%, 0,, ahk_id %nb_tmpHwnd%  ; BM_SETCHECK
+
+                ; Synchronous: notify parent that checkbox was clicked
+                ; This triggers CPRS's child creation/destruction logic
+                ; and does not return until CPRS finishes processing.
+                nb_ctrlID := DllCall("GetDlgCtrlID", "Ptr", nb_tmpHwnd, "Int")
+                nb_parentHwnd := DllCall("GetParent", "Ptr", nb_tmpHwnd, "Ptr")
+                SendMessage, 0x0111, (nb_ctrlID & 0xFFFF), nb_tmpHwnd,, ahk_id %nb_parentHwnd%  ; WM_COMMAND + BN_CLICKED
+
+                ; Verify the toggle took
+                SendMessage, 0x00F0, 0, 0,, ahk_id %nb_tmpHwnd%
+                if (!(ErrorLevel)) {
+                    ; Retry once
+                    SendMessage, 0x00F1, %desiredState%, 0,, ahk_id %nb_tmpHwnd%
+                    SendMessage, 0x0111, (nb_ctrlID & 0xFFFF), nb_tmpHwnd,, ahk_id %nb_parentHwnd%
+                }
+
                 totalApplied++
 
-                ; Parent toggles create/destroy children — must re-enumerate
-                if (liveCb.className = "TCPRSDialogParentCheckBox") {
-                    Sleep, %effectiveSpeed%
-                    needReEnum := true
+                ; Check if structure changed (children created/destroyed)
+                ; Only re-enumerate if count actually changed
+                Sleep, %effectiveLeafSpeed%
+                newItems := NB_EnumDescendantCheckboxes(scrollBox)
+                if (newItems.Length() != liveCount) {
+                    ; Structure changed — use new list
+                    liveItems := newItems
                 } else {
-                    Sleep, %effectiveLeafSpeed%
+                    ; Count unchanged — this was a leaf toggle, no re-enum needed
+                    ; But update liveItems to keep Y-sort fresh
+                    liveItems := newItems
                 }
             }
         }
