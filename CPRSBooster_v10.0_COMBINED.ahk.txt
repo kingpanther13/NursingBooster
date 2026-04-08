@@ -20655,9 +20655,7 @@ NB_CheckCPRS:
         if (dlgCheck) {
             cprsStatus := "Dialog detected"
         } else {
-            WinGetTitle, cprsTitle, ahk_exe CPRSChart.exe
-            StringLeft, cprsShort, cprsTitle, 50
-            cprsStatus := "CPRS: " . cprsShort
+            cprsStatus := "CPRS: Detected"
         }
     }
     else
@@ -22133,26 +22131,28 @@ return
 
 CF_ReadLastEntryTime() {
     ; Read the time from the TDateTimePicker control in CP Flowsheets.
-    ; Only read when the Add Data screen is NOT open — when it IS open,
-    ; the picker shows current time (for the new entry), not last entry.
+    ; Cache it and only update if new time is EARLIER than current clock
+    ; (a saved entry is always in the past; Add Data sets it to now).
     static cachedTime := ""
     cfHwnd := WinExist("ahk_exe CPFlowsheets.exe")
     if (!cfHwnd)
         return cachedTime
-    ; Don't read if Add Data input screen is active (time would be current clock)
-    if (CF_FindAddDataWindow())
-        return cachedTime
     ; Find TDateTimePicker with a time value (HH:MM format)
+    readTime := ""
     ControlGetText, dtText, TDateTimePicker1, ahk_id %cfHwnd%
-    if (RegExMatch(dtText, "^\d{1,2}:\d{2}")) {
-        cachedTime := dtText
-        return dtText
+    if (RegExMatch(dtText, "^\d{1,2}:\d{2}"))
+        readTime := dtText
+    if (readTime = "") {
+        ControlGetText, dtText2, TDateTimePicker2, ahk_id %cfHwnd%
+        if (RegExMatch(dtText2, "^\d{1,2}:\d{2}"))
+            readTime := dtText2
     }
-    ; Try second instance if first is the date
-    ControlGetText, dtText2, TDateTimePicker2, ahk_id %cfHwnd%
-    if (RegExMatch(dtText2, "^\d{1,2}:\d{2}")) {
-        cachedTime := dtText2
-        return dtText2
+    if (readTime != "") {
+        ; Only update cache if the read time is NOT the current time
+        ; (Add Data sets picker to current time; last entry is in the past)
+        FormatTime, nowTime,, HH:mm
+        if (readTime != nowTime)
+            cachedTime := readTime
     }
     return cachedTime
 }
