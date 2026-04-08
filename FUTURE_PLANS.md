@@ -71,6 +71,43 @@ Currently, before using any CPFS quick buttons (like "Calm/Awake"), the user mus
 - **Current**: Navigate to CPFS home → scroll to find "Add Data" → click it → click "Calm/Awake" quick button → it fills out the form
 - **Proposed**: Navigate to CPFS home → click "Calm/Awake" quick button → script presses "Add Data" automatically, data entry page opens, form is pre-filled
 
+## Modular Architecture — Separate CPRSBooster and NursingBooster
+
+Investigate whether NursingBooster can be split into a separate module that CPRSBooster loads on demand, so the two codebases can be updated independently.
+
+### Concept
+- CPRSBooster remains the main script — it runs standalone and handles all existing functionality (function keys, quick orders, hyperdrive bar, etc.)
+- NursingBooster becomes a secondary module (separate `.ahk` or `.ahk.txt` file) that is only loaded when the user enables it
+- CPRSBooster would have a setting or toggle to load/include the NursingBooster module at startup
+- Each module can be versioned and updated independently — updating NursingBooster doesn't require touching CPRSBooster and vice versa
+
+### Benefits
+- Reduces risk of NursingBooster changes breaking CPRSBooster functionality
+- Allows other nurses to use NursingBooster without needing the latest CPRSBooster, or vice versa
+- Cleaner separation of concerns — shared variables and GUI numbering would need to be formalized into an interface
+
+### Implementation Questions
+- Can AHK v1 `#Include` a file conditionally at runtime, or does it need to be at parse time?
+- How to handle shared state (e.g. `NB_ApplySpeed` used by both NB and CPFS, OneDrive paths, CPRS detection)?
+- GUI numbering (67, 73, etc.) would need to be coordinated to avoid conflicts
+- Would the module be loaded via `#Include`, `Run`, or a separate AHK process communicating via messages?
+
+## AutoHotkey Tree View for CPRS Template Navigation
+
+Add a tree view control that mirrors the CPRS reminder dialog structure, allowing users to find and jump to specific sections/checkboxes within a template without scrolling through the entire dialog.
+
+### Concept
+- When a CPRS reminder dialog is open, a tree view panel shows the hierarchical structure of all sections and checkboxes
+- Users can click a section in the tree view to scroll the CPRS dialog to that section
+- Could also show checked/unchecked state in the tree view for quick visual overview
+- Useful for large assessments (VAAES Shift Assessment has 200+ checkboxes across many sections)
+
+### Implementation Notes
+- Build on existing `NB_EnumDescendantCheckboxes` and `NB_EnumScrollBoxGroupBoxes` which already enumerate the dialog structure with depth/hierarchy info
+- Tree view would be a new AHK TreeView control (GUI) that rebuilds when a dialog is detected
+- Clicking a tree node would need to scroll the CPRS dialog's TScrollBox to bring that checkbox into view — likely via `SendMessage` with `SB_THUMBPOSITION` or similar scroll control
+- Could integrate with the section-by-section assessment concept — the tree view shows sections, and right-clicking a section offers "Apply sub-template" options
+
 ## Section-by-Section Charting — Additive/Non-Destructive Mode
 
 Building on the section-by-section assessment concept above, it must be possible to fill in individual sections **after** the initial template has been applied, without disturbing already-filled sections.
