@@ -20995,45 +20995,36 @@ NB_ApplyTemplate(templatePath) {
                 PostMessage, 0x00F5, 0, 0,, ahk_id %nb_tmpHwnd%
 
                 ; Verify the toggle actually took (retry up to 3 times)
-                toggleOk := false
                 Loop, 3 {
                     Sleep, 15
                     SendMessage, 0x00F0, 0, 0,, ahk_id %nb_tmpHwnd%
                     newState := ErrorLevel ? true : false
-                    if (newState = tplCb.checked) {
-                        toggleOk := true
+                    if (newState = tplCb.checked)
                         break
-                    }
-                    ; Retry the click
                     PostMessage, 0x00F5, 0, 0,, ahk_id %nb_tmpHwnd%
                 }
 
                 totalApplied++
+                Sleep, %effectiveLeafSpeed%
 
-                ; Parent toggles create/destroy children — must re-enumerate
-                if (liveCb.className = "TCPRSDialogParentCheckBox") {
-                    Sleep, %effectiveSpeed%
-                    ; Wait for children to stabilize after parent toggle
-                    prevLiveCount := 0
-                    stableRounds := 0
-                    Loop, 10 {
-                        tempItems := NB_EnumDescendantCheckboxes(scrollBox)
-                        curLiveCount := tempItems.Length()
-                        if (curLiveCount > 0 && curLiveCount = prevLiveCount) {
-                            stableRounds++
-                            if (stableRounds >= 2) {
-                                liveItems := tempItems
-                                break
-                            }
-                        } else {
-                            stableRounds := 0
+                ; After toggling, check if the next template item's expected position
+                ; still has a valid window. If not, the dialog structure changed and
+                ; we need to re-enumerate. This is cheap (one IsWindow call) vs
+                ; a full re-enum after every toggle.
+                if (tplPos < tplCount) {
+                    nextLiveIdx := tplPos + 1
+                    if (nextLiveIdx <= liveItems.Length()) {
+                        nextHwnd := liveItems[nextLiveIdx].hwnd
+                        if (!DllCall("IsWindow", "Ptr", nextHwnd)) {
+                            ; Next expected checkbox disappeared — structure changed
+                            Sleep, %effectiveSpeed%
+                            needReEnum := true
                         }
-                        prevLiveCount := curLiveCount
-                        Sleep, 30
+                    } else {
+                        ; We're past the end of live items — re-enum to pick up new children
+                        Sleep, %effectiveSpeed%
+                        needReEnum := true
                     }
-                    needReEnum := false  ; already re-enumerated above
-                } else {
-                    Sleep, %effectiveLeafSpeed%
                 }
             }
         }
