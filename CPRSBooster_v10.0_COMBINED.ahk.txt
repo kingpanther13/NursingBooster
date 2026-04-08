@@ -759,7 +759,7 @@ Gui, 67:Add, Button, x147 y123 w68 h24 gNB_HK3_Run vNB_HK3_Btn, %NB_HK3_Label%
 Gui, 67:Add, Button, x218 y123 w68 h24 gNB_HK4_Run vNB_HK4_Btn, %NB_HK4_Label%
 Gui, 67:Add, Button, x289 y123 w68 h24 gNB_HK5_Run vNB_HK5_Btn, %NB_HK5_Label%
 Gui, 67:Add, Button, x360 y123 w20 h24 gNB_HK_Setup, ...
-Gui, 67:Font, s8 cSilver, Segoe UI
+Gui, 67:Font, s8 cWhite, Segoe UI
 Gui, 67:Add, Text, x5 y151 w375 h16 Center BackgroundTrans vNB_PanelStatus, Ready | CPRS: Not detected | CPFS: Not detected
 ; Advanced-only controls: Override Speed + Leaf Speed
 Gui, 67:Font, s7 c00FF88, Segoe UI
@@ -20672,7 +20672,7 @@ NB_CheckCPRS:
         cfStatus := "CPFS: Detected"
         cfLastTime := CF_ReadLastEntryTime()
         if (cfLastTime != "")
-            cfStatus .= " | Last entry " . cfLastTime
+            cfStatus .= ", last entry " . cfLastTime
     }
     else
     {
@@ -22133,19 +22133,28 @@ return
 
 CF_ReadLastEntryTime() {
     ; Read the time from the TDateTimePicker control in CP Flowsheets.
-    ; This shows the last saved entry time, not the current clock.
+    ; Only read when the Add Data screen is NOT open — when it IS open,
+    ; the picker shows current time (for the new entry), not last entry.
+    static cachedTime := ""
     cfHwnd := WinExist("ahk_exe CPFlowsheets.exe")
     if (!cfHwnd)
-        return ""
+        return cachedTime
+    ; Don't read if Add Data input screen is active (time would be current clock)
+    if (CF_FindAddDataWindow())
+        return cachedTime
     ; Find TDateTimePicker with a time value (HH:MM format)
     ControlGetText, dtText, TDateTimePicker1, ahk_id %cfHwnd%
-    if (RegExMatch(dtText, "^\d{1,2}:\d{2}"))
+    if (RegExMatch(dtText, "^\d{1,2}:\d{2}")) {
+        cachedTime := dtText
         return dtText
+    }
     ; Try second instance if first is the date
     ControlGetText, dtText2, TDateTimePicker2, ahk_id %cfHwnd%
-    if (RegExMatch(dtText2, "^\d{1,2}:\d{2}"))
+    if (RegExMatch(dtText2, "^\d{1,2}:\d{2}")) {
+        cachedTime := dtText2
         return dtText2
-    return ""
+    }
+    return cachedTime
 }
 
 CF_FindCPFlowsheetsWindow() {
