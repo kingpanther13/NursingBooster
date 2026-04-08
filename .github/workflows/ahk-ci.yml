@@ -306,7 +306,7 @@ jobs:
     name: Stamp Version Info
     runs-on: ubuntu-latest
     needs: [syntax-check, unit-tests, compile-check]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: false  # Disabled — using branches for version tracking instead
     permissions:
       contents: write
       statuses: write
