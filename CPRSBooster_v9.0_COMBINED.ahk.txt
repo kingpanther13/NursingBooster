@@ -732,7 +732,7 @@ gosub NB_LoadSettings
 Gui, 67:Destroy
 Gui, 67:Color, 1a1a2e
 Gui, 67:Font, s9 cWhite, Segoe UI
-Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0  |  Ctrl+Shift+B to toggle
+Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v9.0-drift  |  Ctrl+Shift+B to toggle
 Gui, 67:Font, s8 cBlack, Segoe UI
 Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
 Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -20959,7 +20959,9 @@ NB_ApplyTemplate(templatePath) {
     ; Walk the template top-to-bottom, one item at a time.
     ; After toggling any parent, re-enumerate the entire scroll box
     ; so dynamically created children appear at the correct positions.
+    ; liveOffset tracks cumulative drift between template and live positions.
     tplPos := 1
+    liveOffset := 0
     while (tplPos <= tplCount)
     {
         ; Cancel on right-click
@@ -20977,14 +20979,55 @@ NB_ApplyTemplate(templatePath) {
         }
 
         liveCount := liveItems.Length()
-        if (tplPos > liveCount) {
+        liveIdx := tplPos + liveOffset
+        if (liveIdx < 1)
+            liveIdx := 1
+        if (liveIdx > liveCount) {
             totalNotFound++
             tplPos++
             continue
         }
 
         tplCb := tplItems[tplPos]
-        liveCb := liveItems[tplPos]
+        liveCb := liveItems[liveIdx]
+
+        ; --- Drift correction using label and depth ---
+        tplLabel := tplCb.label
+        tplDepth := tplCb.depth
+
+        ; Strong correction: labeled checkbox doesn't match — search ±5
+        if (tplLabel != "" && liveCb.label != tplLabel) {
+            foundIdx := 0
+            Loop, 11 {
+                tryOff := A_Index - 6  ; -5 to +5
+                if (tryOff = 0)
+                    continue
+                tryIdx := liveIdx + tryOff
+                if (tryIdx >= 1 && tryIdx <= liveCount) {
+                    if (liveItems[tryIdx].label = tplLabel) {
+                        foundIdx := tryIdx
+                        break
+                    }
+                }
+            }
+            if (foundIdx > 0) {
+                liveOffset := liveOffset + (foundIdx - liveIdx)
+                liveIdx := foundIdx
+                liveCb := liveItems[liveIdx]
+            }
+        }
+        ; Weak correction: unlabeled but depth mismatch — try ±1 only
+        else if (tplLabel = "" && tplDepth != liveCb.depth) {
+            if (liveIdx + 1 <= liveCount && liveItems[liveIdx + 1].depth = tplDepth) {
+                liveOffset++
+                liveIdx++
+                liveCb := liveItems[liveIdx]
+            } else if (liveIdx - 1 >= 1 && liveItems[liveIdx - 1].depth = tplDepth) {
+                liveOffset--
+                liveIdx--
+                liveCb := liveItems[liveIdx]
+            }
+        }
 
         nb_tmpHwnd := liveCb.hwnd
         if (DllCall("IsWindow", "Ptr", nb_tmpHwnd)) {
