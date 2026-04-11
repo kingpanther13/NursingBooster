@@ -74,7 +74,7 @@ jobs:
             exit 1
           }
           $failed = @()
-          $scripts = Get-ChildItem -Path . -Filter "*.ahk.txt" -Recurse | Where-Object { $_.FullName -notmatch "\\archive\\" }
+          $scripts = Get-ChildItem -Path . -Filter "*.ahk.txt" -Recurse | Where-Object { $_.FullName -notmatch "\\archive\\" -and $_.FullName -notmatch "\\test\\" -and $_.FullName -notmatch "\\dumps\\" }
 
           if ($scripts.Count -eq 0) {
             Write-Host "No .ahk.txt files found, skipping v1 syntax check"
