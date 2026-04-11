@@ -732,7 +732,7 @@ gosub NB_LoadSettings
 Gui, 67:Destroy
 Gui, 67:Color, 1a1a2e
 Gui, 67:Font, s9 cWhite, Segoe UI
-Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v10.0  |  Ctrl+Shift+B to toggle
+Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v10.1-dev  |  Ctrl+Shift+B to toggle
 Gui, 67:Font, s8 cBlack, Segoe UI
 Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
 Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -787,7 +787,7 @@ Gui, 73:Color, 1a1a2e
 Gui, 73:Font, s9 cWhite, Segoe UI
 Gui, 73:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
 Gui, 73:Font, s6 cSilver, Segoe UI
-Gui, 73:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, v10.0 | stable
+Gui, 73:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, v10.1 | dev
 Gui, 73:Font, s7 c00FF88, Segoe UI
 Gui, 73:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
 Gui, 73:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
