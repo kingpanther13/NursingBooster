@@ -23252,6 +23252,11 @@ CF_ApplyTemplate(templatePath) {
         cfTplValueIdx := tplCtrl.valueIdx
         cfTplY := tplCtrl.y
         cfTplGroupLabel := tplCtrl.group_label
+        cfTplCls := tplCtrl.cls
+
+        ; Skip TDateTimePicker — saved as "radio" type but is actually a time/date control
+        if (cfTplCls = "TDateTimePicker")
+            continue
 
         ToolTip, Applying control %ti%/%cfTotalTpl%: %cfTplLabel%
 
@@ -23531,9 +23536,13 @@ CF_ParseControls(jsonContent) {
         if (RegExMatch(itemStr, """checklistIdx"":\s*(-?\d+)", m))
             checklistIdx := m1 + 0
 
+        ctrlCls := ""
+        if (RegExMatch(itemStr, """cls"":\s*""([^""]*)""", m))
+            ctrlCls := m1
+
         entry := {type: ctrlType, label: label, checked: checked, selected: selected
             , value: value, valueIdx: valueIdx, y: yPos, group_label: group_label
-            , checklistIdx: checklistIdx}
+            , checklistIdx: checklistIdx, cls: ctrlCls}
         controls.Push(entry)
 
         itemPos := itemEnd
