@@ -23360,14 +23360,35 @@ CF_ApplyTemplate(templatePath) {
             }
         }
         else if (cfTplType = "combo") {
-            if (cfTplValueIdx >= 0) {
-                SendMessage, 0x014E, cfTplValueIdx, 0,, ahk_id %cfMatchHwnd%   ; CB_SETCURSEL
-                cfComboParent := DllCall("GetParent", "Ptr", cfMatchHwnd, "Ptr")
-                ctrlId := DllCall("GetDlgCtrlID", "Ptr", cfMatchHwnd, "Int")
-                wParam := (0x0001 << 16) | ctrlId
-                PostMessage, 0x0111, wParam, cfMatchHwnd,, ahk_id %cfComboParent%  ; WM_COMMAND
-                totalApplied++
-                Sleep, %cfEffectiveSpeed%
+            ; Find combo item by VALUE TEXT (not index — combo lists can shift between sessions)
+            cfTargetIdx := -1
+            cfTplValue := tplCtrl.value
+            if (cfTplValue != "") {
+                ; CB_FINDSTRINGEXACT — find item by exact text match (case insensitive)
+                cfBufAddr := 0
+                VarSetCapacity(cfFindBuf, (StrLen(cfTplValue) + 1) * 2, 0)
+                StrPut(cfTplValue, &cfFindBuf, "UTF-16")
+                SendMessage, 0x0158, -1, &cfFindBuf,, ahk_id %cfMatchHwnd%  ; CB_FINDSTRINGEXACT
+                if (ErrorLevel != 0xFFFFFFFF && ErrorLevel >= 0)
+                    cfTargetIdx := ErrorLevel
+            }
+            ; Fallback to saved index if label not found
+            if (cfTargetIdx < 0 && cfTplValueIdx >= 0)
+                cfTargetIdx := cfTplValueIdx
+
+            if (cfTargetIdx >= 0) {
+                ; Check current selection — only change if different
+                SendMessage, 0x0147, 0, 0,, ahk_id %cfMatchHwnd%  ; CB_GETCURSEL
+                cfCurrentIdx := ErrorLevel
+                if (cfCurrentIdx != cfTargetIdx) {
+                    SendMessage, 0x014E, cfTargetIdx, 0,, ahk_id %cfMatchHwnd%   ; CB_SETCURSEL
+                    cfComboParent := DllCall("GetParent", "Ptr", cfMatchHwnd, "Ptr")
+                    ctrlId := DllCall("GetDlgCtrlID", "Ptr", cfMatchHwnd, "Int")
+                    wParam := (0x0001 << 16) | ctrlId
+                    PostMessage, 0x0111, wParam, cfMatchHwnd,, ahk_id %cfComboParent%  ; WM_COMMAND
+                    totalApplied++
+                    Sleep, %cfEffectiveSpeed%
+                }
             }
         }
     }
