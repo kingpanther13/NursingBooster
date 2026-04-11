@@ -944,8 +944,12 @@ if (IsFaxKeeper = 1) {
 ; Test version: pulls NursingBooster from GitHub if enabled.
 ; The user toggles this in Ctrl+H settings.
 
-; Load NB_Enabled state from CPRSData.txt array (slot 83)
-NB_Enabled := Array[83] ? Array[83] : 0
+; NB_Enabled and NB_Channel are loaded by refreshdata from CPRSData.txt
+; (slots 83 and 84). Default to 0/stable if undefined.
+if (NB_Enabled = "")
+    NB_Enabled := 0
+if (NB_Channel = "")
+    NB_Channel := "stable"
 
 ; If enabled, check for module updates. If updated, reload so new module loads.
 ; (AHK v1 #Include is parse-time, so updates only take effect after reload.)
@@ -960,9 +964,19 @@ if (NB_Enabled) {
 
 ; Initialize the module (if loaded and enabled)
 ; Use dynamic gosub so the label is resolved at runtime, not parse time
-if (NB_Enabled && IsLabel("NB_ModuleInit")) {
-    nbInitLbl := "NB_ModuleInit"
-    Gosub, %nbInitLbl%
+if (NB_Enabled) {
+    FormatTime, nbStartTime,, yyyy-MM-dd HH:mm:ss
+    nbDbgStartup := onedrivelocal . "\nb_fetch_debug.txt"
+    nbHasInit := IsLabel("NB_ModuleInit") ? "YES" : "NO"
+    nbModuleExists := FileExist(onedrivelocal . "\nursingbooster_module.ahk") ? "YES" : "NO"
+    FileAppend, % "[" . nbStartTime . "] STARTUP NB_Enabled=1`n  module file exists: " . nbModuleExists . "`n  NB_ModuleInit label exists: " . nbHasInit . "`n", %nbDbgStartup%
+    if (nbHasInit = "YES") {
+        nbInitLbl := "NB_ModuleInit"
+        Gosub, %nbInitLbl%
+        FileAppend, % "  NB_ModuleInit returned`n`n", %nbDbgStartup%
+    } else {
+        FileAppend, % "  SKIPPED ModuleInit (label missing — module not loaded by #Include)`n`n", %nbDbgStartup%
+    }
 }
 
 Return  ; End of auto-execute section
@@ -974,18 +988,24 @@ Return  ; End of auto-execute section
 ;############################################################################################
 
 NB_FetchModuleIfNeeded:
-    ; Channel: "stable" or "master" (read from settings, default master while testing)
-    nbChannel := NB_Channel ? NB_Channel : "master"
+    ; Channel: "stable" or "master" (read from settings, default stable)
+    nbChannel := NB_Channel ? NB_Channel : "stable"
     nbModuleUrl := "https://raw.githubusercontent.com/kingpanther13/NursingBooster/" . nbChannel . "/nursingbooster_module.ahk"
     nbModulePath := onedrivelocal . "\nursingbooster_module.ahk"
     nbTempPath := A_Temp . "\nursingbooster_module_dl.ahk"
+    nbDebugLog := onedrivelocal . "\nb_fetch_debug.txt"
+
+    FormatTime, nbNow,, yyyy-MM-dd HH:mm:ss
+    FileAppend, % "[" . nbNow . "] FETCH START`n  channel=" . nbChannel . "`n  url=" . nbModuleUrl . "`n  cache=" . nbModulePath . "`n", %nbDebugLog%
 
     ; Download to temp
     UrlDownloadToFile, %nbModuleUrl%, %nbTempPath%
     if (ErrorLevel) {
-        ; Network error — keep using cached module
+        FileAppend, % "  DOWNLOAD FAILED, ErrorLevel=" . ErrorLevel . "`n", %nbDebugLog%
         return
     }
+    FileGetSize, nbDlSize, %nbTempPath%
+    FileAppend, % "  download OK, size=" . nbDlSize . " bytes`n", %nbDebugLog%
 
     ; Compare with cached. If different, replace.
     FileRead, newContent, %nbTempPath%
@@ -997,8 +1017,10 @@ NB_FetchModuleIfNeeded:
         FileDelete, %nbModulePath%
         FileMove, %nbTempPath%, %nbModulePath%
         nbWasUpdated := true
+        FileAppend, % "  UPDATED cached module`n`n", %nbDebugLog%
     } else {
         FileDelete, %nbTempPath%
+        FileAppend, % "  no change, cache already current`n`n", %nbDebugLog%
     }
 return
 
@@ -8103,10 +8125,12 @@ Gui, Add, Text, gopenfxnscreen x710 y+20 w300 h30, %fctlbl% ; pseudohyperlink
 
 ; --- NursingBooster enable checkbox + channel selector (test integration) ---
 nbEnabledChkOpt := NB_Enabled ? "Checked" : ""
-Gui, Add, Checkbox, x100 y620 w250 h30 vNB_EnabledChk %nbEnabledChkOpt%, Enable Nursing Booster (downloads from GitHub)
-nbCurrentChannel := Array[84] ? Array[84] : "master"
+Gui, Add, Text, x12 y710 w300 h20 cBlue, --- Nursing Booster (test integration) ---
+Gui, Add, Checkbox, x12 y732 w260 h22 vNB_EnabledChk %nbEnabledChkOpt%, Enable Nursing Booster (downloads from GitHub)
+nbCurrentChannel := Array[84] ? Array[84] : "stable"
 nbDevSel := (nbCurrentChannel = "master") ? "|stable|master||" : "|stable||master|"
-Gui, Add, DropDownList, x360 y620 w120 vNB_ChannelDDL, %nbDevSel%
+Gui, Add, Text, x280 y735 w50 h20, Channel:
+Gui, Add, DropDownList, x335 y732 w100 vNB_ChannelDDL, %nbDevSel%
 
 Gui, Add, Button, x2 y620  w80 h30 , OK ; Button to submit the information
 
@@ -8139,7 +8163,7 @@ Gui, Add, Text,  x980 y+20 w250 h30, Dot Provider
 
 
 
-Gui, Show, x10 y0 w1200 h700, Minneapolis VA Informatics ; Display the GUI, x and y tell where to show the window at on the screen and h and w tell what size to make it
+Gui, Show, x10 y0 w1200 h770, Minneapolis VA Informatics ; Display the GUI, x and y tell where to show the window at on the screen and h and w tell what size to make it
 
 Return
 
@@ -8183,7 +8207,7 @@ Gui, Destroy ; Destroy the GUI to get it out of the way
 nbPrevEnabled := NB_Enabled
 nbPrevChannel := NB_Channel
 NB_Enabled := NB_EnabledChk ? 1 : 0
-NB_Channel := NB_ChannelDDL ? NB_ChannelDDL : "master"
+NB_Channel := NB_ChannelDDL ? NB_ChannelDDL : "stable"
 nbNeedsReload := (nbPrevEnabled != NB_Enabled) || (nbPrevChannel != NB_Channel)
 
 ;MsgBox, %RN1%   `n %RN2% `n %MSA% `n %Code% ; Display a message box to show what the user inputted. `n = an Enter key
@@ -11782,7 +11806,7 @@ AmbDictationDone :=Array[80]
 lastprompttype := Array[81]
 OneTimeNonDragonScribeEducation := Array[82]
 NB_Enabled := Array[83]
-NB_Channel := Array[84] ? Array[84] : "master"
+NB_Channel := Array[84] ? Array[84] : "stable"
 
  ; msgbox, %NoShortcut%  ;
 
