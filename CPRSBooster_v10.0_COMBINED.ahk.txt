@@ -21509,7 +21509,7 @@ NB_BtnDeleteTemplate:
     list := ""
     for i, f in NB_delTemplates
         list .= i . ": " . StrReplace(f, ".json", "") . "`n"
-    InputBox, deleteIdx, Delete Template, Enter the number of the template to delete:`n`n%list%,, 300, 400,,,, 1
+    InputBox, deleteIdx, Delete Template, Enter the number of the template to delete:`n`n%list%,, 300, 400
     if (ErrorLevel || deleteIdx = "")
         return
     if deleteIdx is not integer
