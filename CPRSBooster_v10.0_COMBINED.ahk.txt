@@ -20149,14 +20149,14 @@ NB_ToggleSettings:
     } else {
         NB_RefreshSettingsTplList()
         ; Position settings panel below the booster panel
+        settingsX := 0
+        settingsY := 0
         if (NB_BoosterGuiVisible) {
             WinGetPos, nbPosX, nbPosY, nbPosW, nbPosH, ahk_id %NB_PanelHwnd%
-            settingsX := nbPosX
-            settingsY := nbPosY + nbPosH + 2
-        } else {
-            ; Panel not open — show settings at a sensible default
-            settingsX := 0
-            settingsY := 0
+            if (nbPosX != "" && nbPosY != "" && nbPosH != "") {
+                settingsX := nbPosX
+                settingsY := nbPosY + nbPosH + 2
+            }
         }
         Gui, 73:Show, x%settingsX% y%settingsY%
         NB_SettingsVisible := 1
