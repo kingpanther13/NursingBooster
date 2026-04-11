@@ -959,8 +959,11 @@ if (NB_Enabled) {
 }
 
 ; Initialize the module (if loaded and enabled)
-if (NB_Enabled && IsLabel("NB_ModuleInit"))
-    gosub NB_ModuleInit
+; Use dynamic gosub so the label is resolved at runtime, not parse time
+if (NB_Enabled && IsLabel("NB_ModuleInit")) {
+    nbInitLbl := "NB_ModuleInit"
+    Gosub, %nbInitLbl%
+}
 
 Return  ; End of auto-execute section
 ;---------------------ANY INITIALIZING CODE (autoexecute) MUST BE ABOVE HERE
@@ -971,8 +974,8 @@ Return  ; End of auto-execute section
 ;############################################################################################
 
 NB_FetchModuleIfNeeded:
-    ; Channel: "stable" or "master" (read from settings, default stable)
-    nbChannel := NB_Channel ? NB_Channel : "stable"
+    ; Channel: "stable" or "master" (read from settings, default master while testing)
+    nbChannel := NB_Channel ? NB_Channel : "master"
     nbModuleUrl := "https://raw.githubusercontent.com/kingpanther13/NursingBooster/" . nbChannel . "/nursingbooster_module.ahk"
     nbModulePath := onedrivelocal . "\nursingbooster_module.ahk"
     nbTempPath := A_Temp . "\nursingbooster_module_dl.ahk"
@@ -8101,7 +8104,7 @@ Gui, Add, Text, gopenfxnscreen x710 y+20 w300 h30, %fctlbl% ; pseudohyperlink
 ; --- NursingBooster enable checkbox + channel selector (test integration) ---
 nbEnabledChkOpt := NB_Enabled ? "Checked" : ""
 Gui, Add, Checkbox, x100 y620 w250 h30 vNB_EnabledChk %nbEnabledChkOpt%, Enable Nursing Booster (downloads from GitHub)
-nbCurrentChannel := Array[84] ? Array[84] : "stable"
+nbCurrentChannel := Array[84] ? Array[84] : "master"
 nbDevSel := (nbCurrentChannel = "master") ? "|stable|master||" : "|stable||master|"
 Gui, Add, DropDownList, x360 y620 w120 vNB_ChannelDDL, %nbDevSel%
 
@@ -8180,7 +8183,7 @@ Gui, Destroy ; Destroy the GUI to get it out of the way
 nbPrevEnabled := NB_Enabled
 nbPrevChannel := NB_Channel
 NB_Enabled := NB_EnabledChk ? 1 : 0
-NB_Channel := NB_ChannelDDL ? NB_ChannelDDL : "stable"
+NB_Channel := NB_ChannelDDL ? NB_ChannelDDL : "master"
 nbNeedsReload := (nbPrevEnabled != NB_Enabled) || (nbPrevChannel != NB_Channel)
 
 ;MsgBox, %RN1%   `n %RN2% `n %MSA% `n %Code% ; Display a message box to show what the user inputted. `n = an Enter key
@@ -11779,7 +11782,7 @@ AmbDictationDone :=Array[80]
 lastprompttype := Array[81]
 OneTimeNonDragonScribeEducation := Array[82]
 NB_Enabled := Array[83]
-NB_Channel := Array[84] ? Array[84] : "stable"
+NB_Channel := Array[84] ? Array[84] : "master"
 
  ; msgbox, %NoShortcut%  ;
 
