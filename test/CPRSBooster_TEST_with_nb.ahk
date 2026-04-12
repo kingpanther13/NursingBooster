@@ -197,7 +197,9 @@ installDoneFile := JboosterPath . "\" . computerName . "_Installation_Done.txt"
         }
 	}
 
-	SetTimer, CheckToolbars, 1000, On
+	; CheckToolbars timer moved to after refreshdata (line 580+) to prevent
+	; race condition where timer builds Gui 14 before fxn vars are loaded.
+	; SetTimer, CheckToolbars, 1000, On  ; MOVED — see below
 
 ; --- Amb Scribe Pilot Participation Logic ---
 ; Three participation flags:
@@ -579,6 +581,9 @@ If (driveactive= 0)  ; *************we have NO working drives
 
 gosub refreshdata  ;---- this just reads LOADS ALL DATA at start of program (DRIVE CHECK IS DONE AS PART OF THIS)
 
+; Start CheckToolbars AFTER refreshdata so fxn vars are populated before
+; the timer can build Gui 14. Prevents blank F-key labels on Reload.
+SetTimer, CheckToolbars, 1000, On
 
 
 ;############################################################################################
