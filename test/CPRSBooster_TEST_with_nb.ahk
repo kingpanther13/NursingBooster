@@ -986,7 +986,7 @@ Return  ; End of auto-execute section
 ;############################################################################################
 
 NB_FetchModuleIfNeeded:
-    ; Channel: "stable" or "master" (read from settings, default stable)
+    ; Channel: "stable" or "beta-dev" (read from settings, default stable)
     nbChannel := NB_Channel ? NB_Channel : "stable"
     nbModuleUrl := "https://raw.githubusercontent.com/kingpanther13/NursingBooster/" . nbChannel . "/nursingbooster_module.ahk"
     ; Separate cache per channel + active copy that #Include loads
@@ -8160,7 +8160,7 @@ nbEnabledChkOpt := NB_Enabled ? "Checked" : ""
 Gui, Add, Checkbox, x200 y738 w350 h22 vNB_EnabledChk %nbEnabledChkOpt%, Enable Nursing Booster (downloads from GitHub)
 Gui, Add, Text, x600 y740 w60 h20, Channel:
 nbCurrentChannel := Array[84] ? Array[84] : "stable"
-nbDevSel := (nbCurrentChannel = "master") ? "|stable|master||" : "|stable||master|"
+nbDevSel := (nbCurrentChannel = "beta-dev") ? "|stable|beta-dev||" : "|stable||beta-dev|"
 Gui, Add, DropDownList, x665 y738 w100 vNB_ChannelDDL, %nbDevSel%
 
 Gui, Add, Button, x2 y620  w80 h30 , OK ; Button to submit the information
