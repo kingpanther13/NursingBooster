@@ -216,16 +216,16 @@ NB_CheckGui14Dropdown:
             NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
             Gui, 85:Add, DropdownList, gNB_DropdownAction y0 w140 -Tabstop altsubmit vNB_DropdownChoice, %NB_MenuList%
             Gui, 85:+AlwaysOnTop -Caption +ToolWindow +Owner
-            nbMiniX := nbFxnX
-            nbMiniY := nbFxnY - 23
+            nbMiniX := nbFxnX + nbFxnW + 2
+            nbMiniY := nbFxnY
             Gui, 85:Show, x%nbMiniX% y%nbMiniY% h21, NB_MiniBar
             NB_MiniBarBuilt := true
         } else {
-            ; Keep mini bar positioned above fxnbar if it moved
+            ; Keep mini bar positioned to the right of fxnbar
             IfWinExist, NB_MiniBar
             {
-                nbMiniX := nbFxnX
-                nbMiniY := nbFxnY - 23
+                nbMiniX := nbFxnX + nbFxnW + 2
+                nbMiniY := nbFxnY
                 WinMove, NB_MiniBar,, %nbMiniX%, %nbMiniY%
             }
             else
