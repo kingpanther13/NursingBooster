@@ -310,7 +310,7 @@ NB_TogglePanel:
     }
     else
     {
-        Gui, 80:Show
+        Gui, 80:Show, NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
     }
@@ -4150,7 +4150,7 @@ NB_SignWrapper:
     sleep 250 ; brief pause after signing completes
     if (NB_SignWasVisible = 1)
     {
-        Gui, 80:Show
+        Gui, 80:Show, NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
     }
