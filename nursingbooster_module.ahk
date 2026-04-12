@@ -256,10 +256,10 @@ return
 ;============================================================================================
 
 NB_DropdownAction:
-    Gui, 14:Submit, NoHide
+    Gui, 85:Submit, NoHide
     if (NB_DropdownChoice = 1)  ; "Nursing Booster" header - do nothing
     {
-        GuiControl, 14:Choose, NB_DropdownChoice, 1
+        GuiControl, 85:Choose, NB_DropdownChoice, 1
         return
     }
     else if (NB_DropdownChoice >= 2 && NB_DropdownChoice <= 6)  ; Quick Actions 1-5
@@ -287,14 +287,14 @@ NB_DropdownAction:
     else if (NB_DropdownChoice = 11)  ; Settings
         gosub NB_ToggleSettings
     ; Reset dropdown back to header
-    GuiControl, 14:Choose, NB_DropdownChoice, 1
+    GuiControl, 85:Choose, NB_DropdownChoice, 1
 return
 
 NB_RebuildDropdown() {
     global NB_HK1_Label, NB_HK2_Label, NB_HK3_Label, NB_HK4_Label, NB_HK5_Label
     newList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
-    GuiControl, 14:, NB_DropdownChoice, |%newList%
-    GuiControl, 14:Choose, NB_DropdownChoice, 1
+    GuiControl, 85:, NB_DropdownChoice, |%newList%
+    GuiControl, 85:Choose, NB_DropdownChoice, 1
 }
 
 
