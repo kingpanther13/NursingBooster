@@ -986,7 +986,7 @@ Return  ; End of auto-execute section
 ;############################################################################################
 
 NB_FetchModuleIfNeeded:
-    ; Channel: "stable" or "beta-dev" (read from settings, default stable)
+    ; Channel: "stable" or "master" (stored internally, shown as Beta/Dev in UI)
     nbChannel := NB_Channel ? NB_Channel : "stable"
     nbModuleUrl := "https://raw.githubusercontent.com/kingpanther13/NursingBooster/" . nbChannel . "/nursingbooster_module.ahk"
     ; Separate cache per channel + active copy that #Include loads
@@ -8160,7 +8160,7 @@ nbEnabledChkOpt := NB_Enabled ? "Checked" : ""
 Gui, Add, Checkbox, x200 y738 w350 h22 vNB_EnabledChk %nbEnabledChkOpt%, Enable Nursing Booster (downloads from GitHub)
 Gui, Add, Text, x600 y740 w60 h20, Channel:
 nbCurrentChannel := Array[84] ? Array[84] : "stable"
-nbDevSel := (nbCurrentChannel = "beta-dev") ? "|stable|beta-dev||" : "|stable||beta-dev|"
+nbDevSel := (nbCurrentChannel = "master") ? "|Stable|Beta/Dev||" : "|Stable||Beta/Dev|"
 Gui, Add, DropDownList, x665 y738 w100 vNB_ChannelDDL, %nbDevSel%
 
 Gui, Add, Button, x2 y620  w80 h30 , OK ; Button to submit the information
@@ -8238,7 +8238,8 @@ Gui, Destroy ; Destroy the GUI to get it out of the way
 nbPrevEnabled := NB_Enabled
 nbPrevChannel := NB_Channel
 NB_Enabled := NB_EnabledChk ? 1 : 0
-NB_Channel := NB_ChannelDDL ? NB_ChannelDDL : "stable"
+; Map display label back to branch name
+NB_Channel := (NB_ChannelDDL = "Beta/Dev") ? "master" : "stable"
 nbNeedsReload := (nbPrevEnabled != NB_Enabled) || (nbPrevChannel != NB_Channel)
 
 ;MsgBox, %RN1%   `n %RN2% `n %MSA% `n %Code% ; Display a message box to show what the user inputted. `n = an Enter key
