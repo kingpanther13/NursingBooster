@@ -1211,15 +1211,6 @@ NB_ApplyTemplate(templatePath) {
                 }
 
                 totalApplied++
-                Sleep, %effectiveLeafSpeed%
-
-                ; Re-enumerate and check if count changed (parent expanded/collapsed)
-                prevCount := liveItems.Length()
-                liveItems := NB_EnumDescendantCheckboxes(scrollBox)
-                if (liveItems.Length() != prevCount) {
-                    ; Structure changed — wait for it to stabilize
-                    Sleep, %effectiveSpeed%
-                }
             }
         }
 
