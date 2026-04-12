@@ -97,7 +97,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev6  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev7  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -152,7 +152,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev6
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev7
     Gui, 84:Font, s7 c00FF88, Segoe UI
     Gui, 84:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
     Gui, 84:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
@@ -874,28 +874,19 @@ NB_CheckCPRS:
     }
     GuiControl, 80:, NB_PanelStatus, Ready | %cprsStatus% | %cfStatus%
 
-    ; --- Hide panel during signing ---
-    ; Detect CPRS sign windows and hide panel while they're open.
-    ; These are CPRS sub-windows, not separate popups.
-    nbSignVisible := false
-    SetTitleMatchMode, 2
-    if (WinExist("Sign Note ahk_exe CPRSChart.exe") || WinExist("Sign Summary ahk_exe CPRSChart.exe") || WinExist("Cosign Note ahk_exe CPRSChart.exe") || WinExist("Sign Orders ahk_exe CPRSChart.exe") || WinExist("Review / Sign Changes ahk_exe CPRSChart.exe") || WinExist("Electronic Signature ahk_exe CPRSChart.exe")) {
-        nbSignVisible := true
-    }
-    if (nbSignVisible && NB_BoosterGuiVisible = 1) {
-        Gui, 80:Hide
-        NB_BoosterGuiVisible := 0
-        NB_SignWasVisible := 1
-    } else if (!nbSignVisible && NB_SignWasVisible = 1) {
+return
+
+NB_ClearV6Warning:
+    GuiControl, 80:, NB_PanelStatus, Ready
+return
+
+NB_RestorePanelAfterFKey:
+    if (NB_SignWasVisible = 1) {
         Gui, 80:Show, NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
         NB_SignWasVisible := 0
     }
-return
-
-NB_ClearV6Warning:
-    GuiControl, 80:, NB_PanelStatus, Ready
 return
 
 
@@ -2322,6 +2313,27 @@ NB_ResolveParentCBLabel(cbHwnd) {
 
 ^+d::
     gosub NB_DumpDialogControls
+return
+
+; Hide panel for 6 seconds when any F-key is pressed (sign, navigation, etc.)
+~F1::
+~F2::
+~F3::
+~F4::
+~F5::
+~F6::
+~F7::
+~F8::
+~F9::
+~F10::
+~F11::
+~F12::
+    if (NB_BoosterGuiVisible = 1) {
+        Gui, 80:Hide
+        NB_BoosterGuiVisible := 0
+        NB_SignWasVisible := 1
+        SetTimer, NB_RestorePanelAfterFKey, -6000
+    }
 return
 
 
