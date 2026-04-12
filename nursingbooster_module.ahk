@@ -190,6 +190,9 @@ NB_ModuleInit:
     ; --- Start Gui 14 dropdown injection timer ---
     SetTimer, NB_CheckGui14Dropdown, 2000
 
+    ; --- Wrap host's sign hotkey to hide panel during signing ---
+    gosub NB_WrapSignHotkey
+
 return
 
 
@@ -4096,11 +4099,15 @@ return
 ;################### END CP FLOWSHEETS BOOSTER ###############################################
 
 ; ============================================================================================
-; HOST HOOK: NB_SignWrapper — host's sign hotkey can `Gosub NB_SignWrapper`
-; to hide the booster panel during signing and restore it after.
+; NB_SignWrapper — hides the booster panel during signing, restores after.
+; Self-contained: wraps the host's ^!s hotkey via Hotkey command at init.
 ; ============================================================================================
 
-NB_SignWrapper:
+NB_WrapSignHotkey:
+    Hotkey, ^!s, NB_SignHotkeyWrapper
+return
+
+NB_SignHotkeyWrapper:
     if (NB_BoosterGuiVisible = 1)
     {
         Gui, 80:Hide
