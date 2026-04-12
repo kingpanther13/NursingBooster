@@ -215,10 +215,10 @@ NB_CheckGui14Dropdown:
             Gui, 85:Font, s8 cBlack, Verdana
             NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
             Gui, 85:Add, DropdownList, gNB_DropdownAction y0 w140 -Tabstop altsubmit vNB_DropdownChoice, %NB_MenuList%
-            Gui, 85:+AlwaysOnTop -Caption +ToolWindow +Owner
+            Gui, 85:+AlwaysOnTop -Caption +ToolWindow +Owner +E0x08000000  ; WS_EX_NOACTIVATE
             nbMiniX := nbFxnX + nbFxnW + 2
             nbMiniY := nbFxnY
-            Gui, 85:Show, x%nbMiniX% y%nbMiniY% h21, NB_MiniBar
+            Gui, 85:Show, x%nbMiniX% y%nbMiniY% h21 NA, NB_MiniBar
             NB_MiniBarBuilt := true
         } else {
             ; Keep mini bar positioned to the right of fxnbar
