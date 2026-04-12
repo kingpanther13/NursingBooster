@@ -996,7 +996,7 @@ NB_FetchModuleIfNeeded:
     nbDebugLog := onedrivelocal . "\nb_fetch_debug.txt"
 
     FormatTime, nbNow,, yyyy-MM-dd HH:mm:ss
-    FileAppend, % "[" . nbNow . "] FETCH START`n  channel=" . nbChannel . "`n  url=" . nbModuleUrl . "`n  cache=" . nbModulePath . "`n", %nbDebugLog%
+    FileAppend, % "[" . nbNow . "] FETCH START`n  A_ScriptDir=" . A_ScriptDir . "`n  onedrivelocal=" . onedrivelocal . "`n  channel=" . nbChannel . "`n  url=" . nbModuleUrl . "`n  cache=" . nbModulePath . "`n", %nbDebugLog%
 
     ; Download to temp
     UrlDownloadToFile, %nbModuleUrl%, %nbTempPath%
@@ -1028,7 +1028,10 @@ return
 ;################## NURSING BOOSTER MODULE INCLUDE ##########################################
 ;############################################################################################
 ; Include the cached module file. *i = silent if missing.
-#Include *i %A_ScriptDir%\nursingbooster_module.ahk
+; First set the include working directory to the script's folder,
+; then include the module by relative name.
+#Include %A_ScriptDir%
+#Include *i nursingbooster_module.ahk
 
 Return  ; End of auto-execute section
 ;---------------------ANY INITIALIZING CODE (autoexecute) MUST BE ABOVE HERE
