@@ -187,8 +187,8 @@ NB_ModuleInit:
     ; --- NursingBooster: Start CPRS detection timer ---
     SetTimer, NB_CheckCPRS, 3000
 
-    ; --- Gui 14 dropdown disabled for now (was causing bar issues) ---
-    ; SetTimer, NB_CheckGui14Dropdown, 2000
+    ; --- Start Gui 14 dropdown injection timer ---
+    SetTimer, NB_CheckGui14Dropdown, 2000
 
 return
 
