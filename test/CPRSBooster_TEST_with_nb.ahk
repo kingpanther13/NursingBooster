@@ -951,33 +951,26 @@ if (NB_Enabled = "")
 if (NB_Channel = "")
     NB_Channel := "stable"
 
-; If enabled, check for module updates. If updated, reload so new module loads.
-; (AHK v1 #Include is parse-time, so updates only take effect after reload.)
+; If enabled but module file missing, download it now (first-time setup).
+; Otherwise skip the download — update check happens on a background timer.
 if (NB_Enabled) {
-    nbWasUpdated := false
-    gosub NB_FetchModuleIfNeeded
-    if (nbWasUpdated) {
+    nbModulePath := onedrivelocal . "\nursingbooster_module.ahk"
+    if (!FileExist(nbModulePath)) {
+        gosub NB_FetchModuleIfNeeded
         Reload
         Sleep 1000
     }
 }
 
 ; Initialize the module (if loaded and enabled)
-; Use dynamic gosub so the label is resolved at runtime, not parse time
-if (NB_Enabled) {
-    FormatTime, nbStartTime,, yyyy-MM-dd HH:mm:ss
-    nbDbgStartup := onedrivelocal . "\nb_fetch_debug.txt"
-    nbHasInit := IsLabel("NB_ModuleInit") ? "YES" : "NO"
-    nbModuleExists := FileExist(onedrivelocal . "\nursingbooster_module.ahk") ? "YES" : "NO"
-    FileAppend, % "[" . nbStartTime . "] STARTUP NB_Enabled=1`n  module file exists: " . nbModuleExists . "`n  NB_ModuleInit label exists: " . nbHasInit . "`n", %nbDbgStartup%
-    if (nbHasInit = "YES") {
-        nbInitLbl := "NB_ModuleInit"
-        Gosub, %nbInitLbl%
-        FileAppend, % "  NB_ModuleInit returned`n`n", %nbDbgStartup%
-    } else {
-        FileAppend, % "  SKIPPED ModuleInit (label missing — module not loaded by #Include)`n`n", %nbDbgStartup%
-    }
+if (NB_Enabled && IsLabel("NB_ModuleInit")) {
+    nbInitLbl := "NB_ModuleInit"
+    Gosub, %nbInitLbl%
 }
+
+; Start background update check (non-blocking, fires once after 30 seconds)
+if (NB_Enabled)
+    SetTimer, NB_BackgroundUpdateCheck, -30000
 
 Return  ; End of auto-execute section
 ;---------------------ANY INITIALIZING CODE (autoexecute) MUST BE ABOVE HERE
@@ -1039,6 +1032,17 @@ NB_FetchModuleIfNeeded:
         FileAppend, % "  UPDATED active module from " . nbChannel . " cache`n`n", %nbDebugLog%
     } else {
         FileAppend, % "  active module already matches " . nbChannel . " cache`n`n", %nbDebugLog%
+    }
+return
+
+NB_BackgroundUpdateCheck:
+    ; Non-blocking update check — runs once 30 seconds after startup
+    nbWasUpdated := false
+    gosub NB_FetchModuleIfNeeded
+    if (nbWasUpdated) {
+        ToolTip, NursingBooster updated — reloading...
+        Sleep 1500
+        Reload
     }
 return
 
