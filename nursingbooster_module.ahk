@@ -190,9 +190,6 @@ NB_ModuleInit:
     ; --- Start Gui 14 dropdown injection timer ---
     SetTimer, NB_CheckGui14Dropdown, 2000
 
-    ; --- Wrap host's sign hotkey to hide panel during signing ---
-    gosub NB_WrapSignHotkey
-
 return
 
 
@@ -876,6 +873,25 @@ NB_CheckCPRS:
         CF_Detected := 0
     }
     GuiControl, 80:, NB_PanelStatus, Ready | %cprsStatus% | %cfStatus%
+
+    ; --- Hide panel during signing ---
+    ; Detect CPRS sign windows and hide panel while they're open.
+    ; These are CPRS sub-windows, not separate popups.
+    nbSignVisible := false
+    SetTitleMatchMode, 2
+    if (WinExist("Sign Note ahk_exe CPRSChart.exe") || WinExist("Sign Summary ahk_exe CPRSChart.exe") || WinExist("Cosign Note ahk_exe CPRSChart.exe") || WinExist("Sign Orders ahk_exe CPRSChart.exe") || WinExist("Review / Sign Changes ahk_exe CPRSChart.exe") || WinExist("Electronic Signature ahk_exe CPRSChart.exe")) {
+        nbSignVisible := true
+    }
+    if (nbSignVisible && NB_BoosterGuiVisible = 1) {
+        Gui, 80:Hide
+        NB_BoosterGuiVisible := 0
+        NB_SignWasVisible := 1
+    } else if (!nbSignVisible && NB_SignWasVisible = 1) {
+        Gui, 80:Show, NA
+        WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
+        NB_BoosterGuiVisible := 1
+        NB_SignWasVisible := 0
+    }
 return
 
 NB_ClearV6Warning:
@@ -4098,29 +4114,6 @@ return
 ;############################################################################################
 ;################### END CP FLOWSHEETS BOOSTER ###############################################
 
-; ============================================================================================
-; NB_SignWrapper — hides the booster panel during signing, restores after.
-; Self-contained: wraps the host's ^!s hotkey via Hotkey command at init.
-; ============================================================================================
-
-NB_WrapSignHotkey:
-    Hotkey, ^!s, NB_SignHotkeyWrapper
-return
-
-NB_SignHotkeyWrapper:
-    if (NB_BoosterGuiVisible = 1)
-    {
-        Gui, 80:Hide
-        NB_BoosterGuiVisible := 0
-        NB_SignWasVisible := 1
-    }
-    else
-    {
-        NB_SignWasVisible := 0
-    }
-    sleep 500 ; wait for panel to fully close before signing
-    gosub ^!s ; perform the actual sign function
-    sleep 250 ; brief pause after signing completes
     if (NB_SignWasVisible = 1)
     {
         Gui, 80:Show, NA
