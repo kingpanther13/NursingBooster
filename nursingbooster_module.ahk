@@ -212,6 +212,9 @@ NB_CheckGui14Dropdown:
             NB_Gui14LastHwnd := nbFxnHwnd
             NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
             gui, 14: Add, DropdownList, gNB_DropdownAction y0 w130 -Tabstop altsubmit vNB_DropdownChoice , %NB_MenuList%
+            ; Re-show to make the new control visible (Gui 14 has fixed h21)
+            WinGetPos, nbFxnX, nbFxnY,,, ahk_id %nbFxnHwnd%
+            Gui, 14:Show, x%nbFxnX% y%nbFxnY% NA
         }
     }
     else
