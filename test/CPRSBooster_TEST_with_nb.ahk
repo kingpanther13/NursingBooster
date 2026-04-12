@@ -8144,13 +8144,15 @@ Gui, Add, Text, gopenfxnscreen x710 y+20 w300 h30, %fctlbl% ; pseudohyperlink
 
 
 ; --- NursingBooster enable checkbox + channel selector (test integration) ---
+Gui, Font, s10 Bold, Verdana
+Gui, Add, Text, x200 y710 w600 h25 cBlue, Nursing Booster Module
+Gui, Font, s9 Norm, Verdana
 nbEnabledChkOpt := NB_Enabled ? "Checked" : ""
-Gui, Add, Text, x12 y710 w300 h20 cBlue, --- Nursing Booster (test integration) ---
-Gui, Add, Checkbox, x12 y732 w260 h22 vNB_EnabledChk %nbEnabledChkOpt%, Enable Nursing Booster (downloads from GitHub)
+Gui, Add, Checkbox, x200 y738 w350 h22 vNB_EnabledChk %nbEnabledChkOpt%, Enable Nursing Booster (downloads from GitHub)
+Gui, Add, Text, x600 y740 w60 h20, Channel:
 nbCurrentChannel := Array[84] ? Array[84] : "stable"
 nbDevSel := (nbCurrentChannel = "master") ? "|stable|master||" : "|stable||master|"
-Gui, Add, Text, x280 y735 w50 h20, Channel:
-Gui, Add, DropDownList, x335 y732 w100 vNB_ChannelDDL, %nbDevSel%
+Gui, Add, DropDownList, x665 y738 w100 vNB_ChannelDDL, %nbDevSel%
 
 Gui, Add, Button, x2 y620  w80 h30 , OK ; Button to submit the information
 
