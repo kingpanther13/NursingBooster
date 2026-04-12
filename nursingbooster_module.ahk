@@ -94,50 +94,50 @@ NB_ModuleInit:
 
     ; -------------------- BUILD GUIS --------------------
     ; --- NursingBooster: Build floating panel (Gui 67) ---
-    Gui, 67:Destroy
-    Gui, 67:Color, 1a1a2e
-    Gui, 67:Font, s9 cWhite, Segoe UI
-    Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v10.0  |  Ctrl+Shift+B to toggle
-    Gui, 67:Font, s8 cBlack, Segoe UI
-    Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
-    Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
-    Gui, 67:Add, Button, x151 y28 w70 h26 gNB_PanelDelete, Del Tpl
-    Gui, 67:Add, Button, x224 y28 w63 h26 gNB_PanelSettings, Settings
-    Gui, 67:Add, Button, x290 y28 w90 h26 gNB_ShowBothBars, Show All Bars
-    Gui, 67:Font, s7 c00BFFF, Segoe UI
-    Gui, 67:Add, Text, x5 y58 w370 h16 Center BackgroundTrans, --- CP Flowsheets ---
-    Gui, 67:Font, s8 cBlack, Segoe UI
-    Gui, 67:Add, Button, x5   y76 w60 h26 gCF_PanelSave, Save
-    Gui, 67:Add, Button, x68  y76 w60 h26 gCF_PanelLoad, Load
-    Gui, 67:Add, Button, x131 y76 w50 h26 gCF_PanelDelete, Del
-    Gui, 67:Add, Button, x184 y76 w70 h26 gCF_PanelAddData, Add Data
-    Gui, 67:Font, s7 cRed, Segoe UI
-    Gui, 67:Add, Checkbox, x320 y76 w60 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
+    Gui, 80:Destroy
+    Gui, 80:Color, 1a1a2e
+    Gui, 80:Font, s9 cWhite, Segoe UI
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v10.0  |  Ctrl+Shift+B to toggle
+    Gui, 80:Font, s8 cBlack, Segoe UI
+    Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
+    Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
+    Gui, 80:Add, Button, x151 y28 w70 h26 gNB_PanelDelete, Del Tpl
+    Gui, 80:Add, Button, x224 y28 w63 h26 gNB_PanelSettings, Settings
+    Gui, 80:Add, Button, x290 y28 w90 h26 gNB_ShowBothBars, Show All Bars
+    Gui, 80:Font, s7 c00BFFF, Segoe UI
+    Gui, 80:Add, Text, x5 y58 w370 h16 Center BackgroundTrans, --- CP Flowsheets ---
+    Gui, 80:Font, s8 cBlack, Segoe UI
+    Gui, 80:Add, Button, x5   y76 w60 h26 gCF_PanelSave, Save
+    Gui, 80:Add, Button, x68  y76 w60 h26 gCF_PanelLoad, Load
+    Gui, 80:Add, Button, x131 y76 w50 h26 gCF_PanelDelete, Del
+    Gui, 80:Add, Button, x184 y76 w70 h26 gCF_PanelAddData, Add Data
+    Gui, 80:Font, s7 cRed, Segoe UI
+    Gui, 80:Add, Checkbox, x320 y76 w60 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
     ; Advanced-only: AutoSave checkbox
-    Gui, 67:Add, Checkbox, x320 y90 w60 h14 vCF_AutoSaveChk gCF_ToggleAutoSave +HwndCF_AdvAutoSaveHwnd, AutoSave
-    Gui, 67:Font, s7 cFFD700, Segoe UI
-    Gui, 67:Add, Text, x5 y106 w370 h16 Center BackgroundTrans, --- Quick Actions ---
-    Gui, 67:Font, s7 cBlack, Segoe UI
-    Gui, 67:Add, Button, x5   y123 w68 h24 gNB_HK1_Run vNB_HK1_Btn, %NB_HK1_Label%
-    Gui, 67:Add, Button, x76  y123 w68 h24 gNB_HK2_Run vNB_HK2_Btn, %NB_HK2_Label%
-    Gui, 67:Add, Button, x147 y123 w68 h24 gNB_HK3_Run vNB_HK3_Btn, %NB_HK3_Label%
-    Gui, 67:Add, Button, x218 y123 w68 h24 gNB_HK4_Run vNB_HK4_Btn, %NB_HK4_Label%
-    Gui, 67:Add, Button, x289 y123 w68 h24 gNB_HK5_Run vNB_HK5_Btn, %NB_HK5_Label%
-    Gui, 67:Add, Button, x360 y123 w20 h24 gNB_HK_Setup, ...
-    Gui, 67:Font, s8 cWhite, Segoe UI
-    Gui, 67:Add, Text, x5 y151 w375 h16 Center BackgroundTrans vNB_PanelStatus, Ready | CPRS: Not detected | CPFS: Not detected
+    Gui, 80:Add, Checkbox, x320 y90 w60 h14 vCF_AutoSaveChk gCF_ToggleAutoSave +HwndCF_AdvAutoSaveHwnd, AutoSave
+    Gui, 80:Font, s7 cFFD700, Segoe UI
+    Gui, 80:Add, Text, x5 y106 w370 h16 Center BackgroundTrans, --- Quick Actions ---
+    Gui, 80:Font, s7 cBlack, Segoe UI
+    Gui, 80:Add, Button, x5   y123 w68 h24 gNB_HK1_Run vNB_HK1_Btn, %NB_HK1_Label%
+    Gui, 80:Add, Button, x76  y123 w68 h24 gNB_HK2_Run vNB_HK2_Btn, %NB_HK2_Label%
+    Gui, 80:Add, Button, x147 y123 w68 h24 gNB_HK3_Run vNB_HK3_Btn, %NB_HK3_Label%
+    Gui, 80:Add, Button, x218 y123 w68 h24 gNB_HK4_Run vNB_HK4_Btn, %NB_HK4_Label%
+    Gui, 80:Add, Button, x289 y123 w68 h24 gNB_HK5_Run vNB_HK5_Btn, %NB_HK5_Label%
+    Gui, 80:Add, Button, x360 y123 w20 h24 gNB_HK_Setup, ...
+    Gui, 80:Font, s8 cWhite, Segoe UI
+    Gui, 80:Add, Text, x5 y151 w375 h16 Center BackgroundTrans vNB_PanelStatus, Ready | CPRS: Not detected | CPFS: Not detected
     ; Advanced-only controls: Override Speed + Leaf Speed
-    Gui, 67:Font, s7 c00FF88, Segoe UI
-    Gui, 67:Add, Checkbox, x5 y170 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans +HwndNB_AdvOverrideHwnd, Override Speed
-    Gui, 67:Add, Slider, x108 y168 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range0-600 TickInterval100 ToolTip +HwndNB_AdvParentSliderHwnd, %NB_ApplySpeed%
-    Gui, 67:Add, Text, x305 y170 w75 h16 BackgroundTrans vNB_MainSpeedLabel +HwndNB_AdvParentLblHwnd, %NB_ApplySpeed% ms
-    Gui, 67:Add, Text, x5 y192 w100 h16 BackgroundTrans vNB_LeafSpeedLbl +HwndNB_AdvLeafLblHwnd, Leaf Speed:
-    Gui, 67:Add, Slider, x108 y190 w192 h22 vNB_LeafSpeedSlider gNB_LeafSpeedChanged Range0-600 TickInterval50 ToolTip +HwndNB_AdvLeafSliderHwnd, %NB_LeafSpeed%
-    Gui, 67:Add, Text, x305 y192 w75 h16 BackgroundTrans vNB_LeafSpeedLabel +HwndNB_AdvLeafValHwnd, %NB_LeafSpeed% ms
-    Gui, 67:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd +E0x08000000  ; WS_EX_NOACTIVATE — panel never steals focus from CPRS
-    Gui, 67:Show, x0 y0 w385 h218 Hide, NursingBoosterPanel
-    GuiControl, 67:Disable, NB_MainSpeedSlider
-    GuiControl, 67:Disable, NB_LeafSpeedSlider
+    Gui, 80:Font, s7 c00FF88, Segoe UI
+    Gui, 80:Add, Checkbox, x5 y170 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans +HwndNB_AdvOverrideHwnd, Override Speed
+    Gui, 80:Add, Slider, x108 y168 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range0-600 TickInterval100 ToolTip +HwndNB_AdvParentSliderHwnd, %NB_ApplySpeed%
+    Gui, 80:Add, Text, x305 y170 w75 h16 BackgroundTrans vNB_MainSpeedLabel +HwndNB_AdvParentLblHwnd, %NB_ApplySpeed% ms
+    Gui, 80:Add, Text, x5 y192 w100 h16 BackgroundTrans vNB_LeafSpeedLbl +HwndNB_AdvLeafLblHwnd, Leaf Speed:
+    Gui, 80:Add, Slider, x108 y190 w192 h22 vNB_LeafSpeedSlider gNB_LeafSpeedChanged Range0-600 TickInterval50 ToolTip +HwndNB_AdvLeafSliderHwnd, %NB_LeafSpeed%
+    Gui, 80:Add, Text, x305 y192 w75 h16 BackgroundTrans vNB_LeafSpeedLabel +HwndNB_AdvLeafValHwnd, %NB_LeafSpeed% ms
+    Gui, 80:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd +E0x08000000  ; WS_EX_NOACTIVATE — panel never steals focus from CPRS
+    Gui, 80:Show, x0 y0 w385 h218 Hide, NursingBoosterPanel
+    GuiControl, 80:Disable, NB_MainSpeedSlider
+    GuiControl, 80:Disable, NB_LeafSpeedSlider
     ; Apply advanced mode visibility (resize skipped at startup since panels not visible yet)
     gosub NB_ApplyAdvancedMode
     NB_BoosterGuiVisible := 0
@@ -147,42 +147,42 @@ NB_ModuleInit:
     Hotkey, ^+b, NB_TogglePanel
 
     ; --- NursingBooster: Build Settings panel (Gui 73) ---
-    Gui, 73:Destroy
-    Gui, 73:Color, 1a1a2e
-    Gui, 73:Font, s9 cWhite, Segoe UI
-    Gui, 73:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
-    Gui, 73:Font, s6 cSilver, Segoe UI
-    Gui, 73:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, v10.0 | stable
-    Gui, 73:Font, s7 c00FF88, Segoe UI
-    Gui, 73:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
-    Gui, 73:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
-    Gui, 73:Add, Text, x10 y68 w65 h16 BackgroundTrans, Parent Spd:
-    Gui, 73:Add, Slider, x80 y66 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range0-600 TickInterval100 ToolTip, 600
-    Gui, 73:Add, Text, x215 y68 w55 h16 BackgroundTrans vNB_TplSpeedLabel, 600 ms
-    Gui, 73:Add, Text, x10 y92 w65 h16 BackgroundTrans, Leaf Spd:
-    Gui, 73:Add, Slider, x80 y90 w130 h22 vNB_TplLeafSlider gNB_TplLeafChanged Range0-600 TickInterval50 ToolTip, 50
-    Gui, 73:Add, Text, x215 y92 w55 h16 BackgroundTrans vNB_TplLeafLabel, 50 ms
-    Gui, 73:Add, Button, x10 y118 w80 h24 gNB_SaveTplSpeed, Save Speed
-    Gui, 73:Font, s6 cSilver, Segoe UI
-    Gui, 73:Add, Text, x95 y122 w185 h14 BackgroundTrans vNB_TplSpeedStatus, Select a template to edit speed
-    Gui, 73:Font, s7 c00FF88, Segoe UI
+    Gui, 84:Destroy
+    Gui, 84:Color, 1a1a2e
+    Gui, 84:Font, s9 cWhite, Segoe UI
+    Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
+    Gui, 84:Font, s6 cSilver, Segoe UI
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, v10.0 | stable
+    Gui, 84:Font, s7 c00FF88, Segoe UI
+    Gui, 84:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
+    Gui, 84:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
+    Gui, 84:Add, Text, x10 y68 w65 h16 BackgroundTrans, Parent Spd:
+    Gui, 84:Add, Slider, x80 y66 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range0-600 TickInterval100 ToolTip, 600
+    Gui, 84:Add, Text, x215 y68 w55 h16 BackgroundTrans vNB_TplSpeedLabel, 600 ms
+    Gui, 84:Add, Text, x10 y92 w65 h16 BackgroundTrans, Leaf Spd:
+    Gui, 84:Add, Slider, x80 y90 w130 h22 vNB_TplLeafSlider gNB_TplLeafChanged Range0-600 TickInterval50 ToolTip, 50
+    Gui, 84:Add, Text, x215 y92 w55 h16 BackgroundTrans vNB_TplLeafLabel, 50 ms
+    Gui, 84:Add, Button, x10 y118 w80 h24 gNB_SaveTplSpeed, Save Speed
+    Gui, 84:Font, s6 cSilver, Segoe UI
+    Gui, 84:Add, Text, x95 y122 w185 h14 BackgroundTrans vNB_TplSpeedStatus, Select a template to edit speed
+    Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
-    Gui, 73:Add, Checkbox, x10 y144 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
+    Gui, 84:Add, Checkbox, x10 y144 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
     ; Advanced-only: Add Data delay, Dump buttons, Debug Logging
-    Gui, 73:Add, Text, x10 y166 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
-    Gui, 73:Add, Slider, x95 y164 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
-    Gui, 73:Add, Text, x230 y166 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
-    Gui, 73:Add, Text, x10 y190 w80 h16 BackgroundTrans vCF_AdvSaveDelayLbl, AutoSave Delay:
-    Gui, 73:Add, Slider, x95 y188 w130 h22 vCF_AutoSaveDelaySlider gCF_AutoSaveDelayChanged Range50-3000 TickInterval500 ToolTip, %CF_AutoSaveDelay%
-    Gui, 73:Add, Text, x230 y190 w55 h16 BackgroundTrans vCF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
-    Gui, 73:Font, s8 cBlack, Segoe UI
-    Gui, 73:Add, Button, x10 y214 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
-    Gui, 73:Add, Button, x145 y214 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
-    Gui, 73:Font, s7 c00FF88, Segoe UI
+    Gui, 84:Add, Text, x10 y166 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
+    Gui, 84:Add, Slider, x95 y164 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
+    Gui, 84:Add, Text, x230 y166 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
+    Gui, 84:Add, Text, x10 y190 w80 h16 BackgroundTrans vCF_AdvSaveDelayLbl, AutoSave Delay:
+    Gui, 84:Add, Slider, x95 y188 w130 h22 vCF_AutoSaveDelaySlider gCF_AutoSaveDelayChanged Range50-3000 TickInterval500 ToolTip, %CF_AutoSaveDelay%
+    Gui, 84:Add, Text, x230 y190 w55 h16 BackgroundTrans vCF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
+    Gui, 84:Font, s8 cBlack, Segoe UI
+    Gui, 84:Add, Button, x10 y214 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
+    Gui, 84:Add, Button, x145 y214 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
+    Gui, 84:Font, s7 c00FF88, Segoe UI
     nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
-    Gui, 73:Add, Checkbox, x10 y242 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
-    Gui, 73:+AlwaysOnTop +ToolWindow -MinimizeBox
-    Gui, 73:Show, x400 y0 w290 h268 Hide, NB Settings
+    Gui, 84:Add, Checkbox, x10 y242 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+    Gui, 84:+AlwaysOnTop +ToolWindow -MinimizeBox
+    Gui, 84:Show, x400 y0 w290 h268 Hide, NB Settings
 
     ; --- NursingBooster: Start CPRS detection timer ---
     SetTimer, NB_CheckCPRS, 3000
@@ -275,12 +275,12 @@ NB_RebuildDropdown() {
 NB_TogglePanel:
     if (NB_BoosterGuiVisible = 1)
     {
-        Gui, 67:Hide
+        Gui, 80:Hide
         NB_BoosterGuiVisible := 0
     }
     else
     {
-        Gui, 67:Show
+        Gui, 80:Show
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
     }
@@ -310,7 +310,7 @@ return
 NB_PanelSettings:
 NB_ToggleSettings:
     if (NB_SettingsVisible) {
-        Gui, 73:Hide
+        Gui, 84:Hide
         NB_SettingsVisible := 0
     } else {
         NB_RefreshSettingsTplList()
@@ -324,7 +324,7 @@ NB_ToggleSettings:
                 settingsY := nbPosY + nbPosH + 2
             }
         }
-        Gui, 73:Show, x%settingsX% y%settingsY%
+        Gui, 84:Show, x%settingsX% y%settingsY%
         NB_SettingsVisible := 1
     }
 return
@@ -358,35 +358,35 @@ NB_ApplyAdvancedMode:
     ; Show or hide advanced-only controls based on NB_AdvancedMode
     showCmd := NB_AdvancedMode ? "Show" : "Hide"
     ; Gui 67 (main panel): speed sliders and autosave
-    GuiControl, 67:%showCmd%, NB_SpeedOverrideChk
-    GuiControl, 67:%showCmd%, NB_MainSpeedSlider
-    GuiControl, 67:%showCmd%, NB_MainSpeedLabel
-    GuiControl, 67:%showCmd%, NB_LeafSpeedLbl
-    GuiControl, 67:%showCmd%, NB_LeafSpeedSlider
-    GuiControl, 67:%showCmd%, NB_LeafSpeedLabel
-    GuiControl, 67:%showCmd%, CF_AutoSaveChk
+    GuiControl, 80:%showCmd%, NB_SpeedOverrideChk
+    GuiControl, 80:%showCmd%, NB_MainSpeedSlider
+    GuiControl, 80:%showCmd%, NB_MainSpeedLabel
+    GuiControl, 80:%showCmd%, NB_LeafSpeedLbl
+    GuiControl, 80:%showCmd%, NB_LeafSpeedSlider
+    GuiControl, 80:%showCmd%, NB_LeafSpeedLabel
+    GuiControl, 80:%showCmd%, CF_AutoSaveChk
     ; Gui 73 (settings): add data delay, dump buttons, debug logging
-    GuiControl, 73:%showCmd%, CF_AdvDelayLbl
-    GuiControl, 73:%showCmd%, CF_AddDataDelaySlider
-    GuiControl, 73:%showCmd%, CF_AddDataDelayLabel
-    GuiControl, 73:%showCmd%, CF_AdvSaveDelayLbl
-    GuiControl, 73:%showCmd%, CF_AutoSaveDelaySlider
-    GuiControl, 73:%showCmd%, CF_AutoSaveDelayLabel
-    GuiControl, 73:%showCmd%, NB_AdvDumpBtn
-    GuiControl, 73:%showCmd%, CF_AdvSpyBtn
-    GuiControl, 73:%showCmd%, NB_DebugLogChk
+    GuiControl, 84:%showCmd%, CF_AdvDelayLbl
+    GuiControl, 84:%showCmd%, CF_AddDataDelaySlider
+    GuiControl, 84:%showCmd%, CF_AddDataDelayLabel
+    GuiControl, 84:%showCmd%, CF_AdvSaveDelayLbl
+    GuiControl, 84:%showCmd%, CF_AutoSaveDelaySlider
+    GuiControl, 84:%showCmd%, CF_AutoSaveDelayLabel
+    GuiControl, 84:%showCmd%, NB_AdvDumpBtn
+    GuiControl, 84:%showCmd%, CF_AdvSpyBtn
+    GuiControl, 84:%showCmd%, NB_DebugLogChk
     ; Resize panels only if they are currently visible (avoid showing them at startup)
     if (NB_BoosterGuiVisible) {
         if (NB_AdvancedMode)
-            Gui, 67:Show, w385 h218 NA
+            Gui, 80:Show, w385 h218 NA
         else
-            Gui, 67:Show, w385 h172 NA
+            Gui, 80:Show, w385 h172 NA
     }
     if (NB_SettingsVisible) {
         if (NB_AdvancedMode)
-            Gui, 73:Show, w290 h268 NA
+            Gui, 84:Show, w290 h268 NA
         else
-            Gui, 73:Show, w290 h170 NA
+            Gui, 84:Show, w290 h170 NA
     }
 return
 
@@ -398,22 +398,22 @@ return
 NB_SpeedOverrideChanged:
     GuiControlGet, NB_SpeedOverride, 67:, NB_SpeedOverrideChk
     if (NB_SpeedOverride) {
-        GuiControl, 67:Enable, NB_MainSpeedSlider
-        GuiControl, 67:Enable, NB_LeafSpeedSlider
+        GuiControl, 80:Enable, NB_MainSpeedSlider
+        GuiControl, 80:Enable, NB_LeafSpeedSlider
     } else {
-        GuiControl, 67:Disable, NB_MainSpeedSlider
-        GuiControl, 67:Disable, NB_LeafSpeedSlider
+        GuiControl, 80:Disable, NB_MainSpeedSlider
+        GuiControl, 80:Disable, NB_LeafSpeedSlider
     }
 return
 
 NB_MainSpeedChanged:
     GuiControlGet, NB_ApplySpeed, 67:, NB_MainSpeedSlider
-    GuiControl, 67:, NB_MainSpeedLabel, %NB_ApplySpeed% ms
+    GuiControl, 80:, NB_MainSpeedLabel, %NB_ApplySpeed% ms
 return
 
 NB_LeafSpeedChanged:
     GuiControlGet, NB_LeafSpeed, 67:, NB_LeafSpeedSlider
-    GuiControl, 67:, NB_LeafSpeedLabel, %NB_LeafSpeed% ms
+    GuiControl, 80:, NB_LeafSpeedLabel, %NB_LeafSpeed% ms
 return
 
 NB_SettingsTplChanged:
@@ -426,21 +426,21 @@ NB_SettingsTplChanged:
     tplSpeed := NB_ReadTemplateSpeed(tplPath)
     tplLeaf := NB_ReadTemplateLeafSpeed(tplPath)
     displayName := RegExReplace(selectedTpl, "\s*\[(NB|CF)\]$", "")
-    GuiControl, 73:, NB_TplSpeedSlider, %tplSpeed%
-    GuiControl, 73:, NB_TplSpeedLabel, %tplSpeed% ms
-    GuiControl, 73:, NB_TplLeafSlider, %tplLeaf%
-    GuiControl, 73:, NB_TplLeafLabel, %tplLeaf% ms
-    GuiControl, 73:, NB_TplSpeedStatus, Speed for: %displayName%
+    GuiControl, 84:, NB_TplSpeedSlider, %tplSpeed%
+    GuiControl, 84:, NB_TplSpeedLabel, %tplSpeed% ms
+    GuiControl, 84:, NB_TplLeafSlider, %tplLeaf%
+    GuiControl, 84:, NB_TplLeafLabel, %tplLeaf% ms
+    GuiControl, 84:, NB_TplSpeedStatus, Speed for: %displayName%
 return
 
 NB_TplSpeedChanged:
     GuiControlGet, tplSpd, 73:, NB_TplSpeedSlider
-    GuiControl, 73:, NB_TplSpeedLabel, %tplSpd% ms
+    GuiControl, 84:, NB_TplSpeedLabel, %tplSpd% ms
 return
 
 NB_TplLeafChanged:
     GuiControlGet, tplLeafSpd, 73:, NB_TplLeafSlider
-    GuiControl, 73:, NB_TplLeafLabel, %tplLeafSpd% ms
+    GuiControl, 84:, NB_TplLeafLabel, %tplLeafSpd% ms
 return
 
 NB_SaveTplSpeed:
@@ -460,21 +460,21 @@ NB_SaveTplSpeed:
     ok1 := NB_WriteTemplateSpeed(tplPath, newSpeed)
     ok2 := NB_WriteTemplateLeafSpeed(tplPath, newLeaf)
     if (ok1 && ok2) {
-        GuiControl, 73:, NB_TplSpeedStatus, Saved: %newSpeed%/%newLeaf% ms for %displayName%
+        GuiControl, 84:, NB_TplSpeedStatus, Saved: %newSpeed%/%newLeaf% ms for %displayName%
     } else {
-        GuiControl, 73:, NB_TplSpeedStatus, Error saving speed!
+        GuiControl, 84:, NB_TplSpeedStatus, Error saving speed!
     }
 return
 
 CF_AddDataDelayChanged:
     GuiControlGet, CF_AddDataDelay, 73:, CF_AddDataDelaySlider
-    GuiControl, 73:, CF_AddDataDelayLabel, %CF_AddDataDelay% ms
+    GuiControl, 84:, CF_AddDataDelayLabel, %CF_AddDataDelay% ms
     gosub NB_SaveSettings
 return
 
 CF_AutoSaveDelayChanged:
     GuiControlGet, CF_AutoSaveDelay, 73:, CF_AutoSaveDelaySlider
-    GuiControl, 73:, CF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
+    GuiControl, 84:, CF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
     gosub NB_SaveSettings
 return
 
@@ -485,8 +485,8 @@ NB_DebugLogChanged:
     gosub, writeit
 return
 
-73GuiClose:
-    Gui, 73:Hide
+84GuiClose:
+    Gui, 84:Hide
     NB_SettingsVisible := 0
 return
 
@@ -516,13 +516,13 @@ CF_PanelAddData:
 return
 
 CF_ToggleAutoAdd:
-    Gui, 67:Submit, NoHide
+    Gui, 80:Submit, NoHide
     global CF_ChainAddData
     CF_ChainAddData := CF_AutoAddChk
 return
 
 CF_ToggleAutoSave:
-    Gui, 67:Submit, NoHide
+    Gui, 80:Submit, NoHide
     global CF_AutoSave
     if (CF_AutoSaveChk = 1) {
         MsgBox, 308, CP Flowsheets - AutoSave WARNING, WARNING: AutoSave will automatically click the SAVE button in CP Flowsheets after applying a template.`n`nThis saves the entry PERMANENTLY to the patient record.`n`nAre you sure you want to enable AutoSave?
@@ -535,7 +535,7 @@ CF_ToggleAutoSave:
         else
         {
             CF_AutoSave := 0
-            GuiControl, 67:, CF_AutoSaveChk, 0
+            GuiControl, 80:, CF_AutoSaveChk, 0
         }
     } else {
         CF_AutoSave := 0
@@ -629,46 +629,46 @@ NB_HK_Setup:
         actionList .= "CPFS Template: " . fname . "|"
     }
 
-    Gui, 71:Destroy
-    Gui, 71:+AlwaysOnTop +ToolWindow
-    Gui, 71:Color, F8F8F8
-    Gui, 71:Font, s9 Bold, Segoe UI
-    Gui, 71:Add, Text, x10 y10 w380, Quick Action Button Setup
-    Gui, 71:Font, s8 Norm, Segoe UI
+    Gui, 83:Destroy
+    Gui, 83:+AlwaysOnTop +ToolWindow
+    Gui, 83:Color, F8F8F8
+    Gui, 83:Font, s9 Bold, Segoe UI
+    Gui, 83:Add, Text, x10 y10 w380, Quick Action Button Setup
+    Gui, 83:Font, s8 Norm, Segoe UI
 
     ; Slot 1
-    Gui, 71:Add, Text, x10 y40 w50, Slot 1:
-    Gui, 71:Add, Edit, x65 y38 w100 h22 vNB_HKSetup_L1, %NB_HK1_Label%
-    Gui, 71:Add, DropDownList, x170 y38 w220 vNB_HKSetup_A1, %actionList%
+    Gui, 83:Add, Text, x10 y40 w50, Slot 1:
+    Gui, 83:Add, Edit, x65 y38 w100 h22 vNB_HKSetup_L1, %NB_HK1_Label%
+    Gui, 83:Add, DropDownList, x170 y38 w220 vNB_HKSetup_A1, %actionList%
     NB_HKSetupSelectAction("NB_HKSetup_A1", NB_HK1_Action)
 
     ; Slot 2
-    Gui, 71:Add, Text, x10 y68 w50, Slot 2:
-    Gui, 71:Add, Edit, x65 y66 w100 h22 vNB_HKSetup_L2, %NB_HK2_Label%
-    Gui, 71:Add, DropDownList, x170 y66 w220 vNB_HKSetup_A2, %actionList%
+    Gui, 83:Add, Text, x10 y68 w50, Slot 2:
+    Gui, 83:Add, Edit, x65 y66 w100 h22 vNB_HKSetup_L2, %NB_HK2_Label%
+    Gui, 83:Add, DropDownList, x170 y66 w220 vNB_HKSetup_A2, %actionList%
     NB_HKSetupSelectAction("NB_HKSetup_A2", NB_HK2_Action)
 
     ; Slot 3
-    Gui, 71:Add, Text, x10 y96 w50, Slot 3:
-    Gui, 71:Add, Edit, x65 y94 w100 h22 vNB_HKSetup_L3, %NB_HK3_Label%
-    Gui, 71:Add, DropDownList, x170 y94 w220 vNB_HKSetup_A3, %actionList%
+    Gui, 83:Add, Text, x10 y96 w50, Slot 3:
+    Gui, 83:Add, Edit, x65 y94 w100 h22 vNB_HKSetup_L3, %NB_HK3_Label%
+    Gui, 83:Add, DropDownList, x170 y94 w220 vNB_HKSetup_A3, %actionList%
     NB_HKSetupSelectAction("NB_HKSetup_A3", NB_HK3_Action)
 
     ; Slot 4
-    Gui, 71:Add, Text, x10 y124 w50, Slot 4:
-    Gui, 71:Add, Edit, x65 y122 w100 h22 vNB_HKSetup_L4, %NB_HK4_Label%
-    Gui, 71:Add, DropDownList, x170 y122 w220 vNB_HKSetup_A4, %actionList%
+    Gui, 83:Add, Text, x10 y124 w50, Slot 4:
+    Gui, 83:Add, Edit, x65 y122 w100 h22 vNB_HKSetup_L4, %NB_HK4_Label%
+    Gui, 83:Add, DropDownList, x170 y122 w220 vNB_HKSetup_A4, %actionList%
     NB_HKSetupSelectAction("NB_HKSetup_A4", NB_HK4_Action)
 
     ; Slot 5
-    Gui, 71:Add, Text, x10 y152 w50, Slot 5:
-    Gui, 71:Add, Edit, x65 y150 w100 h22 vNB_HKSetup_L5, %NB_HK5_Label%
-    Gui, 71:Add, DropDownList, x170 y150 w220 vNB_HKSetup_A5, %actionList%
+    Gui, 83:Add, Text, x10 y152 w50, Slot 5:
+    Gui, 83:Add, Edit, x65 y150 w100 h22 vNB_HKSetup_L5, %NB_HK5_Label%
+    Gui, 83:Add, DropDownList, x170 y150 w220 vNB_HKSetup_A5, %actionList%
     NB_HKSetupSelectAction("NB_HKSetup_A5", NB_HK5_Action)
 
-    Gui, 71:Add, Button, x110 y185 w90 h28 gNB_HKSetup_Save Default, Save
-    Gui, 71:Add, Button, x210 y185 w90 h28 gNB_HKSetup_Cancel, Cancel
-    Gui, 71:Show, w400 h225, Quick Action Setup
+    Gui, 83:Add, Button, x110 y185 w90 h28 gNB_HKSetup_Save Default, Save
+    Gui, 83:Add, Button, x210 y185 w90 h28 gNB_HKSetup_Cancel, Cancel
+    Gui, 83:Show, w400 h225, Quick Action Setup
 return
 
 NB_HKSetupSelectAction(ctrlName, currentAction) {
@@ -678,11 +678,11 @@ NB_HKSetupSelectAction(ctrlName, currentAction) {
         displayText := "NB Template: " . m1
     else if (RegExMatch(currentAction, "^cf_template:(.+)$", m))
         displayText := "CPFS Template: " . m1
-    GuiControl, 71:ChooseString, %ctrlName%, %displayText%
+    GuiControl, 83:ChooseString, %ctrlName%, %displayText%
 }
 
 NB_HKSetup_Save:
-    Gui, 71:Submit
+    Gui, 83:Submit
     global NB_HK1_Label, NB_HK1_Action, NB_HK2_Label, NB_HK2_Action
     global NB_HK3_Label, NB_HK3_Action, NB_HK4_Label, NB_HK4_Action
     global NB_HK5_Label, NB_HK5_Action
@@ -700,24 +700,24 @@ NB_HKSetup_Save:
     NB_HK5_Action := NB_HKParseActionChoice(NB_HKSetup_A5)
 
     ; Update button labels on panel
-    GuiControl, 67:, NB_HK1_Btn, %NB_HK1_Label%
-    GuiControl, 67:, NB_HK2_Btn, %NB_HK2_Label%
-    GuiControl, 67:, NB_HK3_Btn, %NB_HK3_Label%
-    GuiControl, 67:, NB_HK4_Btn, %NB_HK4_Label%
-    GuiControl, 67:, NB_HK5_Btn, %NB_HK5_Label%
+    GuiControl, 80:, NB_HK1_Btn, %NB_HK1_Label%
+    GuiControl, 80:, NB_HK2_Btn, %NB_HK2_Label%
+    GuiControl, 80:, NB_HK3_Btn, %NB_HK3_Label%
+    GuiControl, 80:, NB_HK4_Btn, %NB_HK4_Label%
+    GuiControl, 80:, NB_HK5_Btn, %NB_HK5_Label%
 
     ; Rebuild dropdown on bottom bar to reflect new quick action labels
     NB_RebuildDropdown()
 
     ; Save to file
     gosub NB_SaveHotkeyConfig
-    Gui, 71:Destroy
+    Gui, 83:Destroy
     ToolTip, Quick actions saved
     SetTimer, NB_ClearToolTip, -2000
 return
 
 NB_HKSetup_Cancel:
-    Gui, 71:Destroy
+    Gui, 83:Destroy
 return
 
 NB_HKParseActionChoice(displayText) {
@@ -842,11 +842,11 @@ NB_CheckCPRS:
     {
         CF_Detected := 0
     }
-    GuiControl, 67:, NB_PanelStatus, Ready | %cprsStatus% | %cfStatus%
+    GuiControl, 80:, NB_PanelStatus, Ready | %cprsStatus% | %cfStatus%
 return
 
 NB_ClearV6Warning:
-    GuiControl, 67:, NB_PanelStatus, Ready
+    GuiControl, 80:, NB_PanelStatus, Ready
 return
 
 
@@ -1044,7 +1044,7 @@ NB_ApplyTemplate(templatePath) {
         return
     }
     if (isV6 && !isV7) {
-        GuiControl, 67:, NB_PanelStatus, WARNING: Loading v6 template - re-save to upgrade to v7
+        GuiControl, 80:, NB_PanelStatus, WARNING: Loading v6 template - re-save to upgrade to v7
         SetTimer, NB_ClearV6Warning, -5000
     }
 
@@ -1629,23 +1629,23 @@ NB_BtnLoadSavedTemplate:
         NB_loadList .= (NB_loadList != "" ? "|" : "") . match1
     }
 
-    Gui, 68:Destroy
-    Gui, 68:+AlwaysOnTop +ToolWindow
-    Gui, 68:Font, s9, Segoe UI
-    Gui, 68:Add, Text,, Select a template to apply:
-    Gui, 68:Add, ListBox, w300 h200 vNB_LoadSelection, %NB_loadList%
-    Gui, 68:Add, Button, y+5 w120 gNB_DoLoadTemplate Default, Apply
-    Gui, 68:Add, Button, x+5 w120 gNB_CancelLoad, Cancel
-    Gui, 68:Show,, Load Nursing Template
+    Gui, 81:Destroy
+    Gui, 81:+AlwaysOnTop +ToolWindow
+    Gui, 81:Font, s9, Segoe UI
+    Gui, 81:Add, Text,, Select a template to apply:
+    Gui, 81:Add, ListBox, w300 h200 vNB_LoadSelection, %NB_loadList%
+    Gui, 81:Add, Button, y+5 w120 gNB_DoLoadTemplate Default, Apply
+    Gui, 81:Add, Button, x+5 w120 gNB_CancelLoad, Cancel
+    Gui, 81:Show,, Load Nursing Template
 return
 
 NB_DoLoadTemplate:
-    Gui, 68:Submit
+    Gui, 81:Submit
     if (NB_LoadSelection = "") {
         MsgBox, 48, %NB_AppTitle%, Select a template.
         return
     }
-    Gui, 68:Destroy
+    Gui, 81:Destroy
     templatePath := NB_TemplateDir . "\" . NB_SanitizeFilename(NB_LoadSelection) . ".json"
     if (FileExist(templatePath)) {
         dlgWnd := NB_FindActiveDialogWindow()
@@ -1658,7 +1658,7 @@ NB_DoLoadTemplate:
 return
 
 NB_CancelLoad:
-    Gui, 68:Destroy
+    Gui, 81:Destroy
 return
 
 
@@ -1878,7 +1878,7 @@ NB_RefreshSettingsTplList() {
         NB_SettingsTplPathMap[displayName] := CF_TemplateDir . "\" . A_LoopFileName
     }
 
-    GuiControl, 73:, NB_SettingsTplDDL, |%list%
+    GuiControl, 84:, NB_SettingsTplDDL, |%list%
 }
 
 NB_ReadTemplateSpeed(filePath) {
@@ -2299,7 +2299,7 @@ NB__MSAAProbeText(hwnd, junkNames) {
 ; NURSING BOOSTER - HOTKEYS (global — not restricted to CPRS window)
 ; NOTE: ^+b is registered via Hotkey command in auto-execute (near Gui 67 setup)
 ;============================================================================================
-#If  ; Clear context so these hotkeys work regardless of active window
+#If (NB_Enabled)  ; Only register these hotkeys when NB is enabled
 
 ^+d::
     gosub NB_DumpDialogControls
@@ -3326,19 +3326,19 @@ CF_BtnLoadTemplate:
     }
 
     ; Show picker GUI (using Gui 69 to avoid conflicts)
-    Gui, 69:Destroy
-    Gui, 69:+AlwaysOnTop
-    Gui, 69:Font, s9, Segoe UI
-    Gui, 69:Add, Text,, Select a CP Flowsheets template to apply:
-    Gui, 69:Add, ListBox, w300 h200 vCF_LoadSelection, %cfLoadList%
-    Gui, 69:Add, Button, y+5 w120 Default gCF_DoLoadTemplate, Apply
-    Gui, 69:Add, Button, x+5 w120 gCF_CancelLoad, Cancel
-    Gui, 69:Show,, %CF_AppTitle% - Load Template
+    Gui, 82:Destroy
+    Gui, 82:+AlwaysOnTop
+    Gui, 82:Font, s9, Segoe UI
+    Gui, 82:Add, Text,, Select a CP Flowsheets template to apply:
+    Gui, 82:Add, ListBox, w300 h200 vCF_LoadSelection, %cfLoadList%
+    Gui, 82:Add, Button, y+5 w120 Default gCF_DoLoadTemplate, Apply
+    Gui, 82:Add, Button, x+5 w120 gCF_CancelLoad, Cancel
+    Gui, 82:Show,, %CF_AppTitle% - Load Template
 return
 
 CF_DoLoadTemplate:
-    Gui, 69:Submit
-    Gui, 69:Destroy
+    Gui, 82:Submit
+    Gui, 82:Destroy
     if (CF_LoadSelection = "") {
         MsgBox, 48, %CF_AppTitle%, Select a template first.
         return
@@ -3366,7 +3366,7 @@ CF_DoLoadTemplate:
 return
 
 CF_CancelLoad:
-    Gui, 69:Destroy
+    Gui, 82:Destroy
 return
 
 CF_ApplyTemplate(templatePath) {
@@ -4103,7 +4103,7 @@ return
 NB_SignWrapper:
     if (NB_BoosterGuiVisible = 1)
     {
-        Gui, 67:Hide
+        Gui, 80:Hide
         NB_BoosterGuiVisible := 0
         NB_SignWasVisible := 1
     }
@@ -4116,8 +4116,10 @@ NB_SignWrapper:
     sleep 250 ; brief pause after signing completes
     if (NB_SignWasVisible = 1)
     {
-        Gui, 67:Show
+        Gui, 80:Show
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
     }
 return
+
+#If  ; Restore default hotkey context
