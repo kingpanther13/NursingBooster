@@ -200,25 +200,48 @@ return
 ; NB_Gui14LastHwnd tracks the last seen fxnbar HWND to detect rebuilds.
 
 NB_Gui14LastHwnd := 0
+NB_MiniBarBuilt := false
 
 NB_CheckGui14Dropdown:
-    ; Check if fxnbar window exists
+    ; Check if fxnbar window exists — position our mini toolbar above it
     IfWinExist, fxnbar
     {
         nbFxnHwnd := WinExist("fxnbar")
-        ; If this is a new/rebuilt fxnbar, add our dropdown
-        if (nbFxnHwnd != NB_Gui14LastHwnd) {
-            NB_Gui14LastHwnd := nbFxnHwnd
+        WinGetPos, nbFxnX, nbFxnY, nbFxnW,, ahk_id %nbFxnHwnd%
+        if (!NB_MiniBarBuilt) {
+            ; Build our own mini toolbar (Gui 85) — sits above the function bar
+            Gui, 85:Destroy
+            Gui, 85:Color, F0F0F0
+            Gui, 85:Font, s8 cBlack, Verdana
             NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
-            gui, 14: Add, DropdownList, gNB_DropdownAction y0 w130 -Tabstop altsubmit vNB_DropdownChoice , %NB_MenuList%
-            ; Re-show to make the new control visible (Gui 14 has fixed h21)
-            WinGetPos, nbFxnX, nbFxnY,,, ahk_id %nbFxnHwnd%
-            Gui, 14:Show, x%nbFxnX% y%nbFxnY% NA
+            Gui, 85:Add, DropdownList, gNB_DropdownAction y0 w140 -Tabstop altsubmit vNB_DropdownChoice, %NB_MenuList%
+            Gui, 85:+AlwaysOnTop -Caption +ToolWindow +Owner
+            nbMiniX := nbFxnX
+            nbMiniY := nbFxnY - 23
+            Gui, 85:Show, x%nbMiniX% y%nbMiniY% h21, NB_MiniBar
+            NB_MiniBarBuilt := true
+        } else {
+            ; Keep mini bar positioned above fxnbar if it moved
+            IfWinExist, NB_MiniBar
+            {
+                nbMiniX := nbFxnX
+                nbMiniY := nbFxnY - 23
+                WinMove, NB_MiniBar,, %nbMiniX%, %nbMiniY%
+            }
+            else
+            {
+                ; Mini bar was destroyed — rebuild next cycle
+                NB_MiniBarBuilt := false
+            }
         }
     }
     else
     {
-        NB_Gui14LastHwnd := 0
+        ; fxnbar gone — hide our mini bar too
+        if (NB_MiniBarBuilt) {
+            Gui, 85:Destroy
+            NB_MiniBarBuilt := false
+        }
     }
 return
 
@@ -1125,6 +1148,10 @@ NB_ApplyTemplate(templatePath) {
 
     ToolTip, Applying %tplCount% items... (Right-click to cancel)
 
+    ; Pause timers during apply to prevent interference
+    SetTimer, NB_CheckCPRS, Off
+    SetTimer, NB_CheckGui14Dropdown, Off
+
     ; Register right-click hotkey to set cancel flag
     NB_ApplyCancelled := false
     Hotkey, ~RButton, NB_CancelApplyHotkey, On
@@ -1184,18 +1211,14 @@ NB_ApplyTemplate(templatePath) {
                 }
 
                 totalApplied++
-
-                ; Check if structure changed (children created/destroyed)
-                ; Only re-enumerate if count actually changed
                 Sleep, %effectiveLeafSpeed%
-                newItems := NB_EnumDescendantCheckboxes(scrollBox)
-                if (newItems.Length() != liveCount) {
-                    ; Structure changed — use new list
-                    liveItems := newItems
-                } else {
-                    ; Count unchanged — this was a leaf toggle, no re-enum needed
-                    ; But update liveItems to keep Y-sort fresh
-                    liveItems := newItems
+
+                ; Re-enumerate and check if count changed (parent expanded/collapsed)
+                prevCount := liveItems.Length()
+                liveItems := NB_EnumDescendantCheckboxes(scrollBox)
+                if (liveItems.Length() != prevCount) {
+                    ; Structure changed — wait for it to stabilize
+                    Sleep, %effectiveSpeed%
                 }
             }
         }
@@ -1224,6 +1247,10 @@ NB_ApplyTemplate(templatePath) {
 
     ToolTip, Done: %totalApplied% toggled - %totalNotFound% not found. Review before Finish.
     SetTimer, NB_ClearToolTip, -5000
+
+    ; Resume timers
+    SetTimer, NB_CheckCPRS, 3000
+    SetTimer, NB_CheckGui14Dropdown, 2000
 
     ; Re-assert AlwaysOnTop on the panel — WinActivate on CPRS dialog strips it
     if (NB_BoosterGuiVisible = 1)
