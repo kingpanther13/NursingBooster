@@ -991,36 +991,54 @@ NB_FetchModuleIfNeeded:
     ; Channel: "stable" or "master" (read from settings, default stable)
     nbChannel := NB_Channel ? NB_Channel : "stable"
     nbModuleUrl := "https://raw.githubusercontent.com/kingpanther13/NursingBooster/" . nbChannel . "/nursingbooster_module.ahk"
-    nbModulePath := onedrivelocal . "\nursingbooster_module.ahk"
+    ; Separate cache per channel + active copy that #Include loads
+    nbChannelCache := onedrivelocal . "\nursingbooster_module_" . nbChannel . ".ahk"
+    nbActivePath := onedrivelocal . "\nursingbooster_module.ahk"
     nbTempPath := A_Temp . "\nursingbooster_module_dl.ahk"
     nbDebugLog := onedrivelocal . "\nb_fetch_debug.txt"
 
     FormatTime, nbNow,, yyyy-MM-dd HH:mm:ss
-    FileAppend, % "[" . nbNow . "] FETCH START`n  A_ScriptDir=" . A_ScriptDir . "`n  onedrivelocal=" . onedrivelocal . "`n  channel=" . nbChannel . "`n  url=" . nbModuleUrl . "`n  cache=" . nbModulePath . "`n", %nbDebugLog%
+    FileAppend, % "[" . nbNow . "] FETCH START`n  A_ScriptDir=" . A_ScriptDir . "`n  onedrivelocal=" . onedrivelocal . "`n  channel=" . nbChannel . "`n  url=" . nbModuleUrl . "`n  channelCache=" . nbChannelCache . "`n  activePath=" . nbActivePath . "`n", %nbDebugLog%
 
     ; Download to temp
     UrlDownloadToFile, %nbModuleUrl%, %nbTempPath%
     if (ErrorLevel) {
         FileAppend, % "  DOWNLOAD FAILED, ErrorLevel=" . ErrorLevel . "`n", %nbDebugLog%
+        ; If channel cache exists, ensure active copy is set
+        if (FileExist(nbChannelCache)) {
+            FileCopy, %nbChannelCache%, %nbActivePath%, 1
+        }
         return
     }
     FileGetSize, nbDlSize, %nbTempPath%
     FileAppend, % "  download OK, size=" . nbDlSize . " bytes`n", %nbDebugLog%
 
-    ; Compare with cached. If different, replace.
+    ; Compare with channel cache. If different, update channel cache.
     FileRead, newContent, %nbTempPath%
     cachedContent := ""
-    if (FileExist(nbModulePath))
-        FileRead, cachedContent, %nbModulePath%
+    if (FileExist(nbChannelCache))
+        FileRead, cachedContent, %nbChannelCache%
 
     if (newContent != cachedContent) {
-        FileDelete, %nbModulePath%
-        FileMove, %nbTempPath%, %nbModulePath%
-        nbWasUpdated := true
-        FileAppend, % "  UPDATED cached module`n`n", %nbDebugLog%
+        FileDelete, %nbChannelCache%
+        FileMove, %nbTempPath%, %nbChannelCache%
+        FileAppend, % "  UPDATED channel cache`n", %nbDebugLog%
     } else {
         FileDelete, %nbTempPath%
-        FileAppend, % "  no change, cache already current`n`n", %nbDebugLog%
+        FileAppend, % "  channel cache already current`n", %nbDebugLog%
+    }
+
+    ; Copy channel cache to active path (what #Include loads)
+    activeContent := ""
+    if (FileExist(nbActivePath))
+        FileRead, activeContent, %nbActivePath%
+    FileRead, channelContent, %nbChannelCache%
+    if (channelContent != activeContent) {
+        FileCopy, %nbChannelCache%, %nbActivePath%, 1
+        nbWasUpdated := true
+        FileAppend, % "  UPDATED active module from " . nbChannel . " cache`n`n", %nbDebugLog%
+    } else {
+        FileAppend, % "  active module already matches " . nbChannel . " cache`n`n", %nbDebugLog%
     }
 return
 
