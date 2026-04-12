@@ -28,44 +28,9 @@
 ; ============================================================================================
 
 ; -------------------- GLOBAL VARIABLES --------------------
-; All paths are computed in NB_ModuleInit using host's `onedrivelocal`
-global NB_AppTitle := "Nursing Booster"
-global NB_TemplateDir := ""
-global NB_LogDir := ""
-global NB_BoosterGuiVisible := 0
-global NB_SignWasVisible := 0
-global NB_ApplySpeed := 0
-global NB_LeafSpeed := 0
-global NB_AdvancedMode := 0
-global NB_SettingsIniPath := ""
-global NB_SpeedOverride := 0
-global NB_SettingsTplPathMap := {}
-global NB_DebugLogging := 0
-global NB_CPRSDetected := 0
-global NB_HotkeyConfigPath := ""
-global NB_HK1_Label := "Quick 1"
-global NB_HK1_Action := ""
-global NB_HK2_Label := "Quick 2"
-global NB_HK2_Action := ""
-global NB_HK3_Label := "Quick 3"
-global NB_HK3_Action := ""
-global NB_HK4_Label := "Quick 4"
-global NB_HK4_Action := ""
-global NB_HK5_Label := "Quick 5"
-global NB_HK5_Action := ""
-global NB_SettingsVisible := 0
-global NB_PanelHwnd := 0
-
-; CP Flowsheets globals
-global CF_AppTitle := "CP Flowsheets Booster"
-global CF_TemplateDir := ""
-global CF_LogDir := ""
-global CF_Detected := 0
-global CF_SpyResults := []
-global CF_AutoSave := 0
-global CF_ChainAddData := 0
-global CF_AddDataDelay := 50
-global CF_AutoSaveDelay := 500
+; Declared here so labels/functions can access them.
+; All values are set in NB_ModuleInit — no defaults here to avoid
+; interfering with host's variable loading order.
 
 ; -------------------- NB_ModuleInit: --------------------
 ; Called by host's auto-execute. Sets up directories, loads settings,
@@ -73,6 +38,37 @@ global CF_AutoSaveDelay := 500
 NB_ModuleInit:
     if (!NB_Enabled)
         return
+
+    ; Initialize all NB/CF globals
+    NB_AppTitle := "Nursing Booster"
+    NB_BoosterGuiVisible := 0
+    NB_SignWasVisible := 0
+    NB_ApplySpeed := 0
+    NB_LeafSpeed := 0
+    NB_AdvancedMode := 0
+    NB_SpeedOverride := 0
+    NB_SettingsTplPathMap := {}
+    NB_DebugLogging := 0
+    NB_CPRSDetected := 0
+    NB_HK1_Label := "Quick 1"
+    NB_HK1_Action := ""
+    NB_HK2_Label := "Quick 2"
+    NB_HK2_Action := ""
+    NB_HK3_Label := "Quick 3"
+    NB_HK3_Action := ""
+    NB_HK4_Label := "Quick 4"
+    NB_HK4_Action := ""
+    NB_HK5_Label := "Quick 5"
+    NB_HK5_Action := ""
+    NB_SettingsVisible := 0
+    NB_PanelHwnd := 0
+    CF_AppTitle := "CP Flowsheets Booster"
+    CF_Detected := 0
+    CF_SpyResults := []
+    CF_AutoSave := 0
+    CF_ChainAddData := 0
+    CF_AddDataDelay := 50
+    CF_AutoSaveDelay := 500
 
     ; Resolve paths from host's `onedrivelocal`
     NB_TemplateDir       := onedrivelocal . "\NursingTemplates"
@@ -196,10 +192,10 @@ NB_ModuleInit:
 return
 
 
-; -------------------- NB_AddDropdownToGui14: --------------------
-; Optional host hook. Host can call `gosub NB_AddDropdownToGui14` while
+; -------------------- NB_AddToGui14: --------------------
+; Optional host hook. Host can call `gosub NB_AddToGui14` while
 ; building its Gui 14 (function bar) to add the NursingBooster dropdown.
-NB_AddDropdownToGui14:
+NB_AddToGui14:
     if (!NB_Enabled)
         return
     NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"

@@ -2008,7 +2008,13 @@ modnotelist := "   New Notes   ||  |EDIT LIST BELOW:|   CLICK HERE|  | "  .  not
 
 gui, 14: Add, DropdownList, gdropdownbutton y0 w100 -Tabstop altsubmit vnotefornow , %modnotelist%
 
-; Gui 14: +AlwaysOnTop -Caption HWNDGui_Hwnd  +ToolWindow ;   +LastFound 
+; --- NursingBooster dropdown on function bar ---
+if (NB_Enabled && IsLabel("NB_AddToGui14")) {
+    nbGui14Lbl := "NB_AddToGui14"
+    Gosub, %nbGui14Lbl%
+}
+
+; Gui 14: +AlwaysOnTop -Caption HWNDGui_Hwnd  +ToolWindow ;   +LastFound
 
  Gui, 14: +AlwaysOnTop -Caption +ToolWindow +Owner
 
