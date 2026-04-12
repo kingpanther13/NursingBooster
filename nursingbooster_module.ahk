@@ -187,7 +187,8 @@ NB_ModuleInit:
     ; --- NursingBooster: Start CPRS detection timer ---
     SetTimer, NB_CheckCPRS, 3000
 
-
+    ; --- Wrap host's !+h hotkey to add NB dropdown to Gui 14 ---
+    gosub NB_WrapGui14Hotkey
 
 return
 
@@ -195,9 +196,21 @@ return
 ; -------------------- NB_AddToGui14: --------------------
 ; Optional host hook. Host can call `gosub NB_AddToGui14` while
 ; building its Gui 14 (function bar) to add the NursingBooster dropdown.
-NB_AddToGui14:
-    if (!NB_Enabled)
-        return
+; -------------------- NB Gui 14 integration --------------------
+; Wraps the host's !+h hotkey so the NB dropdown gets added to Gui 14
+; after the host finishes building it. Fully self-contained — the host
+; doesn't need any code for this.
+
+NB_WrapGui14Hotkey:
+    ; Override the host's !+h hotkey with our wrapper.
+    ; Called from NB_ModuleInit at startup.
+    Hotkey, !+h, NB_Gui14Wrapper
+return
+
+NB_Gui14Wrapper:
+    ; Call the host's original !+h handler (which builds Gui 14)
+    gosub !+h
+    ; Now add the NB dropdown to the already-built Gui 14
     NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
     gui, 14: Add, DropdownList, gNB_DropdownAction y0 w130 -Tabstop altsubmit vNB_DropdownChoice , %NB_MenuList%
 return
