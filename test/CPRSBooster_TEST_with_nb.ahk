@@ -1028,7 +1028,7 @@ return
 ;################## NURSING BOOSTER MODULE INCLUDE ##########################################
 ;############################################################################################
 ; Include the cached module file. *i = silent if missing.
-#Include *i %A_OneDrive%\CPRSBooster\nursingbooster_module.ahk
+#Include *i %A_ScriptDir%\nursingbooster_module.ahk
 
 Return  ; End of auto-execute section
 ;---------------------ANY INITIALIZING CODE (autoexecute) MUST BE ABOVE HERE
