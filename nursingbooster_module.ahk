@@ -97,7 +97,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v10.0  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev6  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -152,7 +152,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, v10.0 | stable
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev6
     Gui, 84:Font, s7 c00FF88, Segoe UI
     Gui, 84:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
     Gui, 84:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
@@ -215,10 +215,10 @@ NB_CheckGui14Dropdown:
             Gui, 85:Font, s8 cBlack, Verdana
             NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
             Gui, 85:Add, DropdownList, gNB_DropdownAction y0 w140 -Tabstop altsubmit vNB_DropdownChoice, %NB_MenuList%
-            Gui, 85:+AlwaysOnTop -Caption +ToolWindow +Owner
+            Gui, 85:+AlwaysOnTop -Caption +ToolWindow +Owner +E0x08000000  ; WS_EX_NOACTIVATE
             nbMiniX := nbFxnX + nbFxnW + 2
             nbMiniY := nbFxnY
-            Gui, 85:Show, x%nbMiniX% y%nbMiniY% h21, NB_MiniBar
+            Gui, 85:Show, x%nbMiniX% y%nbMiniY% h21 NA, NB_MiniBar
             NB_MiniBarBuilt := true
         } else {
             ; Keep mini bar positioned to the right of fxnbar
@@ -256,10 +256,10 @@ return
 ;============================================================================================
 
 NB_DropdownAction:
-    Gui, 14:Submit, NoHide
+    Gui, 85:Submit, NoHide
     if (NB_DropdownChoice = 1)  ; "Nursing Booster" header - do nothing
     {
-        GuiControl, 14:Choose, NB_DropdownChoice, 1
+        GuiControl, 85:Choose, NB_DropdownChoice, 1
         return
     }
     else if (NB_DropdownChoice >= 2 && NB_DropdownChoice <= 6)  ; Quick Actions 1-5
@@ -287,14 +287,14 @@ NB_DropdownAction:
     else if (NB_DropdownChoice = 11)  ; Settings
         gosub NB_ToggleSettings
     ; Reset dropdown back to header
-    GuiControl, 14:Choose, NB_DropdownChoice, 1
+    GuiControl, 85:Choose, NB_DropdownChoice, 1
 return
 
 NB_RebuildDropdown() {
     global NB_HK1_Label, NB_HK2_Label, NB_HK3_Label, NB_HK4_Label, NB_HK5_Label
     newList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
-    GuiControl, 14:, NB_DropdownChoice, |%newList%
-    GuiControl, 14:Choose, NB_DropdownChoice, 1
+    GuiControl, 85:, NB_DropdownChoice, |%newList%
+    GuiControl, 85:Choose, NB_DropdownChoice, 1
 }
 
 
@@ -310,7 +310,7 @@ NB_TogglePanel:
     }
     else
     {
-        Gui, 80:Show
+        Gui, 80:Show, NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
     }
@@ -873,6 +873,25 @@ NB_CheckCPRS:
         CF_Detected := 0
     }
     GuiControl, 80:, NB_PanelStatus, Ready | %cprsStatus% | %cfStatus%
+
+    ; --- Hide panel during signing ---
+    ; Detect CPRS sign windows and hide panel while they're open.
+    ; These are CPRS sub-windows, not separate popups.
+    nbSignVisible := false
+    SetTitleMatchMode, 2
+    if (WinExist("Sign Note ahk_exe CPRSChart.exe") || WinExist("Sign Summary ahk_exe CPRSChart.exe") || WinExist("Cosign Note ahk_exe CPRSChart.exe") || WinExist("Sign Orders ahk_exe CPRSChart.exe") || WinExist("Review / Sign Changes ahk_exe CPRSChart.exe") || WinExist("Electronic Signature ahk_exe CPRSChart.exe")) {
+        nbSignVisible := true
+    }
+    if (nbSignVisible && NB_BoosterGuiVisible = 1) {
+        Gui, 80:Hide
+        NB_BoosterGuiVisible := 0
+        NB_SignWasVisible := 1
+    } else if (!nbSignVisible && NB_SignWasVisible = 1) {
+        Gui, 80:Show, NA
+        WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
+        NB_BoosterGuiVisible := 1
+        NB_SignWasVisible := 0
+    }
 return
 
 NB_ClearV6Warning:
@@ -1211,14 +1230,18 @@ NB_ApplyTemplate(templatePath) {
                 }
 
                 totalApplied++
-                Sleep, %effectiveLeafSpeed%
 
-                ; Re-enumerate and check if count changed (parent expanded/collapsed)
-                prevCount := liveItems.Length()
-                liveItems := NB_EnumDescendantCheckboxes(scrollBox)
-                if (liveItems.Length() != prevCount) {
-                    ; Structure changed — wait for it to stabilize
-                    Sleep, %effectiveSpeed%
+                ; Check if structure changed (children created/destroyed)
+                ; Only re-enumerate if count actually changed
+                Sleep, %effectiveLeafSpeed%
+                newItems := NB_EnumDescendantCheckboxes(scrollBox)
+                if (newItems.Length() != liveCount) {
+                    ; Structure changed — use new list
+                    liveItems := newItems
+                } else {
+                    ; Count unchanged — this was a leaf toggle, no re-enum needed
+                    ; But update liveItems to keep Y-sort fresh
+                    liveItems := newItems
                 }
             }
         }
@@ -2287,44 +2310,6 @@ NB_ResolveParentCBLabel(cbHwnd) {
         panelChild := DllCall("GetWindow", "Ptr", panelChild, "UInt", 2, "Ptr")
     }
 
-    ; Last resort: MSAA probe — walk accessible children of the TDlgFieldPanel.
-    ; VCL may expose TGraphicControl TLabels as simple MSAA children with accName
-    ; even though they have no HWND. Also try the checkbox's parent TGroupBox.
-    try {
-        accText := NB__MSAAProbeText(bestPanel, junkNames)
-        if (accText != "")
-            return accText
-        accText := NB__MSAAProbeText(cbParent, junkNames)
-        if (accText != "")
-            return accText
-    }
-    return ""
-}
-
-NB__MSAAProbeText(hwnd, junkNames) {
-    ; Walk MSAA children of a window looking for non-junk accName text
-    try {
-        acc := Acc_ObjectFromWindow(hwnd, 0)
-        if (!acc)
-            return ""
-        children := Acc_Children(acc)
-        if (!IsObject(children))
-            return ""
-        for _, ch in children {
-            try {
-                nm := ""
-                if IsObject(ch) {
-                    nm := ch.accName(0)
-                } else {
-                    ; Simple child — ID-based
-                    nm := acc.accName(ch)
-                }
-                nm := Trim(nm)
-                if (nm != "" && !InStr(junkNames, "|" . nm . "|") && StrLen(nm) > 1)
-                    return nm
-            }
-        }
-    }
     return ""
 }
 
@@ -4129,28 +4114,9 @@ return
 ;############################################################################################
 ;################### END CP FLOWSHEETS BOOSTER ###############################################
 
-; ============================================================================================
-; HOST HOOK: NB_SignWrapper — host's sign hotkey can `Gosub NB_SignWrapper`
-; to hide the booster panel during signing and restore it after.
-; ============================================================================================
-
-NB_SignWrapper:
-    if (NB_BoosterGuiVisible = 1)
-    {
-        Gui, 80:Hide
-        NB_BoosterGuiVisible := 0
-        NB_SignWasVisible := 1
-    }
-    else
-    {
-        NB_SignWasVisible := 0
-    }
-    sleep 500 ; wait for panel to fully close before signing
-    gosub ^!s ; perform the actual sign function
-    sleep 250 ; brief pause after signing completes
     if (NB_SignWasVisible = 1)
     {
-        Gui, 80:Show
+        Gui, 80:Show, NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
     }

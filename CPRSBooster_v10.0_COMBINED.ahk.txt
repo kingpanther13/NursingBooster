@@ -732,7 +732,7 @@ gosub NB_LoadSettings
 Gui, 67:Destroy
 Gui, 67:Color, 1a1a2e
 Gui, 67:Font, s9 cWhite, Segoe UI
-Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v10.0  |  Ctrl+Shift+B to toggle
+Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v10.0-RC  |  Ctrl+Shift+B to toggle
 Gui, 67:Font, s8 cBlack, Segoe UI
 Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
 Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -759,8 +759,8 @@ Gui, 67:Add, Button, x147 y123 w68 h24 gNB_HK3_Run vNB_HK3_Btn, %NB_HK3_Label%
 Gui, 67:Add, Button, x218 y123 w68 h24 gNB_HK4_Run vNB_HK4_Btn, %NB_HK4_Label%
 Gui, 67:Add, Button, x289 y123 w68 h24 gNB_HK5_Run vNB_HK5_Btn, %NB_HK5_Label%
 Gui, 67:Add, Button, x360 y123 w20 h24 gNB_HK_Setup, ...
-Gui, 67:Font, s8 cWhite, Segoe UI
-Gui, 67:Add, Text, x5 y151 w375 h16 Center BackgroundTrans vNB_PanelStatus, Ready | CPRS: Not detected | CPFS: Not detected
+Gui, 67:Font, s7 cSilver, Segoe UI
+Gui, 67:Add, Text, x5 y151 w370 h16 Center BackgroundTrans vNB_PanelStatus, Ready | CPRS: Not detected | CPFS: Not detected
 ; Advanced-only controls: Override Speed + Leaf Speed
 Gui, 67:Font, s7 c00FF88, Segoe UI
 Gui, 67:Add, Checkbox, x5 y170 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans +HwndNB_AdvOverrideHwnd, Override Speed
@@ -787,7 +787,7 @@ Gui, 73:Color, 1a1a2e
 Gui, 73:Font, s9 cWhite, Segoe UI
 Gui, 73:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
 Gui, 73:Font, s6 cSilver, Segoe UI
-Gui, 73:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, v10.0 | stable
+Gui, 73:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, v10.0-RC | dev | unstamped
 Gui, 73:Font, s7 c00FF88, Segoe UI
 Gui, 73:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
 Gui, 73:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
@@ -20149,14 +20149,14 @@ NB_ToggleSettings:
     } else {
         NB_RefreshSettingsTplList()
         ; Position settings panel below the booster panel
-        settingsX := 0
-        settingsY := 0
         if (NB_BoosterGuiVisible) {
             WinGetPos, nbPosX, nbPosY, nbPosW, nbPosH, ahk_id %NB_PanelHwnd%
-            if (nbPosX != "" && nbPosY != "" && nbPosH != "") {
-                settingsX := nbPosX
-                settingsY := nbPosY + nbPosH + 2
-            }
+            settingsX := nbPosX
+            settingsY := nbPosY + nbPosH + 2
+        } else {
+            ; Panel not open — show settings at a sensible default
+            settingsX := 0
+            settingsY := 0
         }
         Gui, 73:Show, x%settingsX% y%settingsY%
         NB_SettingsVisible := 1
@@ -20655,7 +20655,9 @@ NB_CheckCPRS:
         if (dlgCheck) {
             cprsStatus := "Dialog detected"
         } else {
-            cprsStatus := "CPRS: Detected"
+            WinGetTitle, cprsTitle, ahk_exe CPRSChart.exe
+            StringLeft, cprsShort, cprsTitle, 50
+            cprsStatus := "CPRS: " . cprsShort
         }
     }
     else
@@ -20668,9 +20670,6 @@ NB_CheckCPRS:
     {
         CF_Detected := 1
         cfStatus := "CPFS: Detected"
-        cfLastTime := CF_ReadLastEntryTime()
-        if (cfLastTime != "")
-            cfStatus .= ", last entry " . cfLastTime
     }
     else
     {
@@ -21509,7 +21508,7 @@ NB_BtnDeleteTemplate:
     list := ""
     for i, f in NB_delTemplates
         list .= i . ": " . StrReplace(f, ".json", "") . "`n"
-    InputBox, deleteIdx, Delete Template, Enter the number of the template to delete:`n`n%list%,, 300, 400
+    InputBox, deleteIdx, Delete Template, Enter the number of the template to delete:`n`n%list%,, 300, 400,,,, 1
     if (ErrorLevel || deleteIdx = "")
         return
     if deleteIdx is not integer
@@ -22086,45 +22085,6 @@ NB_ResolveParentCBLabel(cbHwnd) {
         }
         panelChild := DllCall("GetWindow", "Ptr", panelChild, "UInt", 2, "Ptr")
     }
-
-    ; Last resort: MSAA probe — walk accessible children of the TDlgFieldPanel.
-    ; VCL may expose TGraphicControl TLabels as simple MSAA children with accName
-    ; even though they have no HWND. Also try the checkbox's parent TGroupBox.
-    try {
-        accText := NB__MSAAProbeText(bestPanel, junkNames)
-        if (accText != "")
-            return accText
-        accText := NB__MSAAProbeText(cbParent, junkNames)
-        if (accText != "")
-            return accText
-    }
-    return ""
-}
-
-NB__MSAAProbeText(hwnd, junkNames) {
-    ; Walk MSAA children of a window looking for non-junk accName text
-    try {
-        acc := Acc_ObjectFromWindow(hwnd, 0)
-        if (!acc)
-            return ""
-        children := Acc_Children(acc)
-        if (!IsObject(children))
-            return ""
-        for _, ch in children {
-            try {
-                nm := ""
-                if IsObject(ch) {
-                    nm := ch.accName(0)
-                } else {
-                    ; Simple child — ID-based
-                    nm := acc.accName(ch)
-                }
-                nm := Trim(nm)
-                if (nm != "" && !InStr(junkNames, "|" . nm . "|") && StrLen(nm) > 1)
-                    return nm
-            }
-        }
-    }
     return ""
 }
 
@@ -22167,34 +22127,6 @@ return
 ;============================================================================================
 ; CF - WINDOW DETECTION
 ;============================================================================================
-
-CF_ReadLastEntryTime() {
-    ; Read the time from the TDateTimePicker control in CP Flowsheets.
-    ; Cache it and only update if new time is EARLIER than current clock
-    ; (a saved entry is always in the past; Add Data sets it to now).
-    static cachedTime := ""
-    cfHwnd := WinExist("ahk_exe CPFlowsheets.exe")
-    if (!cfHwnd)
-        return cachedTime
-    ; Find TDateTimePicker with a time value (HH:MM format)
-    readTime := ""
-    ControlGetText, dtText, TDateTimePicker1, ahk_id %cfHwnd%
-    if (RegExMatch(dtText, "^\d{1,2}:\d{2}"))
-        readTime := dtText
-    if (readTime = "") {
-        ControlGetText, dtText2, TDateTimePicker2, ahk_id %cfHwnd%
-        if (RegExMatch(dtText2, "^\d{1,2}:\d{2}"))
-            readTime := dtText2
-    }
-    if (readTime != "") {
-        ; Only update cache if the read time is NOT the current time
-        ; (Add Data sets picker to current time; last entry is in the past)
-        FormatTime, nowTime,, HH:mm
-        if (readTime != nowTime)
-            cachedTime := readTime
-    }
-    return cachedTime
-}
 
 CF_FindCPFlowsheetsWindow() {
     ; Find the main CP Flowsheets window
@@ -23291,11 +23223,6 @@ CF_ApplyTemplate(templatePath) {
         cfTplValueIdx := tplCtrl.valueIdx
         cfTplY := tplCtrl.y
         cfTplGroupLabel := tplCtrl.group_label
-        cfTplCls := tplCtrl.cls
-
-        ; Skip TDateTimePicker — saved as "radio" type but is actually a time/date control
-        if (cfTplCls = "TDateTimePicker")
-            continue
 
         ToolTip, Applying control %ti%/%cfTotalTpl%: %cfTplLabel%
 
@@ -23404,8 +23331,15 @@ CF_ApplyTemplate(templatePath) {
             }
         }
         else if (cfTplType = "combo") {
-            ; Combo boxes in CPFS are system settings (location, frequency, etc.)
-            ; that should not be changed by template apply. Skip them entirely.
+            if (cfTplValueIdx >= 0) {
+                SendMessage, 0x014E, cfTplValueIdx, 0,, ahk_id %cfMatchHwnd%   ; CB_SETCURSEL
+                cfComboParent := DllCall("GetParent", "Ptr", cfMatchHwnd, "Ptr")
+                ctrlId := DllCall("GetDlgCtrlID", "Ptr", cfMatchHwnd, "Int")
+                wParam := (0x0001 << 16) | ctrlId
+                PostMessage, 0x0111, wParam, cfMatchHwnd,, ahk_id %cfComboParent%  ; WM_COMMAND
+                totalApplied++
+                Sleep, %cfEffectiveSpeed%
+            }
         }
     }
 
@@ -23575,13 +23509,9 @@ CF_ParseControls(jsonContent) {
         if (RegExMatch(itemStr, """checklistIdx"":\s*(-?\d+)", m))
             checklistIdx := m1 + 0
 
-        ctrlCls := ""
-        if (RegExMatch(itemStr, """cls"":\s*""([^""]*)""", m))
-            ctrlCls := m1
-
         entry := {type: ctrlType, label: label, checked: checked, selected: selected
             , value: value, valueIdx: valueIdx, y: yPos, group_label: group_label
-            , checklistIdx: checklistIdx, cls: ctrlCls}
+            , checklistIdx: checklistIdx}
         controls.Push(entry)
 
         itemPos := itemEnd
