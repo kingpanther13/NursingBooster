@@ -8294,10 +8294,18 @@ if (nbNeedsReload) {
             nbToggle := "NB_TogglePanel"
             Gosub, %nbToggle%
         }
-        SetTimer, NB_CheckCPRS, Off
-        SetTimer, NB_CheckGui14Dropdown, Off
-        ToolTip, NursingBooster disabled
-        SetTimer, NB_ClearToolTip, -2000
+        if (IsLabel("NB_CheckCPRS"))
+            SetTimer, NB_CheckCPRS, Off
+        if (IsLabel("NB_CheckGui14Dropdown"))
+            SetTimer, NB_CheckGui14Dropdown, Off
+        if (IsLabel("NB_ClearToolTip")) {
+            ToolTip, NursingBooster disabled
+            SetTimer, NB_ClearToolTip, -2000
+        } else {
+            ToolTip, NursingBooster disabled
+            Sleep 2000
+            ToolTip
+        }
     } else if (NB_Enabled && nbPrevChannel != NB_Channel) {
         ; Channel changed — download new channel and reload
         gosub NB_FetchModuleIfNeeded
