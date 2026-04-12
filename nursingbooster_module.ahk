@@ -1211,6 +1211,19 @@ NB_ApplyTemplate(templatePath) {
                 }
 
                 totalApplied++
+
+                ; Check if structure changed (children created/destroyed)
+                ; Only re-enumerate if count actually changed
+                Sleep, %effectiveLeafSpeed%
+                newItems := NB_EnumDescendantCheckboxes(scrollBox)
+                if (newItems.Length() != liveCount) {
+                    ; Structure changed — use new list
+                    liveItems := newItems
+                } else {
+                    ; Count unchanged — this was a leaf toggle, no re-enum needed
+                    ; But update liveItems to keep Y-sort fresh
+                    liveItems := newItems
+                }
             }
         }
 
