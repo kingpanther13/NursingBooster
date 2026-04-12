@@ -2291,44 +2291,6 @@ NB_ResolveParentCBLabel(cbHwnd) {
         panelChild := DllCall("GetWindow", "Ptr", panelChild, "UInt", 2, "Ptr")
     }
 
-    ; Last resort: MSAA probe — walk accessible children of the TDlgFieldPanel.
-    ; VCL may expose TGraphicControl TLabels as simple MSAA children with accName
-    ; even though they have no HWND. Also try the checkbox's parent TGroupBox.
-    try {
-        accText := NB__MSAAProbeText(bestPanel, junkNames)
-        if (accText != "")
-            return accText
-        accText := NB__MSAAProbeText(cbParent, junkNames)
-        if (accText != "")
-            return accText
-    }
-    return ""
-}
-
-NB__MSAAProbeText(hwnd, junkNames) {
-    ; Walk MSAA children of a window looking for non-junk accName text
-    try {
-        acc := Acc_ObjectFromWindow(hwnd, 0)
-        if (!acc)
-            return ""
-        children := Acc_Children(acc)
-        if (!IsObject(children))
-            return ""
-        for _, ch in children {
-            try {
-                nm := ""
-                if IsObject(ch) {
-                    nm := ch.accName(0)
-                } else {
-                    ; Simple child — ID-based
-                    nm := acc.accName(ch)
-                }
-                nm := Trim(nm)
-                if (nm != "" && !InStr(junkNames, "|" . nm . "|") && StrLen(nm) > 1)
-                    return nm
-            }
-        }
-    }
     return ""
 }
 
