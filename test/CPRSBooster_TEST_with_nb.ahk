@@ -1028,9 +1028,8 @@ return
 ;################## NURSING BOOSTER MODULE INCLUDE ##########################################
 ;############################################################################################
 ; Include the cached module file. *i = silent if missing.
-; First set the include working directory to the script's folder,
-; then include the module by relative name.
-#Include %A_ScriptDir%
+; Script is in CPRSBooster\Engine\, module is cached in CPRSBooster\
+#Include %A_ScriptDir%\..
 #Include *i nursingbooster_module.ahk
 
 Return  ; End of auto-execute section
