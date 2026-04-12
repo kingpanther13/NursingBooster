@@ -8275,13 +8275,29 @@ gosub, writeit
 sleep 10 ; data deletion issue: may not be able read if writing lags
 gosub, refreshdata  ;----need to refresh the working variables
 
-; --- NursingBooster: reload if enable/channel changed ---
+; --- NursingBooster: handle enable/channel changes ---
 if (nbNeedsReload) {
-    if (NB_Enabled) {
+    if (NB_Enabled && !nbPrevEnabled) {
+        ; Enabling for the first time — need reload to parse #Include
         gosub NB_FetchModuleIfNeeded
+        Reload
+        Sleep 1000
+    } else if (!NB_Enabled && nbPrevEnabled) {
+        ; Disabling — just hide panel and stop timers, no reload
+        if (IsLabel("NB_TogglePanel") && NB_BoosterGuiVisible) {
+            nbToggle := "NB_TogglePanel"
+            Gosub, %nbToggle%
+        }
+        SetTimer, NB_CheckCPRS, Off
+        SetTimer, NB_CheckGui14Dropdown, Off
+        ToolTip, NursingBooster disabled
+        SetTimer, NB_ClearToolTip, -2000
+    } else if (NB_Enabled && nbPrevChannel != NB_Channel) {
+        ; Channel changed — download new channel and reload
+        gosub NB_FetchModuleIfNeeded
+        Reload
+        Sleep 1000
     }
-    Reload
-    Sleep 1000
 }
 
 Return ;--------------THIS IS the return from the OK button
