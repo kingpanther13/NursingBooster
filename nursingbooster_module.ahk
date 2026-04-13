@@ -97,7 +97,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev9  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev10  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -145,7 +145,10 @@ NB_ModuleInit:
     NB_SettingsVisible := 0
 
     ; Register Ctrl+Shift+B globally via Hotkey command — immune to #If context issues
+    ; Register Ctrl+Shift+B globally (no #If context restriction)
+    Hotkey, If
     Hotkey, ^+b, NB_TogglePanel
+    Hotkey, If
 
     ; --- NursingBooster: Build Settings panel (Gui 73) ---
     Gui, 84:Destroy
@@ -153,7 +156,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev9
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev10
     Gui, 84:Font, s7 c00FF88, Segoe UI
     Gui, 84:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
     Gui, 84:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
