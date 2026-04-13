@@ -1,8 +1,21 @@
 # NursingBooster for CPRS
 
+> **TESTING ONLY — NOT OFFICIALLY APPROVED**
+>
+> This software is currently in testing and is **not officially approved or condoned by the VA, CPRSBooster, or any other organization.** Use at your own risk. This is an unofficial, independently developed tool.
+>
+> **YOU are responsible for reviewing all charting and documentation before signing.** NursingBooster fills out checkbox templates to save time, but it does NOT replace clinical judgment. Always verify that every checkbox, radio button, and field is correct before clicking Finish or Sign. Errors in documentation are YOUR responsibility.
+
+---
+
 Nursing-specific automation module for [CPRSBooster](https://github.com/mAbock/CPRSBooster). Adds one-click template apply for CPRS reminder dialogs, CP Flowsheets templates, and quick action buttons.
 
 **Opt-in only.** When disabled, CPRSBooster runs exactly as normal. NursingBooster downloads and updates automatically once enabled.
+
+### How Updates Work
+
+- **NursingBooster module**: Updates automatically from GitHub. When a new version is published, it downloads on the next CPRSBooster startup (30-second background check). No action needed from the user.
+- **CPRSBooster base script**: Does NOT update automatically. The modified CPRSBooster script you paste in Step 2 below is a one-time change. If the official CPRSBooster releases an update, you will need to re-apply the NursingBooster modifications to the new version. We will provide updated scripts when this happens.
 
 ## Installation
 
