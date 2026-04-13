@@ -73,6 +73,16 @@ You can switch channels anytime via Ctrl+H settings. The script downloads the se
 
 The panel hides immediately. No restart needed. CPRSBooster continues running normally.
 
+## Troubleshooting: NursingBooster Option Disappeared
+
+CPRSBooster may occasionally revert back to its regular production script (e.g. after an auto-update). When this happens, the "Enable Nursing Booster" checkbox will no longer appear in Ctrl+H settings.
+
+**Fix:** Simply repeat Step 2 above — right-click CPRSBooster icon, Edit This Script, paste the script from this page again, save, and reload. Your NursingBooster settings and templates are preserved in OneDrive and will load right back up.
+
+## Bugs and Feature Requests
+
+Found a bug? Have a suggestion? Please post it on the [Issues page](https://github.com/kingpanther13/NursingBooster/issues). Bug reports and feature requests are encouraged — they help make NursingBooster better for everyone.
+
 ## To Restore Original CPRSBooster
 
 If you want to remove NursingBooster entirely:
