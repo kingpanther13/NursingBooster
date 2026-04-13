@@ -97,13 +97,14 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev8  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev9  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
     Gui, 80:Add, Button, x151 y28 w70 h26 gNB_PanelDelete, Del Tpl
-    Gui, 80:Add, Button, x224 y28 w63 h26 gNB_PanelSettings, Settings
-    Gui, 80:Add, Button, x290 y28 w90 h26 gNB_ShowBothBars, Show All Bars
+    Gui, 80:Add, Button, x224 y28 w55 h26 gNB_PanelSettings, Settings
+    Gui, 80:Add, Button, x282 y28 w50 h26 gNB_ReloadBoilerplate, Reload BP
+    Gui, 80:Add, Button, x335 y28 w47 h26 gNB_ShowBothBars, Bars
     Gui, 80:Font, s7 c00BFFF, Segoe UI
     Gui, 80:Add, Text, x5 y58 w370 h16 Center BackgroundTrans, --- CP Flowsheets ---
     Gui, 80:Font, s8 cBlack, Segoe UI
@@ -152,7 +153,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev8
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev9
     Gui, 84:Font, s7 c00FF88, Segoe UI
     Gui, 84:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
     Gui, 84:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
@@ -335,6 +336,18 @@ return
 
 NB_PanelDump:
     gosub NB_DumpDialogControls
+return
+
+NB_ReloadBoilerplate:
+    ; Trigger CPRS Action menu > Reload Boilerplate Text (Alt+A then B)
+    IfWinExist, ahk_exe CPRSChart.exe
+    {
+        WinActivate, ahk_exe CPRSChart.exe
+        Sleep, 100
+        Send, !a
+        Sleep, 200
+        Send, b
+    }
 return
 
 NB_PanelSettings:
