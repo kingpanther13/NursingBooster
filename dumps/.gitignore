@@ -1,4 +1,0 @@
-# Ignore everything except dump files
-*
-!.gitignore
-!*.txt

@@ -1,4 +1,0 @@
-# Ignore everything except log files
-*
-!.gitignore
-!*.txt
