@@ -993,23 +993,15 @@ NB_FetchModuleIfNeeded:
     nbChannelCache := onedrivelocal . "\nursingbooster_module_" . nbChannel . ".ahk"
     nbActivePath := onedrivelocal . "\nursingbooster_module.ahk"
     nbTempPath := A_Temp . "\nursingbooster_module_dl.ahk"
-    nbDebugLog := onedrivelocal . "\nb_fetch_debug.txt"
-
-    FormatTime, nbNow,, yyyy-MM-dd HH:mm:ss
-    FileAppend, % "[" . nbNow . "] FETCH START`n  A_ScriptDir=" . A_ScriptDir . "`n  onedrivelocal=" . onedrivelocal . "`n  channel=" . nbChannel . "`n  url=" . nbModuleUrl . "`n  channelCache=" . nbChannelCache . "`n  activePath=" . nbActivePath . "`n", %nbDebugLog%
 
     ; Download to temp
     UrlDownloadToFile, %nbModuleUrl%, %nbTempPath%
     if (ErrorLevel) {
-        FileAppend, % "  DOWNLOAD FAILED, ErrorLevel=" . ErrorLevel . "`n", %nbDebugLog%
-        ; If channel cache exists, ensure active copy is set
-        if (FileExist(nbChannelCache)) {
+        ; Network error — use cached version if available
+        if (FileExist(nbChannelCache))
             FileCopy, %nbChannelCache%, %nbActivePath%, 1
-        }
         return
     }
-    FileGetSize, nbDlSize, %nbTempPath%
-    FileAppend, % "  download OK, size=" . nbDlSize . " bytes`n", %nbDebugLog%
 
     ; Compare with channel cache. If different, update channel cache.
     FileRead, newContent, %nbTempPath%
@@ -1020,10 +1012,8 @@ NB_FetchModuleIfNeeded:
     if (newContent != cachedContent) {
         FileDelete, %nbChannelCache%
         FileMove, %nbTempPath%, %nbChannelCache%
-        FileAppend, % "  UPDATED channel cache`n", %nbDebugLog%
     } else {
         FileDelete, %nbTempPath%
-        FileAppend, % "  channel cache already current`n", %nbDebugLog%
     }
 
     ; Copy channel cache to active path (what #Include loads)
@@ -1034,9 +1024,6 @@ NB_FetchModuleIfNeeded:
     if (channelContent != activeContent) {
         FileCopy, %nbChannelCache%, %nbActivePath%, 1
         nbWasUpdated := true
-        FileAppend, % "  UPDATED active module from " . nbChannel . " cache`n`n", %nbDebugLog%
-    } else {
-        FileAppend, % "  active module already matches " . nbChannel . " cache`n`n", %nbDebugLog%
     }
 return
 
