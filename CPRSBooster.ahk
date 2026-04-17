@@ -1,8 +1,10 @@
-	;-----------by Adam Bock 
+;-----------by Adam Bock 
 
 	
 #SingleInstance force
 
+; Register cleanup handler to close BstHelper.ahk when U64 exits
+OnExit("CleanupBstHelper")
 
 /* ; testing 
 
@@ -30,6 +32,8 @@ BoosterRoot  = \\v23.med.va.gov\apps\GUI\Local_Site_GUI\MIN\CPRSBOOSTER\   ; NEW
 
 onedriveRoot := onedrive
 onedrivelocal := onedrive . "\CPRSBooster"  ; This will be created first time through even w/o CTRLH
+AHKengine := onedrivelocal . "\Engine\AutoHotkeyU64.exe"
+AHKengineroot := onedrivelocal . "\Engine"
 onedriveBoosterFilename := onedrive . "\CPRSBooster\CPRSData.txt"
 onedrivelocalDot := onedrive . "\CPRSBooster\DotPhrases\"  ; This will be created first time through even w/o CTRLH
 qopath := onedrive . "\CPRSBooster\QuickOrders\"
@@ -40,28 +44,249 @@ handgraphicpath := "\\v23.med.va.gov\apps\GUI\Local_Site_GUI\MIN\CPRSBOOSTER\Pic
 ListSITESBetaTesting :=  BoosterRoot . "CPRS_BoosterCVBETASites.txt"
 Sta3nMapDir := BoosterRoot . "SharedDocs\sitecode.csv"
 SiteCode := SubStr(A_UserName, 4, 3)
+JboosterPath := onedrivelocal . "\J-Booster" ; need this to make the directory later
+
+;** Radiology Fax Request Global Variables **
+
+
+;------------------ Record Retriever Global Variables ------------------
+; These variables support the "Record Retriever" button functionality
+; Files are loaded on-demand when button is clicked (not at startup)
+; Runtime state (shared across request types, reloaded when type changes)
+global FaxDisplayList := ""
+global FaxFacilityNames := []
+global FaxNumbers := []
+global BoilerplateText := ""
+global FaxNumberLoadError := 0
+global BoilerplateLoadError := 0
+global CPRSClinicianName := ""  ; Store clinician name extracted from CPRS window title
+global RecordRetrieverPath := onedrivelocal . "\RecordRetriever\"
+global ImagingContactFile := RecordRetrieverPath . "Imaging_Contact_Me.txt"
+global MedRecordsContactFile := RecordRetrieverPath . "MedRecords_Contact_Me.txt"
+global ActiveRequestType := ""   ; Current request type: "Radiology" or "MedRecords"
+global LastLoadedType := ""      ; Tracks which type's config files are loaded
+
+; Personal Fax Book variables
+global PersonalFaxFile := RecordRetrieverPath . "My_FaxBook.txt"
+global PersonalFaxFacilityNames := []
+global PersonalFaxNumbers := []
+global PersonalFaxTypes := []       ; Parallel array: "Radiology" or "MedRecords" per entry
+global PersonalFaxCount := 0       ; Number of personal entries at top of merged dropdown
+global PersonalHeaderIndex := 0    ; Index of ****My Fax Numbers**** header (0 = no personal entries)
+global FacilityHeaderIndex := 0    ; Index of ****Default Fax Numbers**** header (0 = no headers)
+global FaxBookEditIndex := 0       ; Which personal entry is being edited (0 = adding new)
+global FacilityFaxDisplayList := "" ; Facility-only display list (before merge)
+global FaxToValidate := ""         ; Input for ValidateFaxNumber subroutine
+global FaxValidationError := 0     ; Output: 1 if invalid
+global FaxValidationMsg := ""      ; Output: error message if invalid
+
+; --- W Drive state tracking ---
+global WDriveAvailable := 0          ; 1 = W: drive is accessible this session
+global WDriveCheckedThisSession := 0  ; 1 = We already tried activating W: this session
+global WDriveSyncedThisSession := 0   ; 1 = W: drive files already synced to OneDrive cache
+
+; --- Fax Keeper (shared fax number collection via Teams doc) ---
+; PUBLIC_URL config: holds the SharePoint URL that ALL users open in browser to submit fax changes (crowdsourced mode)
+global FaxKeeperURLStorageFile := "W:\Products\XRG\Fax_Keeper_Pending_Changes_File_PUBLIC_URL.txt"
+global FaxKeeperURLStorageFileLocal := RecordRetrieverPath . "Fax_Keeper_Pending_Changes_File_PUBLIC_URL.txt"
+global FaxKeeperURL := ""              ; The SharePoint URL read from the config file above
+global FaxKeeperURLLoaded := 0         ; 1 = URL already loaded this session
+
+; --- Fax Keeper Identity (is this user the facility fax keeper?) ---
+global FaxKeeperIdentityFile := "W:\Products\XRG\Who_Is_the_faxkeeper.txt"
+global FaxKeeperCollectionConfigFile := "W:\Products\XRG\Fax_Keeper_Pending_Changes_File_PRIVATE.txt"  ; W: config that stores the template path to the shared pending-changes file
+global FaxKeeperCollectionFile := ""   ; Resolved at runtime from config file (username swapped in)
+global IsFaxKeeper := 0                ; 1 = current user is the fax keeper for this facility
+global FaxSweepInterval := 300000     ; milliseconds between fax keeper sweeps (300000 = 5 min)
+global FaxSweepErrorNotified := 0      ; 1 = user already shown sweep failure message this session
+
+; --- Fax Keeper action tracking (for Add/Edit/Delete pipeline) ---
+global FaxKeeperAction := ""           ; "Add", "Edit", or "Delete"
+global FaxKeeperOldName := ""          ; Previous facility name (Edit only)
+global FaxKeeperOldNumber := ""        ; Previous fax number (Edit only)
+
+; --- Fax data caching ---
+global PersonalFaxLoaded := 0          ; 1 = personal fax book already loaded this session
+global MergedDisplayEntries := []      ; Display strings for merged fax list
+global MergedFaxValues := []           ; Raw fax numbers parallel to MergedDisplayEntries
+global MergedIsHeader := []            ; 1 = header row, 0 = selectable entry
+global FilteredIndexMap := []           ; Maps filtered ListBox index -> MergedDisplayEntries index
+
+; --- Cached internal contact emails (loaded once at sync, used at send time) ---
+global CachedInternalEmail := {}
+CachedInternalEmail["Radiology"] := ""
+CachedInternalEmail["MedRecords"] := ""
+
+; --- Fax submission mode: Crowdsourced (C) vs Facilitated (F) per type ---
+global FaxSubmitModeFile := "W:\Products\XRG\Fax_CrowdSource_vs_Facilitated.txt"
+global FaxSubmitModeFileLocal := RecordRetrieverPath . "Fax_CrowdSource_vs_Facilitated.txt"
+global CachedFaxSubmitMode := {}
+CachedFaxSubmitMode["Radiology"] := "C"
+CachedFaxSubmitMode["MedRecords"] := "C"
+
+; --- Per-type configuration: File paths on W: drive ---
+global RT_FaxFile := {}
+RT_FaxFile["Radiology"] := "W:\Products\XRG\Imaging_Request_FaxNumbers.txt"
+RT_FaxFile["MedRecords"] := "W:\Products\XRG\Medical_Records_FaxNumbers.txt"
+
+global RT_BoilerplateFile := {}
+RT_BoilerplateFile["Radiology"] := "W:\Products\XRG\Imaging_Request_BoilerplateText.txt"
+RT_BoilerplateFile["MedRecords"] := "W:\Products\XRG\Medical_Records_BoilerplateText.txt"
+
+global RT_InternalContactFile := {}
+RT_InternalContactFile["Radiology"] := "W:\Products\XRG\Imaging_Request_InternalContact.txt"
+RT_InternalContactFile["MedRecords"] := "W:\Products\XRG\Medical_Records_InternalContact.txt"
+
+; --- Per-type configuration: OneDrive cached copies of W: drive files ---
+global RT_FaxFileLocal := {}
+RT_FaxFileLocal["Radiology"] := RecordRetrieverPath . "Imaging_Request_FaxNumbers.txt"
+RT_FaxFileLocal["MedRecords"] := RecordRetrieverPath . "Medical_Records_FaxNumbers.txt"
+
+global RT_BoilerplateFileLocal := {}
+RT_BoilerplateFileLocal["Radiology"] := RecordRetrieverPath . "Imaging_Request_BoilerplateText.txt"
+RT_BoilerplateFileLocal["MedRecords"] := RecordRetrieverPath . "Medical_Records_BoilerplateText.txt"
+
+global RT_InternalContactFileLocal := {}
+RT_InternalContactFileLocal["Radiology"] := RecordRetrieverPath . "Imaging_Request_InternalContact.txt"
+RT_InternalContactFileLocal["MedRecords"] := RecordRetrieverPath . "Medical_Records_InternalContact.txt"
+
+; --- Per-type configuration: UI strings ---
+global RT_GUITitle := {}
+RT_GUITitle["Radiology"] := "Request Outside Radiology Images"
+RT_GUITitle["MedRecords"] := "Request Medical Records"
+
+global RT_DetailsLabel := {}
+RT_DetailsLabel["Radiology"] := "Details of Requested Imaging (ie MRI Lumbar Spine from 2022, etc) :"
+RT_DetailsLabel["MedRecords"] := "Details of Requested Records (ie 3-2023 Discharge Summary) :"
+
+global RT_DetailsBodyLabel := {}
+RT_DetailsBodyLabel["Radiology"] := "Requested Imaging:"
+RT_DetailsBodyLabel["MedRecords"] := "Requested Records:"
+
+global RT_EmailSubjectPrefix := {}
+RT_EmailSubjectPrefix["Radiology"] := "Radiology request"
+RT_EmailSubjectPrefix["MedRecords"] := "Medical Records Request"
+
+global RT_InternalPrompt := {}
+RT_InternalPrompt["Radiology"] := "Send a copy to VA Imaging as FYI?"
+RT_InternalPrompt["MedRecords"] := "Send a copy to Medical Records as FYI?"
+
+global RT_InternalFYIHeader := {}
+RT_InternalFYIHeader["Radiology"] := "***FYI to VA Records/Imaging Staff: this request was faxed***"
+RT_InternalFYIHeader["MedRecords"] := "***FYI to VA Medical Records Staff: this request was faxed***"
+
+global RT_MsgBoxTitle := {}
+RT_MsgBoxTitle["Radiology"] := "Record Retriever - Imaging"
+RT_MsgBoxTitle["MedRecords"] := "Record Retriever - Medical Records"
+
+
+; Notes on: BstHelper.ahk
+; THIS INSTALLs PYTHON/PYTHON LIBRARIES; BAM (jlvauto); AMBIENT SCRIBE; AND RUNS BAM and Amb Scribe
+JBoosterPythonInstallerNETWORK := "\\v23.med.va.gov\apps\GUI\Local_Site_GUI\MIN\CPRSBOOSTER\ApplicationFiles\J-Booster\Python Installer\BstHelper.ahk"
+JBoosterPythonInstallerLocal := onedrivelocal . "\J-Booster\BstHelper.ahk"
+FileDelete, %CPRSopenFile%  ; Reset the CPRS open indicator file
+; Get the computer name
+computerName := A_ComputerName
+installDoneFile := JboosterPath . "\" . computerName . "_Installation_Done.txt"
+    
+; Create required directory if it doesn't exist
+    if !FileExist(JBoosterPath) {
+        FileCreateDir, %JBoosterPath%
+        if ErrorLevel {
+            return
+        }
+	}
+
+	; CheckToolbars moved to after refreshdata to prevent race condition
+	; where timer builds Gui 14 before fxn vars are loaded on Reload.
 
 ; --- Amb Scribe Pilot Participation Logic ---
-AmbScribePilotParticipant := 0  ; Default to not participating
+; Three participation flags:
+; 1. DragonAmbScribePilot = Dragon-only access (goes straight to Dragon method)
+; 2. NonDragonAmbScribeParticipant = Premium access (gets both Dragon and Non-Dragon choices)
+; 3. AnyAmbScribeParticipant = Show button if either flag is set
 
-; Correct root path for config files
-pilotConfigRoot := "\\v23.med.va.gov\apps\GUI\Local_Site_GUI\MIN\CPRSBOOSTER\ApplicationFiles\PilotSitesConfig\AmbientDictation\"
-pilotUserFile := pilotConfigRoot . "AmbScribePilotUsers.txt"
-pilotSiteFile := pilotConfigRoot . "AmbScribePilotSites.txt"
+DragonAmbScribePilot := 0  ; Default to not participating
+NonDragonAmbScribeParticipant := 0  ; Default to not participating
+AnyAmbScribeParticipant := 0  ; Combined flag for button visibility
 
-; Check if user is in pilot user file
-FileRead, pilotUsers, %pilotUserFile%
-if (InStr(pilotUsers,  A_UserName )) {
-	AmbScribePilotParticipant := 1
+; Config file root path
+pilotConfigRoot := "\\v23.med.va.gov\apps\GUI\Local_Site_GUI\MIN\CPRSBOOSTER\ApplicationFiles\PilotSitesConfig\"
+
+; Dragon pilot config files
+dragonUserFile := pilotConfigRoot . "AmbientDictation\AmbScribePilotUsers.txt"
+dragonSiteFile := pilotConfigRoot . "AmbientDictation\AmbScribePilotSites.txt"
+
+; Non-Dragon config files (premium access)
+nonDragonUserFile := pilotConfigRoot . "AmbientDictation\NonDragonAmbScribeUsers.txt"
+nonDragonSiteFile := pilotConfigRoot . "AmbientDictation\NonDragonAmbScribeSites.txt"
+
+
+;**********NOTE: BAM config file to control pilot users/site is in the bsthelper.ahk file
+
+; Check Dragon pilot participation (user)
+FileRead, dragonUsers, %dragonUserFile%
+if (InStr(dragonUsers, A_UserName)) {
+    DragonAmbScribePilot := 1
 }
 
-; Check if site is in pilot site file (independent of user check)
-FileRead, pilotSites, %pilotSiteFile%
-if (InStr(pilotSites, SiteCode)) {
-	AmbScribePilotParticipant := 1
+; Check Dragon pilot participation (site)
+FileRead, dragonSites, %dragonSiteFile%
+if (InStr(dragonSites, SiteCode)) {
+    DragonAmbScribePilot := 1
 }
 
-; MsgBox, 262144, CPRS Booster, Pilot Participation: %AmbScribePilotParticipant%
+; Check Non-Dragon participation (user) - premium access
+FileRead, nonDragonUsers, %nonDragonUserFile%
+if (InStr(nonDragonUsers, A_UserName)) {
+    NonDragonAmbScribeParticipant := 1
+}
+
+; Check Non-Dragon participation (site) - premium access
+FileRead, nonDragonSites, %nonDragonSiteFile%
+if (InStr(nonDragonSites, SiteCode)) {
+    NonDragonAmbScribeParticipant := 1
+}
+
+; Set combined flag if either Dragon or Non-Dragon participation
+if (DragonAmbScribePilot = 1 || NonDragonAmbScribeParticipant = 1) {
+    AnyAmbScribeParticipant := 1
+}
+
+; BAM pilot config files
+BAMUserFile := pilotConfigRoot . "BAM\BAMUsers.txt"
+BAMSiteFile := pilotConfigRoot . "BAM\BAMSites.txt"
+
+BAMParticipant := 0  ; Default to not participating
+
+; Check BAM participation (user)
+FileRead, BAMUsers, %BAMUserFile%
+if (InStr(BAMUsers, A_UserName)) {
+    BAMParticipant := 1
+}
+
+; Check BAM participation (site)
+FileRead, BAMSites, %BAMSiteFile%
+if (InStr(BAMSites, SiteCode)) {
+    BAMParticipant := 1
+}
+
+; Combined flag: user needs Python if Non-Dragon Scribe OR BAM participant
+AnyPythonFeatureParticipant := 0
+if (NonDragonAmbScribeParticipant = 1 || BAMParticipant = 1) {
+    AnyPythonFeatureParticipant := 1
+}
+
+; MsgBox, 262144, CPRS Booster Debug, Dragon Pilot: %DragonAmbScribePilot%`nNon-Dragon: %NonDragonAmbScribeParticipant%`nAny Scribe: %AnyAmbScribeParticipant%`nBAM: %BAMParticipant%`nPython Needed: %AnyPythonFeatureParticipant%
+
+; Record Retriever pilot config
+RecordRetrieverParticipant := 0
+RecordRetrieverSiteFile := pilotConfigRoot . "RecordRetriever\RecordRetrieverSites.txt"
+FileRead, rrSites, %RecordRetrieverSiteFile%
+if (InStr(rrSites, SiteCode)) {
+    RecordRetrieverParticipant := 1
+}
+
 gui56FirstOpen := 0 
 RecordAfterEdit := false ; start with qoEditmode off
 lastActiveCPRS := "" ; Global variable to store the last active CPRS window title
@@ -83,6 +308,7 @@ newIconPath := "\\v23.med.va.gov\apps\GUI\Local_Site_GUI\MIN\CPRSBOOSTER\RocketI
 gui55Hide := 0 ; default to 0 = not hidden = rx quick orders
 OneTimeVoogleEducation := 0 ; start with assumption that Voogle education screens not seen. Loading data will change this prn.
 OneTimeAddPCPEducation := 0 ; start with assumption that education screens not seen. Loading data will change this prn.
+OneTimeNonDragonScribeEducation := 0 ; start with assumption that Non-Dragon Scribe instructions not seen
 SiteSpecificDownKeysToMedOrderMenu := 0 ; start with assumption that we don't know # of down keys to med order menu
 GotRxQOInstructions := 0 ; start with assumption that they haven't gotten instructions
 ;############################################################################################
@@ -94,7 +320,49 @@ global debugging := false
 qodebug := false   ; quick order debugging (Do NOT change: programmatically controlled)
 Global Listening := false
 Global hAnchorEdit
-Global ADPrompts := {}  ; ambient dictation 
+Global ADPrompts := {}  ; ambient dictation
+Global EdgePasteAllowed := false  ; Track if "allow pasting" typed in Edge DevTools
+Global PromptText := "Please summarize the following: "  ; VA GPT prompt text 
+
+;############################################################################################
+;################### NURSING BOOSTER VARIABLES ##############################################
+;############################################################################################
+global NB_AppTitle := "Nursing Booster"
+global NB_TemplateDir := onedrivelocal . "\NursingTemplates"
+global NB_LogDir := onedrivelocal . "\NursingTemplates\Logs"
+global NB_BoosterGuiVisible := 0
+global NB_SignWasVisible := 0
+global NB_ApplySpeed := 0  ; ms delay after parent toggle (slider range 0-600)
+global NB_LeafSpeed := 0    ; ms delay after leaf checkbox toggle (slider range 0-600)
+global NB_AdvancedMode := 0  ; 1 = show advanced controls, 0 = simplified UI
+global NB_SettingsIniPath := onedrivelocal . "\NursingTemplates\booster_settings.ini"
+global NB_SpeedOverride := 0  ; 1 = use main panel speed, 0 = use per-template speed
+global NB_SettingsTplPathMap := {}  ; maps dropdown display name → full file path
+global NB_DebugLogging := 0  ; 1 = write debug logs for NB and CPFS save/apply
+global NB_CPRSDetected := 0
+global NB_HotkeyConfigPath := onedrivelocal . "\NursingTemplates\hotkey_buttons.json"
+global NB_HK1_Label := "Quick 1"
+global NB_HK1_Action := ""
+global NB_HK2_Label := "Quick 2"
+global NB_HK2_Action := ""
+global NB_HK3_Label := "Quick 3"
+global NB_HK3_Action := ""
+global NB_HK4_Label := "Quick 4"
+global NB_HK4_Action := ""
+global NB_HK5_Label := "Quick 5"
+global NB_HK5_Action := ""
+
+;################### CP FLOWSHEETS BOOSTER VARIABLES #########################################
+;############################################################################################
+global CF_AppTitle := "CP Flowsheets Booster"
+global CF_TemplateDir := onedrivelocal . "\CPFSTemplates"
+global CF_LogDir := onedrivelocal . "\CPFSTemplates\Logs"
+global CF_Detected := 0
+global CF_SpyResults := []
+global CF_AutoSave := 0
+global CF_ChainAddData := 0  ; 1 = auto-click Add Data before applying CPFS template
+global CF_AddDataDelay := 50  ; ms to wait after Add Data opens before applying template
+global CF_AutoSaveDelay := 500  ; ms to wait after apply finishes before clicking Save
 
 ;****************AI Folder**************
 AIPath := onedrivelocal . "\AI\"
@@ -124,6 +392,7 @@ Loop, Files, %DeletePromptFolder%*.*, F
 }
 
 ; 2. Update user prompts from master folder
+
 Loop, Files, %MasterPromptFolder%*.bstrAD, F
 {
 	fileName := A_LoopFileName
@@ -147,8 +416,6 @@ Loop, Files, %MasterPromptFolder%*.bstrAD, F
 	}
 }
 ;------------------ End AI Prompt Sync/Cleanup ------------------
-
-
 
 ;************************ Dot phrase library variables *************
 ; Set the path to the Userprofile.txt file for library
@@ -239,6 +506,7 @@ wemadeitpastStart:=0  ; this will pop up an error box if they try to press CTRL 
 skipAltN:=1 ; start off so Alt N is mapped by AHK.
 
 global fxn:= []
+Global CPRSWindowHandle := 0  ; Store CPRS window handle once we find it with reliable title
 
 ; ----------------------------END INTIALIZE VARIABLES
 
@@ -352,6 +620,8 @@ If (driveactive= 0)  ; *************we have NO working drives
 
 gosub refreshdata  ;---- this just reads LOADS ALL DATA at start of program (DRIVE CHECK IS DONE AS PART OF THIS)
 
+; Start CheckToolbars AFTER refreshdata so fxn vars are populated
+SetTimer, CheckToolbars, 1000, On
 
 
 ;############################################################################################
@@ -646,11 +916,282 @@ WinGetPos , X0, Y0, Width0, Height0, CPRS ; starting positions of CPRS prior to 
 ;############################################################################################
 
 ;  deactivate this for now---SetTimer, MonitorForSpecificWindows, 1000
+; return  ; this seems to be doing nothing: remove 8-12-25
+
+
+
+
+;###########################################################################
+;##############################Python-based Features Installer/Launcher###########################
+;##############################BstHelper.ahk: Python installer, library checker, BAM & Ambient Scribe launcher###########################
+;########################## Only runs for users who need Python (Non-Dragon Scribe OR BAM participants) ##12-15-25
+
+
+if (AnyPythonFeatureParticipant = 1) {
+	; --- Check and copy BstHelper.ahk from network
+	; MUST do this before launching because it also contains BAM and Ambient Scribe launcher logic
+	if !FileExist(JBoosterPythonInstallerLocal)
+	{
+		FileCopy, %JBoosterPythonInstallerNETWORK%, %JBoosterPythonInstallerLocal%, 1
+	}
+	else
+	{
+		FileGetTime, localTime, %JBoosterPythonInstallerLocal%, M
+		FileGetTime, networkTime, %JBoosterPythonInstallerNETWORK%, M
+		if (networkTime > localTime)
+		{
+			FileCopy, %JBoosterPythonInstallerNETWORK%, %JBoosterPythonInstallerLocal%, 1
+		}
+	}
+
+	;############################################################################################
+	;#####################LAUNCH BstHelper.ahk (Python installer & feature launcher) #############################################################
+	;############################################################################################
+
+	try {
+		Run, "%AHKengine%" "%JBoosterPythonInstallerLocal%", , Hide
+	} catch e {
+		; Display error information in a message box
+		MsgBox, 16, Error Running BstHelper, % "An error occurred:`n`nError: " e.Message "`nWhat: " e.What "`nExtra: " e.Extra
+	}
+}
+;############################################################################################
+;############################################################################################
+;############################################################################################
+
+; Named pipe handles for communicating with BAM (Python)
+Global PythonCommandPipeName := "\\.\pipe\CPRSBoosterCommands"
+Global PythonDataPipeName := "\\.\pipe\CPRSBoosterData"
+Global hCommandPipe := 0
+Global hDataPipe := 0
+Global pipesConnected := false
+
+; Start timer to connect to BAM's pipes (BAM creates them, AHK connects)
+if (AnyPythonFeatureParticipant = 1) {
+    SetTimer, ConnectToBAMPipes, 2000  ; Check every 2 seconds
+}
+
+;############################################################################################
+;################## Fax Keeper: Check identity and start sweep timer ########################
+;############################################################################################
+gosub CheckIfFaxKeeper
+if (IsFaxKeeper = 1) {
+    gosub LoadFaxKeeperCollectionPath  ; Load the path to the shared pending-changes file from W: config
+    gosub SweepFaxKeeperFile          ; Run one immediate sweep at startup
+    SetTimer, SweepFaxKeeperFile, %FaxSweepInterval%
+}
+
+
+; --- NursingBooster: Load configs and build GUIs ---
+; --- Load hotkey button config ---
+gosub NB_LoadHotkeyConfig
+gosub NB_LoadSettings
+
+; --- NursingBooster: Build floating panel (Gui 67) ---
+Gui, 67:Destroy
+Gui, 67:Color, 1a1a2e
+Gui, 67:Font, s9 cWhite, Segoe UI
+Gui, 67:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster v10.2  |  Ctrl+Shift+B to toggle
+Gui, 67:Font, s8 cBlack, Segoe UI
+Gui, 67:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
+Gui, 67:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
+Gui, 67:Add, Button, x151 y28 w70 h26 gNB_PanelDelete, Del Tpl
+Gui, 67:Add, Button, x224 y28 w63 h26 gNB_PanelSettings, Settings
+Gui, 67:Add, Button, x290 y28 w90 h26 gNB_ShowBothBars, Show All Bars
+Gui, 67:Font, s7 c00BFFF, Segoe UI
+Gui, 67:Add, Text, x5 y58 w370 h16 Center BackgroundTrans, --- CP Flowsheets ---
+Gui, 67:Font, s8 cBlack, Segoe UI
+Gui, 67:Add, Button, x5   y76 w60 h26 gCF_PanelSave, Save
+Gui, 67:Add, Button, x68  y76 w60 h26 gCF_PanelLoad, Load
+Gui, 67:Add, Button, x131 y76 w50 h26 gCF_PanelDelete, Del
+Gui, 67:Add, Button, x184 y76 w70 h26 gCF_PanelAddData, Add Data
+Gui, 67:Font, s7 cRed, Segoe UI
+Gui, 67:Add, Checkbox, x320 y76 w60 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
+; Advanced-only: AutoSave checkbox
+Gui, 67:Add, Checkbox, x320 y90 w60 h14 vCF_AutoSaveChk gCF_ToggleAutoSave +HwndCF_AdvAutoSaveHwnd, AutoSave
+Gui, 67:Font, s7 cFFD700, Segoe UI
+Gui, 67:Add, Text, x5 y106 w370 h16 Center BackgroundTrans, --- Quick Actions ---
+Gui, 67:Font, s7 cBlack, Segoe UI
+Gui, 67:Add, Button, x5   y123 w68 h24 gNB_HK1_Run vNB_HK1_Btn, %NB_HK1_Label%
+Gui, 67:Add, Button, x76  y123 w68 h24 gNB_HK2_Run vNB_HK2_Btn, %NB_HK2_Label%
+Gui, 67:Add, Button, x147 y123 w68 h24 gNB_HK3_Run vNB_HK3_Btn, %NB_HK3_Label%
+Gui, 67:Add, Button, x218 y123 w68 h24 gNB_HK4_Run vNB_HK4_Btn, %NB_HK4_Label%
+Gui, 67:Add, Button, x289 y123 w68 h24 gNB_HK5_Run vNB_HK5_Btn, %NB_HK5_Label%
+Gui, 67:Add, Button, x360 y123 w20 h24 gNB_HK_Setup, ...
+Gui, 67:Font, s8 cWhite, Segoe UI
+Gui, 67:Add, Text, x5 y151 w375 h16 Center BackgroundTrans vNB_PanelStatus, Ready | CPRS: Not detected | CPFS: Not detected
+; Advanced-only controls: Override Speed + Leaf Speed
+Gui, 67:Font, s7 c00FF88, Segoe UI
+Gui, 67:Add, Checkbox, x5 y170 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans +HwndNB_AdvOverrideHwnd, Override Speed
+Gui, 67:Add, Slider, x108 y168 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range0-600 TickInterval100 ToolTip +HwndNB_AdvParentSliderHwnd, %NB_ApplySpeed%
+Gui, 67:Add, Text, x305 y170 w75 h16 BackgroundTrans vNB_MainSpeedLabel +HwndNB_AdvParentLblHwnd, %NB_ApplySpeed% ms
+Gui, 67:Add, Text, x5 y192 w100 h16 BackgroundTrans vNB_LeafSpeedLbl +HwndNB_AdvLeafLblHwnd, Leaf Speed:
+Gui, 67:Add, Slider, x108 y190 w192 h22 vNB_LeafSpeedSlider gNB_LeafSpeedChanged Range0-600 TickInterval50 ToolTip +HwndNB_AdvLeafSliderHwnd, %NB_LeafSpeed%
+Gui, 67:Add, Text, x305 y192 w75 h16 BackgroundTrans vNB_LeafSpeedLabel +HwndNB_AdvLeafValHwnd, %NB_LeafSpeed% ms
+Gui, 67:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd +E0x08000000  ; WS_EX_NOACTIVATE — panel never steals focus from CPRS
+Gui, 67:Show, x0 y0 w385 h218 Hide, NursingBoosterPanel
+GuiControl, 67:Disable, NB_MainSpeedSlider
+GuiControl, 67:Disable, NB_LeafSpeedSlider
+; Apply advanced mode visibility (resize skipped at startup since panels not visible yet)
+gosub NB_ApplyAdvancedMode
+NB_BoosterGuiVisible := 0
+NB_SettingsVisible := 0
+
+; Register Ctrl+Shift+B globally via Hotkey command — immune to #If context issues
+Hotkey, ^+b, NB_TogglePanel
+
+; --- NursingBooster: Build Settings panel (Gui 73) ---
+Gui, 73:Destroy
+Gui, 73:Color, 1a1a2e
+Gui, 73:Font, s9 cWhite, Segoe UI
+Gui, 73:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
+Gui, 73:Font, s6 cSilver, Segoe UI
+Gui, 73:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, v10.2 | combined
+Gui, 73:Font, s7 c00FF88, Segoe UI
+Gui, 73:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
+Gui, 73:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
+Gui, 73:Add, Text, x10 y68 w65 h16 BackgroundTrans, Parent Spd:
+Gui, 73:Add, Slider, x80 y66 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range0-600 TickInterval100 ToolTip, 600
+Gui, 73:Add, Text, x215 y68 w55 h16 BackgroundTrans vNB_TplSpeedLabel, 600 ms
+Gui, 73:Add, Text, x10 y92 w65 h16 BackgroundTrans, Leaf Spd:
+Gui, 73:Add, Slider, x80 y90 w130 h22 vNB_TplLeafSlider gNB_TplLeafChanged Range0-600 TickInterval50 ToolTip, 50
+Gui, 73:Add, Text, x215 y92 w55 h16 BackgroundTrans vNB_TplLeafLabel, 50 ms
+Gui, 73:Add, Button, x10 y118 w80 h24 gNB_SaveTplSpeed, Save Speed
+Gui, 73:Font, s6 cSilver, Segoe UI
+Gui, 73:Add, Text, x95 y122 w185 h14 BackgroundTrans vNB_TplSpeedStatus, Select a template to edit speed
+Gui, 73:Font, s7 c00FF88, Segoe UI
+nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
+Gui, 73:Add, Checkbox, x10 y144 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
+; Advanced-only: Add Data delay, Dump buttons, Debug Logging
+Gui, 73:Add, Text, x10 y166 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
+Gui, 73:Add, Slider, x95 y164 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
+Gui, 73:Add, Text, x230 y166 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
+Gui, 73:Add, Text, x10 y190 w80 h16 BackgroundTrans vCF_AdvSaveDelayLbl, AutoSave Delay:
+Gui, 73:Add, Slider, x95 y188 w130 h22 vCF_AutoSaveDelaySlider gCF_AutoSaveDelayChanged Range50-3000 TickInterval500 ToolTip, %CF_AutoSaveDelay%
+Gui, 73:Add, Text, x230 y190 w55 h16 BackgroundTrans vCF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
+Gui, 73:Font, s8 cBlack, Segoe UI
+Gui, 73:Add, Button, x10 y214 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
+Gui, 73:Add, Button, x145 y214 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
+Gui, 73:Font, s7 c00FF88, Segoe UI
+nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
+Gui, 73:Add, Checkbox, x10 y242 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+Gui, 73:+AlwaysOnTop +ToolWindow -MinimizeBox
+Gui, 73:Show, x400 y0 w290 h268 Hide, NB Settings
+
+; --- NursingBooster: Start CPRS detection timer ---
+SetTimer, NB_CheckCPRS, 3000
+
 return
 
-
-
+Return  ; End of auto-execute section
 ;---------------------ANY INITIALIZING CODE (autoexecute) MUST BE ABOVE HERE
+
+
+;############################################################################################
+;################## DATA FETCH OVERLAY LABELS ###############################################
+;############################################################################################
+
+Return  ; CRITICAL: Prevent fall-through into ShowDataOverlay from autoexecute
+
+ShowDataOverlay:
+	global overlayMessageIndex, overlaySeconds, calmingMessages, overlayTimeoutSeconds, overlayMainMessage
+	
+	; Initialize variables
+	overlayMessageIndex := 1
+	overlaySeconds := 0
+	calmingMessages := ["Take a few seconds to rest while I work....", "NOTE: After I grab this CPRS data, you can ask additional questions about this patient without this delay...", "Use the 'History' Link to see my prior answers....", "Breathe in... and out...", "Almost there...", "Just a moment longer..."]
+	
+	; Use default message if not set
+	if (overlayMainMessage = "") {
+		overlayMainMessage := "DO NOT TOUCH MOUSE OR KEYBOARD - Getting data from CPRS"
+	}
+	
+	; Use default timeout if not set (45 seconds)
+	if (overlayTimeoutSeconds = "" || overlayTimeoutSeconds = 0) {
+		overlayTimeoutSeconds := 45000
+	}
+	
+	; Create banner at top of screen (150 pixels tall for BAM)
+	Gui, DataOverlay:New, +AlwaysOnTop -Caption +ToolWindow +LastFound
+	Gui, DataOverlay:Color, Yellow
+	
+	; Add header
+	Gui, DataOverlay:Font, s18 cBlack Bold
+	Gui, DataOverlay:Add, Text, x0 y5 w%A_ScreenWidth% Center, BOOSTER AI MODULE (BAM)
+	
+	; Add main message (use dynamic message from caller)
+	Gui, DataOverlay:Font, s14 cBlack Bold
+	Gui, DataOverlay:Add, Text, x0 y40 w%A_ScreenWidth% Center vMainMessage, %overlayMainMessage%
+	Gui, DataOverlay:Font, s12 cBlack
+	Gui, DataOverlay:Add, Text, x0 y80 w%A_ScreenWidth% Center vCalmMessage, % calmingMessages[1]
+	Gui, DataOverlay:Font, s10 cBlack
+	Gui, DataOverlay:Add, Text, x0 y110 w%A_ScreenWidth% Center vTimeCounter, 0s elapsed
+	
+	; Add Cancel button on right side of banner
+	Gui, DataOverlay:Font, s11 cRed Bold
+	
+	Gui, DataOverlay:Add, Button, x20 y20 w150 h35 gCancelDataFetch, CANCEL
+	
+	; Show banner at top (150 pixels tall)
+	Gui, DataOverlay:Show, x0 y0 w%A_ScreenWidth% h150 NoActivate
+	
+	; Start timers (use dynamic timeout from caller)
+	SetTimer, UpdateOverlaySeconds, 1000
+	SetTimer, UpdateOverlayMessage, 3800
+	SetTimer, OverlayTimeout, %overlayTimeoutSeconds%
+return
+
+HideDataOverlay:
+	; Stop all timers
+	SetTimer, UpdateOverlaySeconds, Off
+	SetTimer, UpdateOverlayMessage, Off
+	SetTimer, OverlayTimeout, Off
+	
+	; Destroy overlay
+	Gui, DataOverlay:Destroy
+return
+
+UpdateOverlaySeconds:
+	global overlaySeconds
+	
+	overlaySeconds++
+	GuiControl, DataOverlay:, TimeCounter, %overlaySeconds%s elapsed
+return
+
+UpdateOverlayMessage:
+	global overlayMessageIndex, calmingMessages
+	
+	; Rotate through calming messages
+	overlayMessageIndex++
+	if (overlayMessageIndex > calmingMessages.Length())
+		overlayMessageIndex := 1
+	
+	GuiControl, DataOverlay:, CalmMessage, % calmingMessages[overlayMessageIndex]
+return
+
+CancelDataFetch:
+	; User clicked Cancel button
+	global dataFetchCancelled
+	dataFetchCancelled := true  ; Set flag to stop any running loops
+	gosub HideDataOverlay
+	
+	; Send cancellation response to BAM
+	jsonData := "{""sentinel"": ""CPRS_DATA_CANCELLED"", ""request_id"": """ . requestId . """, ""error"": ""User cancelled data fetch""}"
+	gosub SendDataToPipe
+return
+
+OverlayTimeout:
+	; 60-second timeout expired
+	gosub HideDataOverlay
+	
+	; Send timeout error to BAM
+	jsonData := "{""sentinel"": ""CPRS_DATA_TIMEOUT"", ""request_id"": """ . requestId . """, ""error"": ""Data fetch timeout after 60 seconds""}"
+	gosub SendDataToPipe
+return
+
+;############################################################################################
+;################## END DATA FETCH OVERLAY ##################################################
+;############################################################################################
 
 
 ;############################################################################################
@@ -681,37 +1222,339 @@ return
 
 
 
-/*  ; BETA must activate
+ /*; BETA must activate
+
 
 ^t::
-	; when done the orders may not show up with flags.
-	send !v
-	sleep 50
-	send C  ; for custom
-	sleep 50
-	send {pgup 2}
-	sleep 50
-	send {pgdn}
-	sleep 50
-	send {tab}
-	sleep 50
-	send {pgup 2}
-	sleep 50
-	send {down}
-	sleep 50
-		send {enter}
-	sleep 500
-return
 
-*/   ; BETA must activate
+  */   ; BETA must activate
+
+
 ;############################################################################################
 ;##################end testing area###########################################
 ;############################################################################################
 
+;############################################################################################
+;################## CONNECT TO BAM PIPES ##########################################
+;############################################################################################
+
+ConnectToBAMPipes:
+    global hCommandPipe, hDataPipe, pipesConnected
+    global PythonCommandPipeName, PythonDataPipeName
+    
+    ; Already connected
+    if (pipesConnected) {
+        return
+    }
+    
+    ; Try to connect to command pipe (read commands from BAM)
+    if (hCommandPipe = 0) {
+        GENERIC_READ := 0x80000000
+        OPEN_EXISTING := 3
+        
+        hCommandPipe := DllCall("CreateFile"
+            , "Str", PythonCommandPipeName
+            , "UInt", GENERIC_READ
+            , "UInt", 0
+            , "Ptr", 0
+            , "UInt", OPEN_EXISTING
+            , "UInt", 0
+            , "Ptr", 0
+            , "Ptr")
+        
+        if (hCommandPipe != -1 && hCommandPipe != 0) {
+            ; SplashTextOn, 350, 100, BAM Connection, Connected to BAM command pipe!
+            ; Sleep, 1000
+            ; SplashTextOff
+        } else {
+            hCommandPipe := 0
+            return  ; Command pipe not ready yet
+        }
+    }
+    
+    ; Try to connect to data pipe (write responses to BAM)
+    if (hDataPipe = 0) {
+        GENERIC_WRITE := 0x40000000
+        
+        hDataPipe := DllCall("CreateFile"
+            , "Str", PythonDataPipeName
+            , "UInt", GENERIC_WRITE
+            , "UInt", 0
+            , "Ptr", 0
+            , "UInt", OPEN_EXISTING
+            , "UInt", 0
+            , "Ptr", 0
+            , "Ptr")
+        
+        if (hDataPipe != -1 && hDataPipe != 0) {
+            ; SplashTextOn, 350, 100, BAM Connection, Connected to BAM data pipe!
+            ; Sleep, 1000
+            ; SplashTextOff
+        } else {
+            hDataPipe := 0
+            return  ; Data pipe not ready yet
+        }
+    }
+    
+    ; Both pipes connected!
+    if (hCommandPipe != 0 && hDataPipe != 0) {
+        pipesConnected := true
+        SetTimer, ConnectToBAMPipes, Off  ; Stop trying to connect
+        SetTimer, ListenForPythonCommands, 100  ; Start listening for commands
+        
+       ; SplashTextOn, 350, 100, BAM Ready, BAM communication ready!
+      ;  Sleep, 2000
+       ;  SplashTextOff
+    }
+return
+
+;############################################################################################
+;################## LISTEN FOR BAM COMMANDS ##########################################
+;############################################################################################
+
+ListenForPythonCommands:
+    global hCommandPipe
+    
+    if (!pipesConnected || hCommandPipe = 0) {
+        return
+    }
+    
+    ; Check if data is available (non-blocking check)
+    bytesAvail := 0
+    peekSuccess := DllCall("PeekNamedPipe"
+        , "Ptr", hCommandPipe
+        , "Ptr", 0
+        , "UInt", 0
+        , "Ptr", 0
+        , "UInt*", bytesAvail
+        , "Ptr", 0
+        , "Int")
+    
+    if (!peekSuccess) {
+        ; Pipe broken - BAM probably closed
+        pipesConnected := false
+        DllCall("CloseHandle", "Ptr", hCommandPipe)
+        DllCall("CloseHandle", "Ptr", hDataPipe)
+        hCommandPipe := 0
+        hDataPipe := 0
+        SetTimer, ListenForPythonCommands, Off
+        SetTimer, ConnectToBAMPipes, 2000  ; Try reconnecting
+        return
+    }
+    
+    if (bytesAvail = 0) {
+        return  ; No data yet
+    }
+    
+    ; Read the command
+    VarSetCapacity(buffer, 4096, 0)
+    bytesRead := 0
+    success := DllCall("ReadFile"
+        , "Ptr", hCommandPipe
+        , "Ptr", &buffer
+        , "UInt", 4096
+        , "UInt*", bytesRead
+        , "Ptr", 0
+        , "Int")
+    
+    if (bytesRead > 0) {
+        commandJSON := StrGet(&buffer, bytesRead, "UTF-8")
+        
+        ; SplashTextOn, 400, 120, Command Received, Received: %commandJSON%
+        ; Sleep, 1000
+        ; SplashTextOff
+        
+        ; Process the command
+        gosub ProcessPythonCommand
+    }
+return
+
+ProcessPythonCommand:
+    ; Parse JSON command (simple parsing for our specific format)
+    ; Expected: {"command": "fetch_data", "data_method": "current_note|progress_notes|health_summary_4yr", "request_id": "123"}
+    ; or: {"command": "get_patient_info", "request_id": "456"}
+    
+    command := ""
+    dataMethod := ""
+    requestId := ""
+    
+    ; Validate that commandJSON exists and is not empty
+    if (commandJSON = "" || !commandJSON) {
+        return
+    }
+    
+    ; Extract command
+    if RegExMatch(commandJSON, """command""\s*:\s*""([^""]+)""", match) {
+        command := match1
+    }
+    
+    ; Validate command was found
+    if (command = "" || !command) {
+        return
+    }
+    
+    ; Extract data_method
+    if RegExMatch(commandJSON, """data_method""\s*:\s*""([^""]+)""", match) {
+        dataMethod := match1
+    }
+    
+    ; Extract request_id
+    if RegExMatch(commandJSON, """request_id""\s*:\s*""([^""]+)""", match) {
+        requestId := match1
+    }
+    
+    ; Route to appropriate handler
+    if (command = "get_patient_info") {
+        gosub HandleGetPatientInfo
+    } else if (command = "fetch_data") {
+        gosub HandleFetchData
+    }
+return
+
+HandleGetPatientInfo:
+	; Check if we have a valid CPRS window handle
+	if (CPRSWindowHandle = 0) {
+		; No handle - CPRS not detected yet
+		FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
+		jsonData := "{""sentinel"": ""CPRS_WINDOW_NOT_FOUND"", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}" 
+		gosub SendDataToPipe
+		return
+	}
+	
+	; Validate handle still points to an existing window
+	if (!WinExist("ahk_id " . CPRSWindowHandle)) {
+		; Handle invalid - window closed or handle stale
+		CPRSWindowHandle := 0  ; Reset so CheckToolbars will recapture
+		FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
+		jsonData := "{""sentinel"": ""CPRS_WINDOW_NOT_FOUND"", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}" 
+		gosub SendDataToPipe
+		return
+	}
+	
+	; Valid handle exists - get patient info (no activation required)
+	gosub Getpatientinfo
+	
+	; Check if text retrieval failed
+	if (TextRetrievalFailed) {
+		FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
+		jsonData := "{""sentinel"": ""CPRS_TEXT_UNAVAILABLE"", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}" 
+		gosub SendDataToPipe
+		return
+	}
+	
+	; Check if patient data parsing failed
+	if (reformattedSSN = "" || PatientName = "") {
+		; DIAGNOSTIC: Save unparsable text to desktop file for troubleshooting
+		FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
+		debugFile := A_Desktop . "\CPRS_Parse_Debug.txt"
+		debugHeader := "`n`n========================================`n"
+		debugHeader .= "PARSE FAILED - " . currentTime . "`n"
+		debugHeader .= "Window Handle: " . CPRSWindowHandle . "`n"
+		debugHeader .= "Text Length: " . StrLen(SSVoogle) . " characters`n"
+		debugHeader .= "SSN Found: " . (reformattedSSN = "" ? "NO" : reformattedSSN) . "`n"
+		debugHeader .= "Name Found: " . (PatientName = "" ? "NO" : PatientName) . "`n"
+		debugHeader .= "========================================`n`n"
+		debugContent := debugHeader . SSVoogle . "`n"
+		FileAppend, %debugContent%, %debugFile%
+		
+		; Note: Debug file saved but not auto-opened - Python GUI will show error details
+		
+		; Send failure response
+		jsonData := "{""sentinel"": ""CPRS_DATA_PARSE_FAILED"", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}" 
+		gosub SendDataToPipe
+		return
+	}
+	
+	; Success - build JSON response with patient info
+	FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
+	
+	; Escape patient name
+	StringReplace, escapedName, PatientName, \, \\, All
+	StringReplace, escapedName, escapedName, ", \", All
+	
+	; Build patient-only JSON
+	jsonData := "{""sentinel"": ""CPRS_PATIENT_INFO"", ""patient"": {""ssn"": """ . reformattedSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . ptDOB . """, ""last4"": """ . lastFour . """}, ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
+	
+	; Send via data pipe
+	gosub SendDataToPipe
+return
+
+HandleFetchData:
+	; Reset cancellation flag at start of each fetch
+	global dataFetchCancelled, overlayTimeoutSeconds, overlayMainMessage
+	dataFetchCancelled := false
+	
+	; Set timeout and message based on data method
+	if (dataMethod = "current_note") {
+		overlayTimeoutSeconds := 15000  ; 15 seconds for current note
+		overlayMainMessage := "DO NOT TOUCH MOUSE OR KEYBOARD - Getting current note from CPRS"
+	} else {
+		overlayTimeoutSeconds := 45000  ; 45 seconds for other methods
+		overlayMainMessage := "DO NOT TOUCH MOUSE OR KEYBOARD - Getting data from CPRS (30 seconds or less)"
+	}
+	
+	; Activate CPRS first so we can interact with it
+	gosub ActivateCPRS
+	Sleep, 500  ; Give CPRS time to come to foreground
+	
+	; Show overlay for ALL fetch methods
+	gosub ShowDataOverlay
+	
+	; Determine which fetch method to execute
+	if (dataMethod = "current_note") {
+		gosub FetchCurrentNote
+	} else if (dataMethod = "health_summary_4yr") {
+		gosub FetchHealthSummary4yr
+	} else if (dataMethod = "progress_notes") {
+		lookback := "> 2 Years"
+		gosub FetchAllNotes
+	}
+	
+	; Hide overlay after fetch completes
+	gosub HideDataOverlay
+
+SendDataToPipe:
+    ; Send jsonData via the persistent data pipe to BAM
+    global hDataPipe, pipesConnected
+    
+    if (!pipesConnected || hDataPipe = 0) {
+        ; SplashTextOn, 300, 100, Pipe Error, Data pipe not connected!
+        ; Sleep, 2000
+        ; SplashTextOff
+        return
+    }
+    
+    ; Convert to UTF-8 and write to pipe
+    VarSetCapacity(utf8Data, StrPut(jsonData, "UTF-8"))
+    dataLen := StrPut(jsonData, &utf8Data, "UTF-8") - 1
+    
+    bytesWritten := 0
+    success := DllCall("WriteFile"
+        , "Ptr", hDataPipe
+        , "Ptr", &utf8Data
+        , "UInt", dataLen
+        , "UInt*", bytesWritten
+        , "Ptr", 0
+        , "Int")
+    
+    if (!success || bytesWritten != dataLen) {
+        ; SplashTextOn, 300, 100, Write Error, Failed to write to data pipe!
+        ; Sleep, 2000
+        ; SplashTextOff
+    } else {
+        ; SplashTextOn, 300, 100, Data Sent, Sent %bytesWritten% bytes to BAM
+        ; Sleep, 1000
+        ; SplashTextOff
+    }
+return
+
+;############################################################################################
+;################## END BAM PIPE COMMUNICATION ##########################################
+;############################################################################################
 
 ; SetTitleMatchMode, 2 we want regex
-^F5::reload
-!F5::pause
+;^F5::reload
+;!F5::pause
 loopvar = 0
 
 ;############################################################################################
@@ -830,12 +1673,12 @@ if (windowCount > 2) ; don't know why it's 2 when only 1 screen open but this wo
             break
         }
     }
-    if (!windowFound) ; If the saved window wasn't found, activate the first non-"Vista Cprs in use by" window
+    if (!windowFound) ; If the saved window wasn't found, activate the first non-"Vista Cprs in use" window
     {
         for index, hwnd in idList
         {
             WinGetTitle, title, ahk_id %hwnd%
-            if (!InStr(title, "Vista Cprs in use by"))
+            if (!InStr(title, "VistA CPRS in use"))
             {
                 /*
 				; Displaying the fallback window 
@@ -851,18 +1694,33 @@ if (windowCount > 2) ; don't know why it's 2 when only 1 screen open but this wo
 }
 else if (windowCount = 2) ; If only one window, activate it
 {
+    ; Try title first (mirrors CheckToolbars logic)
+    if WinExist("VistA CPRS in use") {
+        Winactivate, VistA CPRS in use
+    } else if (CPRSWindowHandle != 0) {
+        ; Title not found, try stored handle (from CheckToolbars)
+        if WinExist("ahk_id " . CPRSWindowHandle) {
+            WinActivate, ahk_id %CPRSWindowHandle%
+        }
+    }
+    ; If neither works, do nothing - don't activate wrong window
+}
+
+/* OLD version of elseif above
+
+{
     ; WinActivate, ahk_id %idList1%
-	Winactivate, VistA CPRS in use by
+	Winactivate, VistA CPRS in use
 	
 	/*
     ; Displaying single window activation 
     SplashTextOn, 150, 100, CPRS Booster, Activating One WIN: Vista CPRS in use
     Sleep 1500
     SplashTextOff
-	*/
+	
 }
 
-
+*/
 
 return
 ;############################################################################################
@@ -1020,196 +1878,6 @@ if winexist("Consult Toolbox")
 
 }
 
-sleep 50
-
-if (winactive("fxnbar") || winactive("hyperdrivebar") || winactive("Booster Quick Orders") || winactive("Ambient Scribe Toolbar") || winactive("Booster Dictation Box"))  ; if any of these are active, don't do anything
-{
-
-
-; THIS PREVENTS HIDING OF BOOSTER GUIs WHEN YOU CLICK ON BOOSTER GUIs
-return
-}
-
-
-; TRACK LAST ACTIVE CPRS WINDOW Before messing w/Booster toolbars
-
-gosub SaveLastActiveCPRSWindow   ; in this case: it will hold last CLICKED on active; ? we want that
-
-
-
-if !winactive("ahk_exe CPRS")  ; if mouse is clicked and CPRS no longer the active window: destroy help bar ; WHY doesn't this destroy helpbar when you click on help bar? (b/c of logic immediately above)
-{
-; COULD check bar on status here b/c often prob repeatedly destroying things not there.
-Gui 14: Destroy
-gui 7: destroy    ;Destroy
-gui 8: destroy
-gui 28: destroy  ;Destroy
-barOn := 0
-lastwin:= "notCPRS"
-
-WinGetPos, X0, Y0, Width0, Height0, CPRS ; store current state as OLD state before return
-; timelast:=A_Now ; set time of end of this click processing before return
-
-
-return
-}
-
-; -------------If we're here: CPRS is active and there has been a mouse click
-
-
-
-
-WinGetPos , X2, Y2, Width2, Height2, VistA CPRS
-; WinGet, IsMax, MinMax , ahk_exe CPRSChart.exe
-
-sleep 100 ; This delay fixes the problem of line below showing maxed when just minimized
-
-WinGet, IsMax, MinMax , ahk_exe CPRS   ; this version will work for CPRS launched from CPRS launcher ; this will show still maxed if Just minimized
-
-
- If (X2=X0 and Y2=Y0 and Width2=Width0) and (lastwin = "isCPRS")
-
-{
-
-	if (IsMax = 1) ; We are here if SAME + last window was CPRS AND it is maxed
-	{
-	
-		If (barOn = 0)
-		{
-		; SplashTextOn ,300 ,100, CPRS Booster HERE, redrawing  
-		;  sleep 400
-		;  SplashTextOff
-
-				if (paintedToolbarsyet = 0)
-				{
-				gosub !+z ; hyperdrive bar ; top nav
-				gosub !+h ; floating bar ; function key list
-				gosub quickorder ; THis is basically calling the same as GUI 28 (turned off currently)
-				paintedToolbarsyet := 1
-				}
-				else  ; I'm NOT sure these two (above/below) are any different....??
-				{
-				gosub yellow ; this is GUI 7 (top)which is also called by !+z; yellow just bypasses logic 
-								; that if already painted, skip it. Also !+z calls gui 8 as part of it.
-				gosub gui8
-				gosub !+h ; floating bar ; function key list
-				; ; ; GUi 28: show
-				}
-				
-			gosub ActivateCPRS ; hopefully this solves both issue of focus on CPRS but not subscreen
-			
- 	; 	winactivate, VistA ; need this b/c creating GUI takes focus off CPRS. THIS IS CAUSING PROBS with TEMPLATES  & ? CONSULTS
-	; REVERT TO HIDDEN 11-13-23	gosub ActivateCPRS in use by; added above gosub
-		
-		}	
-	barOn := 1 
-	}
-	else  ; this happens with CPRS minimization(?); Verified to happen with toggle to non-CPRS window
-	{
-	 ; Gui 14: Destroy ;**this is the problemed area****
-	; Gui 7: Destroy
-	
-	; barOn := 0
-
-	/*
-	SplashTextOn ,300 ,100, CPRS Booster, SAME %X2%, %Y2%
-	sleep 400
-	SplashTextOff
-	SplashTextOn ,300 ,100, CPRS Booster, %IsMax%
-	sleep 400
-	SplashTextOff
-	*/
-
-
-	
-	}
-
-	
-}
- 
-else  ; CPRS WINDOW MOVED; OR this seems to come with toggle with another NonCPRS window (?)
- {
-
-	; SplashTextOn ,300 ,100, CPRS Booster, MOVED
-	; sleep 400
-	; SplashTextOff
-	; SplashTextOn ,300 ,100, CPRS Booster, %IsMax%
-	; sleep 400
-	; SplashTextOff
-	; if (IsMax ="")
-	; {
-	; msgbox, blank
-	; 
-	; }
-
-	if (IsMax = 0)  ;  CPRS moved ; Get GUI off a non min non max screen
-	{
-	Gui 14: Destroy
-	gui 7: destroy ;Destroy
-	gui 8: destroy
-	;  gui 28: hide ;Destroy
-	
-	barOn := 0
-	}
-
-	if (IsMax = 1) ; CPRS MOVED and IS MAXED (don't know if this happens: does on change b/t apps)
-	{
-
-
-		If (A_TimeSincePriorHotkey<400) and (A_PriorHotkey="~LButton Up") ; don't think this line ever triggers
-
-
-		{
-		
-		; SplashTextOn ,300 ,100, CPRS Booster, You Double clicked
-		; sleep 400
-		;  SplashTextOff
-		}
-
-		else
-	 	{
-		;  SplashTextOn ,300 ,100, CPRS Booster, redrawing  
-
-		sleep 400
-		 SplashTextOff
-
-		Gui 14: Destroy ; destroy old and make new
-		gui 7: destroy ;Destroy
-		gui 8: destroy
-		gui 28: Destroy
-		
-		
-	  if (paintedToolbarsyet = 0)
-		{
-		gosub !+h ; floating bar
-		gosub !+z ; hyperdrive bar
-		gosub quickorder
-		paintedToolbarsyet := 1
-		}
-		else
-		{                                                              
-		
-		gosub yellow
-		gosub gui8
-		gosub !+h 
-		; ; GUi 28: show
-		}
-		
-		gosub ActivateCPRS ; hopefully this solves both issue of focus on CPRS but not subscreen
-		
-		;  11-22-23: d/c this line...gosub ActivateCPRS in use by ; need this b/c creating GUI takes focus off CPRS.
-		; LINE ABOVE IS CAUSING PROBLEMS with pulling Big cprs infront; removal causing charles prob with CPRS not active during f1 med renewal red flag
-		
-		barOn := 1
-		}
-	}
-
- }
-
-WinGetPos, X0, Y0, Width0, Height0, VistA CPRS ; store current state as OLD state before return
-lastwin:= "isCPRS" ; reset this. We wouldn't have gotten to this point if CPRS not active
-; timelast:=A_Now ; set time of end of this click processing before return
-
 
 
 return
@@ -1256,36 +1924,39 @@ return
 
 !+h::
 
+/*
+
 
 if (FBO = 1)
 {
 return
 }
 
-WinGet, IsMax, MinMax , VistA CPRS
+WinGet, IsMax, MinMax, ahk_exe CPRS
 
 if (IsMax = 1) ; only build the gui on maxed CPRS
 
 
 {
 
-
-; Win_Hwnd := WinExist("ahk_exe CPRSChart.exe")
-
-Win_Hwnd := WinExist("ahk_exe CPRS") ; this version should work with launcher
-
-WinGetPos, X0, Y0, Width0, Height0, VistA CPRS
-
-
-if FBH is not number ; null or text
-{
-FBH:=0
+*/
+; Use stored handle if available, otherwise capture it
+if (CPRSWindowHandle != 0) {
+    WinGetPos, X0, Y0, Width0, Height0, ahk_id %CPRSWindowHandle%
+} else {
+    WinGet, CPRSWindowHandle, ID, A
+    WinGetPos, X0, Y0, Width0, Height0, ahk_id %CPRSWindowHandle%
 }
 
-if FBV is not number ; null
-{
-FBV:=0
-}
+		if FBH is not number ; null or text
+		{
+		FBH:=0
+		}
+
+		if FBV is not number ; null
+		{
+		FBV:=0
+		}
 
  newX := X0+(Width0-(.96*Width0))+FBH   ; negative number moves to the left (X gets smaller) ; 0.93
  newY := Y0+Height0-(.03*Height0)-FBV  ; negative number moves down (Y gets bigger)
@@ -1370,6 +2041,12 @@ modnotelist := "   New Notes   ||  |EDIT LIST BELOW:|   CLICK HERE|  | "  .  not
 
 gui, 14: Add, DropdownList, gdropdownbutton y0 w100 -Tabstop altsubmit vnotefornow , %modnotelist%
 
+; --- NursingBooster Dropdown Menu on toolbar ---
+; --- NursingBooster Dropdown Menu on toolbar ---
+NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
+gui, 14: Add, DropdownList, gNB_DropdownAction y0 w130 -Tabstop altsubmit vNB_DropdownChoice , %NB_MenuList%
+
+
 ; Gui 14: +AlwaysOnTop -Caption HWNDGui_Hwnd  +ToolWindow ;   +LastFound 
 
  Gui, 14: +AlwaysOnTop -Caption +ToolWindow +Owner
@@ -1387,7 +2064,7 @@ gui, 14: Add, DropdownList, gdropdownbutton y0 w100 -Tabstop altsubmit vnoteforn
 	}
 
 
-}
+
 
 
 return  ; END of floating bar logic
@@ -1658,6 +2335,18 @@ quickorder:  ; TO START QO GUI PRESENT &&&&&&&&& QO DATA LOAD
 ;############################################################################################
 ;###############################end distinct categories##########################################
 ;############################################################################################
+
+;############################################################################################
+;###################Cleanup Function - Close BstHelper when U64 exits##########################################
+;############################################################################################
+
+CleanupBstHelper(ExitReason, ExitCode) {
+    ; Close BstHelper.ahk when U64 exits (any reason: user close, crash, reload, etc.)
+    DetectHiddenWindows, On
+    SetTitleMatchMode, 2
+    WinClose, BstHelper.ahk ahk_class AutoHotkey
+    return
+}
 
 
 
@@ -3453,7 +4142,7 @@ if (looppaused = false) && (loopstopped = false)
 
 
 
-			FoundPos := InStr(Title, "VistA CPRS in use by")     ; don't want to record this.
+			FoundPos := InStr(Title, "VistA CPRS in use")     ; don't want to record this.
 			
 			if (Title != lastTitle) && (foundpos = 0)
 				{
@@ -4214,7 +4903,13 @@ if HBV is not number ; null
 HBV:=0
 }
 
-	WinGetPos, X4, Y4, Width, Height, VistA CPRS
+; Use stored handle if available, otherwise capture it
+if (CPRSWindowHandle != 0) {
+    WinGetPos, X4, Y4, Width, Height, ahk_id %CPRSWindowHandle%
+} else {
+    WinGet, CPRSWindowHandle, ID, A
+    WinGetPos, X4, Y4, Width, Height, ahk_id %CPRSWindowHandle%
+}
 
 	Px := X4 + width - (width/1.05) + HBH ; division by smaller number moves bar to left ; was 1.15
 	Py := Y4 + 5 - HBV
@@ -4278,7 +4973,7 @@ Gui, 7:Add, Button, y0  h%hbar% -Tabstop, Exit Booster
 
 try
 {
-Gui, 7:Show, x%Px% y%Py% w1050 h%hGui% , hyperdrivebar   
+Gui, 7:Show, x%Px% y%Py% w1150 h%hGui% , hyperdrivebar   
 }
 
 hyperX := Px
@@ -4489,26 +5184,31 @@ Gui, 8: Margin, 2
 Gui, 8: +AlwaysOnTop -Caption +ToolWindow +Owner
 ; Gui, 8:Add, Picture,x0 y4  h18 w-1, %my_picturefile%
 
-if (AmbScribePilotParticipant = 1)
+if (AnyAmbScribeParticipant = 1)
 {
 Gui, 8:Add, Button, X20 y0  h20 gAmbDict -Tabstop, Ambient Scribe
 }
 Gui, 8:Add, Button, y0  h20 gMWW -Tabstop, My WorkWeek
+Gui, 8:Add, Button, y0  h20 gMPic -Tabstop, REFILL HISTORY
 if (sitecode = "MIN")
 {
 Gui, 8:Add, Button, y0  h20 -Tabstop, iMedConsent
 }
 Gui, 8:Add, Button, y0  h20 -Tabstop, UpToDate
+if (RecordRetrieverParticipant = 1)
+{
+Gui, 8:Add, Button, y0  h20 g8RadsGopher -Tabstop, Record Retriever
+}
 Gui, 8:Add, Button, y0  h20  g8Voogle -Tabstop, CPRS SEARCH (Voogle)
 gui, 8:Add, Button, y0  h20 g8GetPCP -Tabstop, Add/Flag/Forward PCP
 
 
-linkbarX := Px+400
-linkbarY := Py + 33   ; try change from + 40
+linkbarX := Px+350
+linkbarY := Py + 31  ; try change from + 40
 
 try
 {
-Gui, 8:Show, x%linkbarX% y%linkbarY% w800 h20 , hyperdrivebar
+Gui, 8:Show, x%linkbarX% y%linkbarY% w900 h20 , hyperdriveSubbar
 }
 
 return  
@@ -4517,7 +5217,57 @@ Mww:
 run https://cds.med.va.gov/?app=mww&utm_source=superboard
 return
 
+MPic:
+run https://cds.med.va.gov/smart-container/mpc
+SplashTextOn ,150 ,100, CPRS Booster, Loading Refill History...
+sleep 10000
+SplashTextOff
+return
+
+
+;############################################################################################
+;#########################Start AMB SCRIBE BOTTON LOGIC###############################################
+;############################################################################################
+
 AmbDict:
+; Route based on participation type:
+; - Dragon-only users (DragonAmbScribePilot=1, NonDragonAmbScribeParticipant=0): Go directly to Dragon
+; - Non-Dragon users (NonDragonAmbScribeParticipant=1, any Dragon status): Show choice dialog
+if (DragonAmbScribePilot = 1 && NonDragonAmbScribeParticipant = 0) {
+    goto 67UseDragon  ; Dragon-only users skip choice dialog
+}
+; Fall through to gui67 for Non-Dragon participants (premium access)
+
+;############################################################################################
+;#########################GUI 67: Scribe Options Selection###############################################
+;############################################################################################
+
+gui67:
+Gui, 67: Destroy
+Gui, 67: Font, s10, Verdana
+Gui, 67: Add, Button, x20 y20 w240 h40 g67UseDragon, DRAGON-BOOSTER Scribe
+Gui, 67: Add, Button, x+10 y20 w240 h40 g67UseNonDragon, NON-DRAGON-BOOSTER Scribe
+Gui, 67: Font, s9 cBlue underline
+Gui, 67: Add, Text, x200 y70 w120 g67HelpDecide, Help me decide
+Gui, 67: Show, w550 h100, Scribe Options
+return
+
+67GuiClose:
+Gui, 67: Destroy
+return
+
+67HelpDecide:
+run, https://tinyurl.com/BoosterScribeOptions
+return
+
+
+;############################################################################################
+;################For Booster Dragon Users#################################################
+;############################################################################################
+
+67UseDragon:
+Gui, 67: Destroy
+
 
 if !FileExist(dragonpath)
 {
@@ -4535,8 +5285,68 @@ Else
 
 	gosub gui64 ; dragon is installed and running, so open the Amb dictation GUI
 }
+return
 
-Return ; this is the Amb dictation button
+;############################################################################################
+;#########################For Booster non-Dragon users###########################################
+;############################################################################################
+
+67UseNonDragon:
+Gui, 67: Destroy
+
+; Check if user has seen instructions before
+if (OneTimeNonDragonScribeEducation = 0) || (OneTimeNonDragonScribeEducation = "")
+{
+    MsgBox, 4, CPRS Booster - Non-Dragon Ambient Scribe, 
+    (
+    RECOMMENDED: See Instructions
+    
+    Would you like to view the setup instructions 
+    for Non-Dragon Ambient Scribe now?
+    )
+    
+    IfMsgBox, Yes
+    {
+        ; Open instructions URL
+        run, https://dvagov-my.sharepoint.com/:p:/g/personal/adam_bock_va_gov/IQA8a1E-Kd_HS5gGdtn-OO5HAaTsmQE0wbvrJFqW74sDU0M?e=yfRUF7
+        
+        ; Wait for the specific browser tab/window to open (up to 10 seconds)
+        WinWait, Booster Ambient Scribe - Non-Dragon Version,, 10
+        if !ErrorLevel  ; If window was found within timeout
+        {
+            WinActivate, Booster Ambient Scribe - Non-Dragon Version
+            WinMaximize, Booster Ambient Scribe - Non-Dragon Version
+        }
+        
+        ; Mark as viewed permanently
+        OneTimeNonDragonScribeEducation := 1
+        gosub writeit
+        
+        ; Show message and stop - don't launch recorder yet
+        MsgBox, 262144, CPRS Booster, After you have read instructions, click the Ambient Scribe Button on Booster again. `n (To make slides easier to read: click the 'Present' button above the first slide)
+        return
+    }
+    Else  ; They clicked No - skip instructions and launch amb scribe
+    {
+        ; Show splash and continue to launch ambient scribe below
+        SplashTextOn ,150 ,100, CPRS Booster, I'll ask you again next time...
+        sleep 1000
+        SplashTextOff
+        ; Variable stays at 0 - they'll be asked again next time
+    }
+}
+
+; Start the ambient scribe (only if they didn't choose to view instructions)
+send +!^a  ; hotkey to start amb scribe dictation
+SplashTextOn ,150 ,100, CPRS Booster, Starting Ambient Scribe...
+sleep 600
+SplashTextOff
+
+return
+
+;############################################################################################
+;######################End AMB SCRIBE BOTTON LOGIC###############################################
+;############################################################################################
 
 
 8GetPCP:  ;process PCP button
@@ -4567,7 +5377,7 @@ gosub ActivateCPRS
 gosub gotools
 sleep 50
 
-send {down 18}
+send {down 19}
 send {enter}
 
 gosub imedopen
@@ -4580,6 +5390,2010 @@ sleep 300
 SplashTextOff
 run, https://vacoweb02.dva.va.gov/VALNETCC/uptodate
 
+return
+
+
+;############################################################################################
+;###################Booster toolbar Record Retriever button action##########################
+;############################################################################################
+
+8RadsGopher:
+	; Validate CPRS window handle exists (before showing type picker)
+	if (CPRSWindowHandle = 0 || !WinExist("ahk_id " . CPRSWindowHandle)) {
+		MsgBox, 262160, Record Retriever, CPRS window not detected.`n`nPlease open CPRS first.
+		return
+	}
+	
+	; Show the Request Type Picker (GUI 69)
+	gosub ShowRequestTypePicker
+return
+
+;############################################################################################
+;###################Request Type Picker (GUI 69)###########################################
+;############################################################################################
+
+ShowRequestTypePicker:
+	Gui, 69: Destroy
+	Gui, 69: +AlwaysOnTop +ToolWindow
+	Gui, 69: Font, s12, Verdana
+	Gui, 69: Margin, 20, 15
+	
+	Gui, 69: Font, bold s13, Verdana
+	Gui, 69: Add, Text, x20 y15 w300, What Do You Need?
+	Gui, 69: Font, norm s11, Verdana
+	
+	Gui, 69: Add, Button, g69PickRadiology x20 y+20 w300 h40, Radiology / Images
+	Gui, 69: Add, Button, g69PickMedRecords x20 y+10 w300 h40, Medical Records
+	Gui, 69: Add, Button, g69CancelPicker x20 y+20 w300 h30, Cancel
+	
+	Gui, 69: Show, , Record Retriever - Choose Type
+return
+
+69PickRadiology:
+	Gui, 69: Destroy
+	ActiveRequestType := "Radiology"
+	gosub LoadAndShowFaxGUI
+return
+
+69PickMedRecords:
+	Gui, 69: Destroy
+	ActiveRequestType := "MedRecords"
+	gosub LoadAndShowFaxGUI
+return
+
+69CancelPicker:
+69GuiClose:
+69GuiEscape:
+	Gui, 69: Destroy
+return
+
+
+;############################################################################################
+;###################Check W: Drive Availability############################################
+;############################################################################################
+
+CheckWDrive:
+	WDriveAvailable := 0
+
+	; Quick check: is W: already accessible?
+	IfExist, W:\
+	{
+		WDriveAvailable := 1
+		WDriveCheckedThisSession := 1
+		return
+	}
+
+	; Fallback: check specific subfolder (more reliable for DFS-mapped drives)
+	IfExist, W:\Products\XRG
+	{
+		WDriveAvailable := 1
+		WDriveCheckedThisSession := 1
+		return
+	}
+
+	; First time this session: try to activate W: drive (same pattern as U: drive)
+	if (WDriveCheckedThisSession = 0)
+	{
+		WDriveCheckedThisSession := 1
+		try
+		{
+			Run, W:\
+			WinWait, (W:), , 5
+			sleep 1000
+			WinClose, (W:)
+		}
+
+		; Re-check after activation attempt
+		IfExist, W:\
+		{
+			WDriveAvailable := 1
+		}
+		; Fallback re-check
+		else IfExist, W:\Products\XRG
+		{
+			WDriveAvailable := 1
+		}
+	}
+
+	; If still not available after first-time attempt, that's OK — we'll use OneDrive cache
+return
+
+
+;############################################################################################
+;###################Sync W: Drive Files to OneDrive Cache##################################
+;############################################################################################
+
+SyncWDriveFiles:
+	; Only sync if W: drive is available
+	if (WDriveAvailable != 1)
+		return
+
+	; Ensure RecordRetriever folder exists
+	if !InStr(FileExist(RecordRetrieverPath), "D") {
+		FileCreateDir, %RecordRetrieverPath%
+	}
+
+	; Sync all 6 config files: Fax, Boilerplate, InternalContact for both types
+	; Loop through both request types and all 3 file categories
+	for typeIdx, reqType in ["Radiology", "MedRecords"]
+	{
+		; --- Fax Numbers file ---
+		wPath := RT_FaxFile[reqType]
+		localPath := RT_FaxFileLocal[reqType]
+		gosub SyncOneFile
+
+		; --- Boilerplate file ---
+		wPath := RT_BoilerplateFile[reqType]
+		localPath := RT_BoilerplateFileLocal[reqType]
+		gosub SyncOneFile
+
+		; --- Internal Contact file ---
+		wPath := RT_InternalContactFile[reqType]
+		localPath := RT_InternalContactFileLocal[reqType]
+		gosub SyncOneFile
+	}
+
+	; --- Fax Keeper URL config file (not per-type, just one file) ---
+	wPath := FaxKeeperURLStorageFile
+	localPath := FaxKeeperURLStorageFileLocal
+	gosub SyncOneFile
+
+	; --- Fax Submit Mode config file (not per-type, just one file) ---
+	wPath := FaxSubmitModeFile
+	localPath := FaxSubmitModeFileLocal
+	gosub SyncOneFile
+
+	; --- Cache internal contact emails from local copies ---
+	for typeIdx2, reqType2 in ["Radiology", "MedRecords"]
+	{
+		localContactPath := RT_InternalContactFileLocal[reqType2]
+		if FileExist(localContactPath) {
+			FileRead, tmpContactEmail, %localContactPath%
+			CachedInternalEmail[reqType2] := Trim(tmpContactEmail)
+		}
+	}
+
+	; --- Cache fax submit mode (Crowdsourced vs Facilitated) from local copy ---
+	if FileExist(FaxSubmitModeFileLocal) {
+		Loop, Read, %FaxSubmitModeFileLocal%
+		{
+			modeLine := Trim(A_LoopReadLine)
+			if (modeLine = "")
+				continue
+			StringSplit, modeParts, modeLine, |
+			if (modeParts0 < 2)
+				continue
+			modeType := Trim(modeParts1)
+			modeVal := Trim(modeParts2)
+			if (modeType = "Radiology")
+				CachedFaxSubmitMode["Radiology"] := modeVal
+			else if (modeType = "Records")
+				CachedFaxSubmitMode["MedRecords"] := modeVal
+		}
+	}
+return
+
+; Helper: sync a single file from W: to OneDrive if W: version is newer or local doesn't exist
+SyncOneFile:
+	try
+	{
+		if !FileExist(wPath)
+			return  ; W: source doesn't exist (not all sites have all files)
+
+		if !FileExist(localPath)
+		{
+			; First time: copy from W: to OneDrive
+			FileCopy, %wPath%, %localPath%, 1
+		}
+		else
+		{
+			; Both exist: compare timestamps, copy if W: is newer
+			FileGetTime, localTime, %localPath%, M
+			FileGetTime, networkTime, %wPath%, M
+			if (networkTime > localTime)
+			{
+				FileCopy, %wPath%, %localPath%, 1
+			}
+		}
+	}
+return
+
+
+;############################################################################################
+;###################Load Config and Show Fax GUI for Selected Type#########################
+;############################################################################################
+
+LoadAndShowFaxGUI:
+	; If type changed, clear cached data so files reload for new type
+	if (ActiveRequestType != LastLoadedType) {
+		FacilityFaxDisplayList := ""
+		FaxDisplayList := ""
+		FaxFacilityNames := []
+		FaxNumbers := []
+		BoilerplateText := ""
+		PersonalFaxLoaded := 0
+	}
+	
+	; --- Check W: drive and sync files to OneDrive cache (once per session) ---
+	if (WDriveSyncedThisSession = 0) {
+		gosub CheckWDrive
+		gosub SyncWDriveFiles
+		WDriveSyncedThisSession := 1
+	}
+	
+	; --- Resolve file paths: prefer W: if available, fall back to OneDrive cache ---
+	if (WDriveAvailable = 1) {
+		FaxNumbersFile := RT_FaxFile[ActiveRequestType]
+		BoilerplateFile := RT_BoilerplateFile[ActiveRequestType]
+	} else {
+		FaxNumbersFile := RT_FaxFileLocal[ActiveRequestType]
+		BoilerplateFile := RT_BoilerplateFileLocal[ActiveRequestType]
+	}
+	
+	; Load fax data if not already loaded (on-demand loading)
+	activeMsgTitle := RT_MsgBoxTitle[ActiveRequestType]
+	if (FacilityFaxDisplayList = "" || BoilerplateText = "") {
+		gosub LoadFaxNumbers
+		if (FaxNumberLoadError = 1)
+			return
+			
+		gosub LoadBoilerplate
+		if (BoilerplateLoadError = 1)
+			return
+	}
+
+	; Load personal fax book and build merged list (cached until fax book edited)
+	if (PersonalFaxLoaded = 0) {
+		gosub LoadPersonalFaxNumbers
+		gosub BuildMergedFaxList
+		PersonalFaxLoaded := 1
+	}
+
+	; Load Fax Keeper URL (for sharing fax numbers, cached once per session)
+	if (FaxKeeperURLLoaded = 0) {
+		gosub LoadFaxKeeperURL
+	}
+	
+	; Mark type as loaded
+	LastLoadedType := ActiveRequestType
+	
+	; Extract patient info using existing logic
+	gosub Getpatientinfo
+	
+	; Check if extraction successful
+	if (TextRetrievalFailed || PatientName = "" || ptDOB = "") {
+		MsgBox, 262160, %activeMsgTitle%, Could not read patient information from CPRS.`n`nMake sure a patient is selected.
+		return
+	}
+	
+	; Ensure RecordRetriever folder exists for contact preferences
+	if !FileExist(RecordRetrieverPath) {
+		FileCreateDir, %RecordRetrieverPath%
+	}
+	
+	; Call ShowFaxGUI with prepopulated data
+	gosub ShowFaxGUI
+return
+
+
+;############################################################################################
+;###################Load Fax Numbers from File#############################################
+;############################################################################################
+
+LoadFaxNumbers:
+	FaxNumberLoadError := 0  ; Reset error flag
+	activeMsgTitle := RT_MsgBoxTitle[ActiveRequestType]
+	
+	if !FileExist(FaxNumbersFile) {
+		; File not found at resolved path (W: or OneDrive cache)
+		; This means: W: not available AND no cached copy in OneDrive
+		MsgBox, 262160, %activeMsgTitle%, Fax Number File is not available.`n`nPlease connect to the W: drive at least once to initialize this feature.
+		FaxNumberLoadError := 1
+		return
+	}
+
+	FacilityFaxDisplayList := ""
+	FaxFacilityNames := []
+	FaxNumbers := []
+	lineCount := 0
+
+	Loop, Read, %FaxNumbersFile%
+	{
+		line := Trim(A_LoopReadLine)
+
+		; Skip blank lines
+		if (line = "")
+			continue
+
+		; Split on pipe delimiter
+		StringSplit, parts, line, |
+
+		if (parts0 < 2)
+			continue
+
+		facilityName := Trim(parts1)
+		faxNum := Trim(parts2)
+
+		; Skip separator/header lines (lines with ****)
+		if (InStr(facilityName, "****"))
+			continue
+
+		lineCount++
+		FaxFacilityNames.Push(facilityName)
+		FaxNumbers.Push(faxNum)
+
+		; Build display string: "FacilityName (fax number)"
+		displayEntry := facilityName . " (" . faxNum . ")"
+
+		if (FacilityFaxDisplayList != "")
+			FacilityFaxDisplayList .= "|"
+		FacilityFaxDisplayList .= displayEntry
+	}
+
+	if (lineCount = 0) {
+		MsgBox, 262160, %activeMsgTitle%, Fax Number File is empty. This button may not work at your site.
+		FaxNumberLoadError := 1
+		return
+	}
+
+	; Sort facility entries alphabetically by name
+	sortTemp := ""
+	for idx, name in FaxFacilityNames {
+		sortTemp .= name . "`t" . idx . "`n"
+	}
+	Sort, sortTemp
+	tempNames := []
+	tempNums := []
+	Loop, Parse, sortTemp, `n, `r
+	{
+		if (A_LoopField = "")
+			continue
+		tabPos := InStr(A_LoopField, "`t")
+		origIdx := SubStr(A_LoopField, tabPos + 1)
+		tempNames.Push(FaxFacilityNames[origIdx])
+		tempNums.Push(FaxNumbers[origIdx])
+	}
+	FaxFacilityNames := tempNames
+	FaxNumbers := tempNums
+
+	; Rebuild display list in sorted order
+	FacilityFaxDisplayList := ""
+	for idx, name in FaxFacilityNames {
+		displayEntry := name . " (" . FaxNumbers[idx] . ")"
+		if (FacilityFaxDisplayList != "")
+			FacilityFaxDisplayList .= "|"
+		FacilityFaxDisplayList .= displayEntry
+	}
+
+return
+
+
+;############################################################################################
+;###################Load Boilerplate Text from File########################################
+;############################################################################################
+
+LoadBoilerplate:
+	BoilerplateLoadError := 0  ; Reset error flag
+	activeMsgTitle := RT_MsgBoxTitle[ActiveRequestType]
+	
+	if !FileExist(BoilerplateFile) {
+		; File not found at resolved path (W: or OneDrive cache)
+		MsgBox, 262160, %activeMsgTitle%, Fax Template File is not available.`n`nPlease connect to the W: drive at least once to initialize this feature.
+		BoilerplateLoadError := 1
+		return
+	}
+	
+	FileRead, BoilerplateText, %BoilerplateFile%
+	if (ErrorLevel || BoilerplateText = "") {
+		MsgBox, 262160, %activeMsgTitle%, Fax Template File is empty.`n`nPlease connect to the W: drive to update the file.
+		BoilerplateLoadError := 1
+		return
+	}
+
+return
+
+
+;############################################################################################
+;###################Load Personal Fax Book from OneDrive###################################
+;############################################################################################
+
+LoadPersonalFaxNumbers:
+	PersonalFaxFacilityNames := []
+	PersonalFaxNumbers := []
+	PersonalFaxTypes := []
+
+	if !FileExist(PersonalFaxFile)
+		return
+
+	Loop, Read, %PersonalFaxFile%
+	{
+		line := Trim(A_LoopReadLine)
+		if (line = "")
+			continue
+
+		StringSplit, parts, line, |
+		if (parts0 < 2)
+			continue
+
+		facilityName := Trim(parts1)
+		faxNum := Trim(parts2)
+		faxType := (parts0 >= 3) ? Trim(parts3) : "Radiology"  ; Default to Radiology if no type column
+
+		if (InStr(facilityName, "****"))
+			continue
+
+		PersonalFaxFacilityNames.Push(facilityName)
+		PersonalFaxNumbers.Push(faxNum)
+		PersonalFaxTypes.Push(faxType)
+	}
+
+	; Sort personal entries alphabetically by name
+	if (PersonalFaxFacilityNames.Length() > 0) {
+		sortTemp := ""
+		for idx, name in PersonalFaxFacilityNames {
+			sortTemp .= name . "`t" . idx . "`n"
+		}
+		Sort, sortTemp
+		tempNames := []
+		tempNums := []
+		tempTypes := []
+		Loop, Parse, sortTemp, `n, `r
+		{
+			if (A_LoopField = "")
+				continue
+			tabPos := InStr(A_LoopField, "`t")
+			origIdx := SubStr(A_LoopField, tabPos + 1)
+			tempNames.Push(PersonalFaxFacilityNames[origIdx])
+			tempNums.Push(PersonalFaxNumbers[origIdx])
+			tempTypes.Push(PersonalFaxTypes[origIdx])
+		}
+		PersonalFaxFacilityNames := tempNames
+		PersonalFaxNumbers := tempNums
+		PersonalFaxTypes := tempTypes
+	}
+
+return
+
+
+;############################################################################################
+;###################Build Merged Fax List (Personal + Facility)############################
+;############################################################################################
+
+BuildMergedFaxList:
+	FaxDisplayList := ""
+	MergedDisplayEntries := []
+	MergedFaxValues := []
+	MergedIsHeader := []
+	PersonalFaxCount := PersonalFaxFacilityNames.Length()
+
+	; Add personal section (header + entries) if any personal entries exist
+	if (PersonalFaxCount > 0) {
+		; Header row
+		MergedDisplayEntries.Push("****My Fax Numbers****")
+		MergedFaxValues.Push("")
+		MergedIsHeader.Push(1)
+		FaxDisplayList := "****My Fax Numbers****"
+
+		; Personal entries
+		for idx, name in PersonalFaxFacilityNames {
+			typeLabel := (PersonalFaxTypes[idx] = "MedRecords") ? "Records" : "Imaging"
+			displayEntry := name . " (" . PersonalFaxNumbers[idx] . ") [" . typeLabel . "]"
+			MergedDisplayEntries.Push(displayEntry)
+			MergedFaxValues.Push(PersonalFaxNumbers[idx])
+			MergedIsHeader.Push(0)
+			FaxDisplayList .= "|" . displayEntry
+		}
+
+		; Facility header (only if there are facility entries)
+		if (FacilityFaxDisplayList != "") {
+			MergedDisplayEntries.Push("****Default Fax Numbers****")
+			MergedFaxValues.Push("")
+			MergedIsHeader.Push(1)
+			FaxDisplayList .= "|****Default Fax Numbers****"
+		}
+	}
+
+	; Append facility entries
+	if (FacilityFaxDisplayList != "") {
+		if (FaxDisplayList != "")
+			FaxDisplayList .= "|"
+		FaxDisplayList .= FacilityFaxDisplayList
+
+		; Also add facility entries to merged arrays
+		if (FacilityFaxDisplayList != "" && PersonalFaxCount = 0) {
+			; No personal header was added; add facility header if there are facility entries
+		}
+		for idx, name in FaxFacilityNames {
+			displayEntry := name . " (" . FaxNumbers[idx] . ")"
+			MergedDisplayEntries.Push(displayEntry)
+			MergedFaxValues.Push(FaxNumbers[idx])
+			MergedIsHeader.Push(0)
+		}
+	}
+
+return
+
+
+;############################################################################################
+;###################Show Fax Request GUI (GUI 68)##########################################
+;############################################################################################
+
+ShowFaxGUI:
+	; Destroy any existing instance first
+	Gui, 68: Destroy
+	
+	; Look up type-specific UI strings
+	guiTitle := RT_GUITitle[ActiveRequestType]
+	detailsLabel := RT_DetailsLabel[ActiveRequestType]
+	activeMsgTitle := RT_MsgBoxTitle[ActiveRequestType]
+
+	Gui, 68: +AlwaysOnTop +ToolWindow
+	Gui, 68: Font, s12, Verdana
+	Gui, 68: Margin, 15, 15
+
+	; Title (type-specific)
+	Gui, 68: Font, bold s14, Verdana
+	Gui, 68: Add, Text, x15 y15 w640, %guiTitle%
+	Gui, 68: Font, norm s11, Verdana
+
+	; Patient Name (prepopulated)
+	Gui, 68: Add, Text, x15 y+20 w150 h25, Patient Name:
+	Gui, 68: Add, Edit, x170 yp w380 h28 vFaxPatientName, %PatientName%
+
+	; DOB (prepopulated)
+	Gui, 68: Add, Text, x15 y+15 w150 h25, Date of Birth:
+	Gui, 68: Add, Edit, x170 yp w200 h28 vFaxPatientDOB, %ptDOB%
+
+	; Facility / Fax Number search + ListBox
+	Gui, 68: Add, Text, x15 y+20 w150 h25, Send Fax To:
+	Gui, 68: Add, Edit, x170 yp w485 h28 vFaxSearchBox gFaxSearchChanged,
+	; Set grayed-out placeholder text in the search box (EM_SETCUEBANNER)
+	GuiControlGet, hFaxSearch, 68: Hwnd, FaxSearchBox
+	DllCall("SendMessage", "Ptr", hFaxSearch, "UInt", 0x1501, "Int", 1, "WStr", "Type facility name here to search, then click item in list below")
+	; Blue underlined hyperlink to manage personal fax book
+	Gui, 68: Font, underline s9, Verdana
+	Gui, 68: Add, Text, x15 y+5 w150 h18 cBlue g68ManageFaxBook Section, edit / add fax numbers
+	; "Need Help?" link — only show if a local contact email exists for this type
+	HelpContactEmail := CachedInternalEmail[ActiveRequestType]
+	if (HelpContactEmail != "") {
+		Gui, 68: Add, Text, x15 y+40 w150 h18 cBlue g68EmailLocalContact, Need Help?
+		Gui, 68: Add, Text, x15 y+1 w150 h18 cBlue g68EmailLocalContact, Click to contact us
+	}
+	Gui, 68: Font, norm s11, Verdana
+	Gui, 68: Add, ListBox, x170 ys w485 r8 vFaxSelection AltSubmit, %FaxDisplayList%
+
+	; Manual fax entry for numbers not in the list
+	Gui, 68: Font, s9, Verdana
+	Gui, 68: Add, Text, x170 y+10 w485 h20, Don't see fax # in list above? Type it here:
+	Gui, 68: Font, norm s11, Verdana
+	Gui, 68: Add, Edit, x170 y+3 w485 h28 vManualFaxNumber,
+
+	; Requested details (free text, multi-line) - label changes per type
+	Gui, 68: Add, Text, x15 y+20 w640 h25, %detailsLabel%
+	Gui, 68: Add, Edit, x15 y+5 w640 h80 vFaxImageDetails Multi WantReturn,
+
+	; Contact / Return info section - different per type
+	if (ActiveRequestType = "MedRecords") {
+		; Medical Records: Required return fax and ATTN fields
+		medFaxReturn := ""
+		medAttn := ""
+		if FileExist(MedRecordsContactFile) {
+			FileRead, medContactSaved, %MedRecordsContactFile%
+			; Line 1 = fax number, Line 2 = ATTN
+			StringSplit, medParts, medContactSaved, `n, `r
+			if (medParts0 >= 1)
+				medFaxReturn := Trim(medParts1)
+			if (medParts0 >= 2)
+				medAttn := Trim(medParts2)
+		}
+		; Store original values for change detection
+		OriginalMedFaxReturn := medFaxReturn
+		OriginalMedAttn := medAttn
+		Gui, 68: Add, Text, x15 y+20 w640 h25, FAX RECORDS TO (return fax # for outside facility to send records to):
+		Gui, 68: Add, Edit, x15 y+5 w640 h28 vMedRecsFaxReturn, %medFaxReturn%
+		Gui, 68: Add, Text, x15 y+10 w640 h25, ATTN (name or department to receive the records):
+		Gui, 68: Add, Edit, x15 y+5 w640 h28 vMedRecsAttn, %medAttn%
+	} else {
+		; Radiology: Optional multi-line contact info
+		contactValue := ""
+		if FileExist(ImagingContactFile) {
+			FileRead, contactValue, %ImagingContactFile%
+		} else if (CPRSClinicianName != "") {
+			contactValue := CPRSClinicianName
+		}
+		; Store original value for change detection
+		OriginalContactInfo := contactValue
+		Gui, 68: Add, Text, x15 y+20 w640 h25, (Optional) Your (or team member's) Name/Phone for Questions:
+		Gui, 68: Add, Edit, x15 y+5 w640 h60 vFaxContactInfo Multi, %contactValue%
+	}
+
+	; Buttons
+	Gui, 68: Add, Button, g68SubmitFax x15 y+20 w120 h35 Default, Submit
+	Gui, 68: Add, Button, g68CancelFax x+20 yp w120 h35, Cancel
+
+	Gui, 68: Show, , Booster: %activeMsgTitle%
+
+return
+
+
+;############################################################################################
+;###################Search-as-you-type filter for Fax ListBox#############################
+;############################################################################################
+
+FaxSearchChanged:
+	GuiControlGet, searchText, 68:, FaxSearchBox
+
+	; If search is empty, restore the full list
+	if (searchText = "") {
+		GuiControl, 68:, FaxSelection, |%FaxDisplayList%
+		FilteredIndexMap := []
+		return
+	}
+
+	; Build filtered list: loop through MergedDisplayEntries, match with InStr
+	filteredList := ""
+	FilteredIndexMap := []
+	lastHeaderIdx := 0       ; track last header we saw
+	lastHeaderText := ""
+	headerAdded := 0         ; whether we added the header for current section
+
+	Loop, % MergedDisplayEntries.Length()
+	{
+		idx := A_Index
+		entry := MergedDisplayEntries[idx]
+
+		if (MergedIsHeader[idx] = 1) {
+			; Remember this header; we'll add it only if a match follows
+			lastHeaderIdx := idx
+			lastHeaderText := entry
+			headerAdded := 0
+			continue
+		}
+
+		; Check if this entry matches the search text (case-insensitive substring)
+		if (InStr(entry, searchText)) {
+			; Add the section header if we haven't yet
+			if (lastHeaderIdx > 0 && headerAdded = 0) {
+				if (filteredList != "")
+					filteredList .= "|"
+				filteredList .= lastHeaderText
+				FilteredIndexMap.Push(lastHeaderIdx)
+				headerAdded := 1
+			}
+			if (filteredList != "")
+				filteredList .= "|"
+			filteredList .= entry
+			FilteredIndexMap.Push(idx)
+		}
+	}
+
+	; If no matches, show a placeholder
+	if (filteredList = "") {
+		filteredList := "(no matches)"
+		FilteredIndexMap := [0]
+	}
+
+	GuiControl, 68:, FaxSelection, |%filteredList%
+return
+
+
+;############################################################################################
+;###################Submit Fax - Validate and Create Outlook Email#########################
+;############################################################################################
+
+68SubmitFax:
+	Gui, 68: Submit, NoHide
+	activeMsgTitle := RT_MsgBoxTitle[ActiveRequestType]
+
+	;--- Validate required fields
+	if (FaxPatientName = "") {
+		MsgBox, 262192, %activeMsgTitle%, Please enter the Patient Name.
+		return
+	}
+	if (FaxPatientDOB = "") {
+		MsgBox, 262192, %activeMsgTitle%, Please enter the Patient Date of Birth.
+		return
+	}
+	if (FaxImageDetails = "") {
+		MsgBox, 262192, %activeMsgTitle%, Please enter the requested details.
+		return
+	}
+	
+	;--- Medical Records: validate required return fax fields
+	if (ActiveRequestType = "MedRecords") {
+		if (MedRecsFaxReturn = "") {
+			MsgBox, 262192, %activeMsgTitle%, Please enter the return fax number where records should be sent.
+			return
+		}
+		; Validate return fax number format (10-11 digits)
+		FaxToValidate := MedRecsFaxReturn
+		gosub ValidateFaxNumber
+		if (FaxValidationError = 1) {
+			MsgBox, 262192, %activeMsgTitle%, Return fax number is invalid.`n`n%FaxValidationMsg%
+			return
+		}
+		if (MedRecsAttn = "") {
+			MsgBox, 262192, %activeMsgTitle%, Please enter the ATTN name or department.
+			return
+		}
+	}
+
+	;--- Determine fax number source: Manual entry takes priority over list selection
+	UsedManualFax := 0
+	ManualFaxNumber := Trim(ManualFaxNumber)
+
+	if (ManualFaxNumber != "") {
+		; Manual fax entry takes priority
+		FaxToValidate := ManualFaxNumber
+		gosub ValidateFaxNumber
+		if (FaxValidationError = 1) {
+			MsgBox, 262192, %activeMsgTitle%, Manual fax number is invalid.`n`n%FaxValidationMsg%
+			return
+		}
+		selectedFaxRaw := ManualFaxNumber
+		selectedFacility := "Manual Entry"
+		UsedManualFax := 1
+	} else {
+		; Use ListBox selection
+		if (FaxSelection = "" || FaxSelection = 0) {
+			MsgBox, 262192, %activeMsgTitle%, Please select a facility from the list or type a fax number in the manual entry field.
+			return
+		}
+
+		;--- Resolve the original merged-list index from the ListBox selection
+		GuiControlGet, currentSearch, 68:, FaxSearchBox
+		if (currentSearch != "" && FilteredIndexMap.Length() > 0) {
+			; Search is active — map filtered index back to original
+			originalIdx := FilteredIndexMap[FaxSelection]
+		} else {
+			; No search active — ListBox index maps directly to MergedDisplayEntries
+			originalIdx := FaxSelection
+		}
+
+		;--- Check for "(no matches)" placeholder or invalid index
+		if (originalIdx = 0 || originalIdx = "") {
+			MsgBox, 262192, %activeMsgTitle%, No matching fax entry found. Please refine your search or type a fax number in the manual entry field.
+			return
+		}
+
+		;--- Check if a header row is selected
+		if (MergedIsHeader[originalIdx] = 1) {
+			MsgBox, 262192, %activeMsgTitle%, That is just a section header. Please select a valid fax entry or type a fax number below.
+			return
+		}
+
+		;--- Look up fax number from the merged arrays
+		selectedFaxRaw := MergedFaxValues[originalIdx]
+		selectedFacility := MergedDisplayEntries[originalIdx]
+
+		;--- Validate fax number (must be 10 digits, or 11 starting with 1)
+		FaxToValidate := selectedFaxRaw
+		gosub ValidateFaxNumber
+		if (FaxValidationError = 1) {
+			MsgBox, 262192, %activeMsgTitle%, %FaxValidationMsg%
+			return
+		}
+	}
+
+	;--- Clean fax number: remove all non-digit characters (dashes, spaces, letters, etc.)
+	CleanFax := RegExReplace(selectedFaxRaw, "[^\d]", "")
+
+	;--- Prepend 1 if it doesn't already start with 1
+	if (SubStr(CleanFax, 1, 1) != "1")
+		CleanFax := "1" . CleanFax
+
+	;--- Build email recipient
+	EmailTo := CleanFax . "@ecfax.va.gov"
+
+	;--- Build subject with current date-time (type-specific prefix)
+	FormatTime, DateTimeStr, , MM/dd/yyyy HH:mm
+	EmailSubject := RT_EmailSubjectPrefix[ActiveRequestType] . " " . DateTimeStr
+
+	;--- Build "THIS FAX IS INTENDED FOR:" header line (skip for manual entry)
+	FaxIntendedForLine := ""
+	if (UsedManualFax != 1) {
+		FaxRecipientName := RegExReplace(selectedFacility, "\s*\(.*$", "")
+		if (StrLen(CleanFax) = 11)
+			FormattedFax := SubStr(CleanFax, 2, 3) . "-" . SubStr(CleanFax, 5, 3) . "-" . SubStr(CleanFax, 8, 4)
+		else
+			FormattedFax := CleanFax
+		FaxIntendedForLine := "THIS FAX IS INTENDED FOR: " . FaxRecipientName . " (fax# " . FormattedFax . ")" . "`n`n"
+	}
+
+	;--- Build email body (type-specific details label)
+	detailsBodyLabel := RT_DetailsBodyLabel[ActiveRequestType]
+	EmailBody := FaxIntendedForLine . BoilerplateText
+	EmailBody .= "`n`n"
+	EmailBody .= "Patient Name: " . FaxPatientName . "`n"
+	EmailBody .= "Date of Birth: " . FaxPatientDOB . "`n"
+	EmailBody .= "`n"
+	EmailBody .= detailsBodyLabel . "`n"
+	EmailBody .= FaxImageDetails . "`n"
+	
+	; Add contact / return fax info at bottom (type-specific)
+	if (ActiveRequestType = "MedRecords") {
+		; Medical Records: include return fax info (always present - fields are required)
+		EmailBody .= "`n---`n"
+		EmailBody .= "PLEASE FAX RECORDS TO: " . MedRecsFaxReturn . "`n"
+		EmailBody .= "ATTN: " . MedRecsAttn . "`n"
+	} else {
+		; Radiology: optional contact info
+		if (FaxContactInfo != "") {
+			EmailBody .= "`n---`n"
+			EmailBody .= "FOR QUESTIONS, THIS FAX WAS SENT BY:`n"
+			EmailBody .= FaxContactInfo . "`n"
+		}
+	}
+
+	;--- Show WAIT message while creating email
+	SplashTextOn, 200, 100, WAIT!, Creating Fax
+	Sleep, 2000
+	SplashTextOff
+
+	;--- Ensure Outlook is running as a full app (prevents auto-shutdown after compose windows close)
+	Process, Exist, OUTLOOK.EXE
+	if (ErrorLevel = 0) {
+		Run, outlook.exe
+		WinWait, ahk_exe OUTLOOK.EXE, , 15
+		if (ErrorLevel != 0) {
+			MsgBox, 262160, %activeMsgTitle% - Error, Failed to start Outlook.`n`nPlease start Outlook manually and try again.
+			return
+		}
+		Sleep, 1000  ; Extra settle time for COM registration
+	}
+
+	;--- Get Outlook COM object (reused for both fax email and FYI email)
+	try {
+		olApp := ComObjActive("Outlook.Application")
+	} catch {
+		try {
+			olApp := ComObjCreate("Outlook.Application")
+		} catch e {
+			MsgBox, 262160, %activeMsgTitle% - Error, Failed to connect to Outlook.`n`nMake sure Outlook is running.`n`nError: %e%
+			return
+		}
+	}
+
+	;--- Create fax email via COM
+	try {
+		MailItem := olApp.CreateItem(0)
+		MailItem.To := EmailTo
+		MailItem.Subject := EmailSubject
+		MailItem.Body := EmailBody
+	}
+	catch e {
+		MsgBox, 262160, %activeMsgTitle% - Error, Failed to create Outlook email.`n`nMake sure Outlook is running.`n`nError: %e%
+		return
+	}
+
+	;--- Pre-create FYI email NOW (before displaying fax email) to keep Outlook alive
+	InternalEmail := CachedInternalEmail[ActiveRequestType]
+	InternalMailItem := ""
+	FYISubject := ""
+	if (InternalEmail != "") {
+		internalFYIHeader := RT_InternalFYIHeader[ActiveRequestType]
+		InternalBody := internalFYIHeader . "`n`n"
+		InternalBody .= EmailBody
+		FYISubject := "FYI - " . EmailSubject
+		try {
+			InternalMailItem := olApp.CreateItem(0)
+			InternalMailItem.To := InternalEmail
+			InternalMailItem.Subject := FYISubject
+			InternalMailItem.Body := InternalBody
+
+			; Set S/MIME encryption via MAPI property
+			try {
+				InternalMailItem.PropertyAccessor.SetProperty("http://schemas.microsoft.com/mapi/proptag/0x6E010003", 1)
+			} catch encErr {
+				; Encryption property failed — email will still display without encryption
+			}
+		} catch {
+			InternalMailItem := ""
+		}
+	}
+
+	;--- Now display the fax email
+	MailItem.Display
+
+	;--- Close the GUI
+	Gui, 68: Destroy
+
+	;--- Activate and maximize the email window so user can see it
+	SetTitleMatchMode, 2  ; Partial match on subject line
+
+	
+	WinActivate, %EmailSubject%
+	;WinWait, %EmailSubject%, , 5
+	sleep 200
+	WinMaximize, %EmailSubject%
+	sleep 300
+
+	;--- Important instructions for user
+	MsgBox, 262208, %activeMsgTitle%, YOU'RE NOT DONE UNTIL YOU SEND THIS EMAIL.`n`n -Check email for accuracy`n -A fax will be sent`n -You will get a confirmation email`n -Do not encrypt this email
+
+	;--- Wait for first email window to close (or 30 second timeout)
+	SetTitleMatchMode, 2  ; Partial match
+	WinWaitClose, %EmailSubject%, , 30
+
+	;--- Display pre-created FYI email (if it was successfully created earlier)
+	if (InternalMailItem != "") {
+		try {
+			InternalMailItem.Display
+			MsgBox, 262208, %activeMsgTitle%, I also created an encrypted FYI email to your imaging/records department.`n`nPlease click SEND on this email as well (they will look out for the images)
+
+			;--- Wait for FYI email window to close (or 30 second timeout)
+			SetTitleMatchMode, 2
+			WinWaitClose, %FYISubject%, , 30
+		}
+		catch e {
+			; FYI email display failed — skip silently
+		}
+	}
+
+	;--- Check if contact info changed and offer to save (after both emails sent)
+	if (ActiveRequestType = "MedRecords") {
+		; Medical Records: save return fax + ATTN (line 1 = fax, line 2 = ATTN)
+		newFax := Trim(MedRecsFaxReturn)
+		newAttn := Trim(MedRecsAttn)
+		if (newFax != OriginalMedFaxReturn || newAttn != OriginalMedAttn) {
+			newMedContact := newFax . "`n" . newAttn
+			MsgBox, 262180, %activeMsgTitle%, Should I save this return fax info for next time?`n`nFAX RECORDS TO: %newFax%`nATTN: %newAttn%
+			IfMsgBox, Yes
+			{
+				FileDelete, %MedRecordsContactFile%
+				FileAppend, %newMedContact%, %MedRecordsContactFile%
+			}
+		}
+	} else {
+		; Radiology: save optional contact info
+		if (FaxContactInfo != "") {
+			normalizedNew := Trim(StrReplace(FaxContactInfo, "`r", ""))
+			normalizedOrig := Trim(StrReplace(OriginalContactInfo, "`r", ""))
+			
+			if (normalizedNew != normalizedOrig) {
+				MsgBox, 262180, %activeMsgTitle%, Should I save this contact information for next time?`n`nContact Info:`n%FaxContactInfo%
+				IfMsgBox, Yes
+				{
+					FileDelete, %ImagingContactFile%
+					FileAppend, %FaxContactInfo%, %ImagingContactFile%
+				}
+			}
+		}
+	}
+
+	;--- If manual fax was used, offer to save/share
+	if (UsedManualFax = 1) {
+		MsgBox, 262180, %activeMsgTitle%, Would you like to save or share this fax number for future use?`n`nFax Number: %ManualFaxNumber%
+		IfMsgBox, Yes
+		{
+			; Open GUI 71 standalone (no owner since GUI 68 is destroyed) with new Add flow
+			FaxBookEditIndex := 0
+			FaxBookEditSource := "New"
+			Gui, 71: Destroy
+			Gui, 71: +AlwaysOnTop +ToolWindow
+			Gui, 71: Font, s11, Verdana
+			Gui, 71: Margin, 10, 10
+			Gui, 71: Add, Text, x10 y10 w350 h25, Facility / Name:
+			Gui, 71: Add, Edit, x10 y+5 w350 h28 vFaxBookEntryName,
+			Gui, 71: Add, Text, x10 y+10 w350 h25, Fax Number:
+			Gui, 71: Add, Edit, x10 y+5 w350 h28 vFaxBookEntryNumber, %ManualFaxNumber%
+			Gui, 71: Add, Text, x10 y+10 w350 h25, This fax number is for:
+			if (ActiveRequestType = "MedRecords") {
+				Gui, 71: Add, Radio, x10 y+5 w200 h20 vFaxBookEntryType, Radiology / Imaging
+				Gui, 71: Add, Radio, x10 y+3 w200 h20 Checked, ROI / Records
+			} else {
+				Gui, 71: Add, Radio, x10 y+5 w200 h20 vFaxBookEntryType Checked, Radiology / Imaging
+				Gui, 71: Add, Radio, x10 y+3 w200 h20, ROI / Records
+			}
+			Gui, 71: Add, Text, x10 y+15 w350 h25, How would you like to add this fax number?
+			Gui, 71: Add, Radio, x10 y+7 w400 h35 vFaxShareOption Checked, Share with your colleagues (Recommended! PLEASE)
+			Gui, 71: Add, Radio, x10 y+7 w400 h25, Add only to my personal fax address book
+			Gui, 71: Add, Radio, x10 y+7 w400 h25, Both: add to my personal list AND share
+			Gui, 71: Add, Button, g71SaveFaxEntry x10 y+15 w100 h30 Default, Save
+			Gui, 71: Add, Button, g71CancelFaxEntry x+10 yp w100 h30, Cancel
+			Gui, 71: Show, , Save Fax Number
+		}
+	}
+
+return
+
+
+;############################################################################################
+;###################Cancel / Close Fax Request GUI#########################################
+;############################################################################################
+
+68ManageFaxBook:
+	Gui, 70: Destroy
+	Gui, 70: +AlwaysOnTop +ToolWindow +Owner68
+	Gui, 70: Font, s11, Verdana
+	Gui, 70: Margin, 10, 10
+	Gui, 70: Add, Text, x10 y10 w480, Select an item to edit or delete`, or press Add to add a new fax number.
+
+	; Build combined listbox from personal + facility entries for active request type
+	MgmtSource := []
+	MgmtSourceIndex := []
+	MgmtNames := []
+	MgmtNumbers := []
+	MgmtIsHeader := []
+	mgmtListBoxContent := ""
+
+	; Add personal entries that match the active request type
+	hasPersonal := 0
+	for idx, name in PersonalFaxFacilityNames {
+		if (PersonalFaxTypes[idx] != ActiveRequestType)
+			continue
+		if (hasPersonal = 0) {
+			; Add header row before first personal entry
+			MgmtSource.Push("")
+			MgmtSourceIndex.Push(0)
+			MgmtNames.Push("")
+			MgmtNumbers.Push("")
+			MgmtIsHeader.Push(1)
+			mgmtListBoxContent := "*****My Fax Numbers*****"
+			hasPersonal := 1
+		}
+		MgmtSource.Push("Personal")
+		MgmtSourceIndex.Push(idx)
+		MgmtNames.Push(name)
+		MgmtNumbers.Push(PersonalFaxNumbers[idx])
+		MgmtIsHeader.Push(0)
+		if (mgmtListBoxContent != "")
+			mgmtListBoxContent .= "|"
+		mgmtListBoxContent .= name . " (" . PersonalFaxNumbers[idx] . ")"
+	}
+
+	; Add facility entries (all are the active type since they're loaded per-type)
+	if (FaxFacilityNames.Length() > 0) {
+		; Add header row before facility entries
+		MgmtSource.Push("")
+		MgmtSourceIndex.Push(0)
+		MgmtNames.Push("")
+		MgmtNumbers.Push("")
+		MgmtIsHeader.Push(1)
+		if (mgmtListBoxContent != "")
+			mgmtListBoxContent .= "|"
+		mgmtListBoxContent .= "*****Shared Fax Numbers*****"
+	}
+	for idx, name in FaxFacilityNames {
+		MgmtSource.Push("Facility")
+		MgmtSourceIndex.Push(idx)
+		MgmtNames.Push(name)
+		MgmtNumbers.Push(FaxNumbers[idx])
+		MgmtIsHeader.Push(0)
+		if (mgmtListBoxContent != "")
+			mgmtListBoxContent .= "|"
+		mgmtListBoxContent .= name . " (" . FaxNumbers[idx] . ")"
+	}
+
+	Gui, 70: Add, ListBox, x10 y+5 w480 h220 vFaxBookSelection AltSubmit, %mgmtListBoxContent%
+
+	; Buttons row
+	Gui, 70: Add, Button, g70AddFaxEntry x10 y+10 w100 h30, Add
+	Gui, 70: Add, Button, g70EditFaxEntry x+5 yp w100 h30, Edit
+	Gui, 70: Add, Button, g70DeleteFaxEntry x+5 yp w100 h30, Delete
+	Gui, 70: Add, Button, g70CloseFaxBook x+5 yp w100 h30, Close
+	Gui, 70: Show, , Manage Fax Numbers
+return
+
+70AddFaxEntry:
+	FaxBookEditIndex := 0
+	FaxBookEditSource := "New"
+	Gui, 71: Destroy
+	Gui, 71: +AlwaysOnTop +ToolWindow +Owner70
+	Gui, 71: Font, s11, Verdana
+	Gui, 71: Margin, 10, 10
+	Gui, 71: Add, Text, x10 y10 w350 h25, Facility / Name:
+	Gui, 71: Add, Edit, x10 y+5 w350 h28 vFaxBookEntryName,
+	Gui, 71: Add, Text, x10 y+10 w350 h25, Fax Number:
+	Gui, 71: Add, Edit, x10 y+5 w350 h28 vFaxBookEntryNumber,
+	Gui, 71: Add, Text, x10 y+10 w350 h25, This fax number is for:
+	if (ActiveRequestType = "MedRecords") {
+		Gui, 71: Add, Radio, x10 y+5 w200 h20 vFaxBookEntryType, Radiology / Imaging
+		Gui, 71: Add, Radio, x10 y+3 w200 h20 Checked, ROI / Records
+	} else {
+		Gui, 71: Add, Radio, x10 y+5 w200 h20 vFaxBookEntryType Checked, Radiology / Imaging
+		Gui, 71: Add, Radio, x10 y+3 w200 h20, ROI / Records
+	}
+	Gui, 71: Add, Text, x10 y+15 w350 h25, How would you like to add this fax number?
+	Gui, 71: Add, Radio, x10 y+7 w400 h35 vFaxShareOption Checked, Share with your colleagues (Recommended! PLEASE)
+	Gui, 71: Add, Radio, x10 y+7 w400 h25, Add only to my personal fax address book
+	Gui, 71: Add, Radio, x10 y+7 w400 h25, Both: add to my personal list AND share
+	Gui, 71: Add, Button, g71SaveFaxEntry x10 y+15 w100 h30 Default, Save
+	Gui, 71: Add, Button, g71CancelFaxEntry x+10 yp w100 h30, Cancel
+	Gui, 71: Show, , Add Fax Number
+return
+
+70EditFaxEntry:
+	Gui, 70: Submit, NoHide
+	activeMsgTitle := RT_MsgBoxTitle[ActiveRequestType]
+
+	if (FaxBookSelection = "" || FaxBookSelection = 0) {
+		MsgBox, 262192, %activeMsgTitle%, Please select an entry to edit.
+		return
+	}
+
+	selectedIdx := FaxBookSelection
+	if (MgmtIsHeader[selectedIdx] = 1) {
+		MsgBox, 262192, %activeMsgTitle%, That is a section header. Please select a fax entry to edit.
+		return
+	}
+	FaxBookEditSource := MgmtSource[selectedIdx]
+	FaxBookEditIndex := MgmtSourceIndex[selectedIdx]
+	editName := MgmtNames[selectedIdx]
+	editNumber := MgmtNumbers[selectedIdx]
+
+	; Store old values for facility edit pipeline
+	FaxKeeperOldName := editName
+	FaxKeeperOldNumber := editNumber
+
+	Gui, 71: Destroy
+	Gui, 71: +AlwaysOnTop +ToolWindow +Owner70
+	Gui, 71: Font, s11, Verdana
+	Gui, 71: Margin, 10, 10
+
+	; Bold warning for facility entries
+	if (FaxBookEditSource = "Facility") {
+		Gui, 71: Font, s11 Bold, Verdana
+		Gui, 71: Add, Text, x10 y10 w400, NOTE: You are changing this entry for EVERYONE at your facility. Please be certain the fax# is correct AND the facility name is clear.
+		Gui, 71: Font, s11 Norm, Verdana
+		Gui, 71: Add, Text, x10 y+10 w350 h25, Facility / Name:
+	} else {
+		Gui, 71: Add, Text, x10 y10 w350 h25, Facility / Name:
+	}
+
+	Gui, 71: Add, Edit, x10 y+5 w350 h28 vFaxBookEntryName, %editName%
+	Gui, 71: Add, Text, x10 y+10 w350 h25, Fax Number:
+	Gui, 71: Add, Edit, x10 y+5 w350 h28 vFaxBookEntryNumber, %editNumber%
+	Gui, 71: Add, Text, x10 y+10 w350 h25, This fax number is for:
+	if (FaxBookEditSource = "Personal") {
+		editType := PersonalFaxTypes[FaxBookEditIndex]
+	} else {
+		editType := ActiveRequestType
+	}
+	if (editType = "MedRecords") {
+		Gui, 71: Add, Radio, x10 y+5 w200 h20 vFaxBookEntryType, Radiology / Imaging
+		Gui, 71: Add, Radio, x10 y+3 w200 h20 Checked, ROI / Records
+	} else {
+		Gui, 71: Add, Radio, x10 y+5 w200 h20 vFaxBookEntryType Checked, Radiology / Imaging
+		Gui, 71: Add, Radio, x10 y+3 w200 h20, ROI / Records
+	}
+	Gui, 71: Add, Button, g71SaveFaxEntry x10 y+15 w100 h30 Default, Save
+	Gui, 71: Add, Button, g71CancelFaxEntry x+10 yp w100 h30, Cancel
+	editTitle := (FaxBookEditSource = "Facility") ? "Edit Facility Fax Number" : "Edit Personal Fax Number"
+	Gui, 71: Show, , %editTitle%
+return
+
+70DeleteFaxEntry:
+	Gui, 70: Submit, NoHide
+	activeMsgTitle := RT_MsgBoxTitle[ActiveRequestType]
+
+	if (FaxBookSelection = "" || FaxBookSelection = 0) {
+		MsgBox, 262192, %activeMsgTitle%, Please select an entry to delete.
+		return
+	}
+
+	selectedIdx := FaxBookSelection
+	if (MgmtIsHeader[selectedIdx] = 1) {
+		MsgBox, 262192, %activeMsgTitle%, That is a section header. Please select a fax entry to delete.
+		return
+	}
+	deleteSource := MgmtSource[selectedIdx]
+	deleteSourceIndex := MgmtSourceIndex[selectedIdx]
+	deleteName := MgmtNames[selectedIdx]
+	deleteNum := MgmtNumbers[selectedIdx]
+
+	if (deleteSource = "Personal") {
+		; Personal delete — immediate removal
+		MsgBox, 262180, %activeMsgTitle%, Remove this entry from your personal fax book?`n`n%deleteName% (%deleteNum%)
+		IfMsgBox, No
+			return
+
+		PersonalFaxFacilityNames.RemoveAt(deleteSourceIndex)
+		PersonalFaxNumbers.RemoveAt(deleteSourceIndex)
+		PersonalFaxTypes.RemoveAt(deleteSourceIndex)
+
+		gosub SavePersonalFaxFile
+		PersonalFaxLoaded := 0
+		gosub RefreshFaxBookListBox
+
+	} else {
+		; Facility delete — firm warning + route to pipeline
+		MsgBox, 262452, %activeMsgTitle%, WARNING: This will remove this entry for ALL users at your facility.`n`nAre you sure you want to request removal of:`n%deleteName% (%deleteNum%)
+		IfMsgBox, No
+			return
+
+		; Determine type label
+		if (ActiveRequestType = "MedRecords")
+			deleteTypeLabel := "Records"
+		else
+			deleteTypeLabel := "Imaging"
+
+		; Set up pipeline variables
+		FaxKeeperEntryName := deleteName
+		FaxKeeperEntryNumber := deleteNum
+		FaxKeeperEntryType := deleteTypeLabel
+		FaxKeeperAction := "Delete"
+		FaxKeeperOldName := ""
+		FaxKeeperOldNumber := ""
+
+		; Route based on submit mode
+		submitMode := CachedFaxSubmitMode[ActiveRequestType]
+		if (submitMode = "F")
+			gosub EmailFaxSuggestion
+		else
+			gosub ShareFaxToKeeper
+	}
+return
+
+71SaveFaxEntry:
+	Gui, 71: Submit
+	activeMsgTitle := RT_MsgBoxTitle[ActiveRequestType]
+
+	if (FaxBookEntryName = "" || FaxBookEntryNumber = "") {
+		MsgBox, 262192, %activeMsgTitle%, Please enter both a name and fax number.
+		return
+	}
+
+	; Validate fax number (must be 10 digits, or 11 starting with 1)
+	FaxToValidate := FaxBookEntryNumber
+	gosub ValidateFaxNumber
+	if (FaxValidationError = 1) {
+		MsgBox, 262192, %activeMsgTitle%, %FaxValidationMsg%
+		return
+	}
+
+	; Determine type from radio button (1 = Radiology, 2 = MedRecords)
+	if (FaxBookEntryType = 2)
+		savedFaxType := "MedRecords"
+	else
+		savedFaxType := "Radiology"
+
+	savedTypeLabel := (savedFaxType = "MedRecords") ? "Records" : "Imaging"
+
+	; --- Branch based on source context ---
+
+	if (FaxBookEditSource = "New") {
+		; --- ADD flow: use FaxShareOption radio (1=Share, 2=Personal, 3=Both) ---
+		saveToPersonal := 0
+		shareToFacility := 0
+		if (FaxShareOption = 1) {
+			shareToFacility := 1
+		} else if (FaxShareOption = 2) {
+			saveToPersonal := 1
+		} else if (FaxShareOption = 3) {
+			saveToPersonal := 1
+			shareToFacility := 1
+		} else {
+			; Default to share if somehow unset
+			shareToFacility := 1
+		}
+
+		; Save to personal arrays if requested
+		if (saveToPersonal = 1) {
+			PersonalFaxFacilityNames.Push(FaxBookEntryName)
+			PersonalFaxNumbers.Push(FaxBookEntryNumber)
+			PersonalFaxTypes.Push(savedFaxType)
+			if !InStr(FileExist(RecordRetrieverPath), "D")
+				FileCreateDir, %RecordRetrieverPath%
+			gosub SavePersonalFaxFile
+			PersonalFaxLoaded := 0
+		}
+
+		Gui, 71: Destroy
+		gosub RefreshFaxBookListBox
+
+		; Share to facility if requested
+		if (shareToFacility = 1) {
+			FaxKeeperEntryName := FaxBookEntryName
+			FaxKeeperEntryNumber := FaxBookEntryNumber
+			FaxKeeperEntryType := savedTypeLabel
+			FaxKeeperAction := "Add"
+			FaxKeeperOldName := ""
+			FaxKeeperOldNumber := ""
+
+			submitMode := CachedFaxSubmitMode[savedFaxType]
+			if (submitMode = "F")
+				gosub EmailFaxSuggestion
+			else
+				gosub ShareFaxToKeeper
+		}
+
+	} else if (FaxBookEditSource = "Personal") {
+		; --- PERSONAL EDIT: update arrays directly, no confirmation needed ---
+		PersonalFaxFacilityNames[FaxBookEditIndex] := FaxBookEntryName
+		PersonalFaxNumbers[FaxBookEditIndex] := FaxBookEntryNumber
+		PersonalFaxTypes[FaxBookEditIndex] := savedFaxType
+
+		if !InStr(FileExist(RecordRetrieverPath), "D")
+			FileCreateDir, %RecordRetrieverPath%
+		gosub SavePersonalFaxFile
+		PersonalFaxLoaded := 0
+
+		Gui, 71: Destroy
+		gosub RefreshFaxBookListBox
+
+	} else if (FaxBookEditSource = "Facility") {
+		; --- FACILITY EDIT: show GUI 72 confirmation before submitting ---
+		; Store values for GUI 72 to use
+		GUI72_Name := FaxBookEntryName
+		GUI72_Number := FaxBookEntryNumber
+		GUI72_Type := savedFaxType
+		GUI72_TypeLabel := savedTypeLabel
+
+		Gui, 72: Destroy
+		Gui, 72: +AlwaysOnTop +ToolWindow +Owner71
+		Gui, 72: Font, s11, Verdana
+		Gui, 72: Margin, 15, 15
+		Gui, 72: Font, s12 Bold, Verdana
+		Gui, 72: Add, Text, x15 y15 w520, Please confirm this facility fax change:
+		Gui, 72: Font, s11 Norm, Verdana
+		Gui, 72: Add, Text, x15 y+15 w520, Facility: %GUI72_Name%
+		Gui, 72: Add, Text, x15 y+8 w520, Fax Number: %GUI72_Number%
+		Gui, 72: Add, Text, x15 y+8 w520, Type: %GUI72_TypeLabel%
+		Gui, 72: Add, Button, g72ConfirmFacilityEdit x15 y+25 w400 h40 Default, This is correct: Change for my facility
+		Gui, 72: Add, Button, g72GoBack x15 y+10 w130 h35, Go Back
+		Gui, 72: Add, Button, g72CancelAll x+10 yp w130 h35, Cancel
+		Gui, 72: Show, w560, Confirm Facility Fax Change
+	}
+
+return
+
+71CancelFaxEntry:
+71GuiClose:
+71GuiEscape:
+	Gui, 72: Destroy
+	Gui, 71: Destroy
+return
+
+72ConfirmFacilityEdit:
+	Gui, 72: Destroy
+	Gui, 71: Destroy
+
+	; Submit the facility edit to the pipeline
+	FaxKeeperEntryName := GUI72_Name
+	FaxKeeperEntryNumber := GUI72_Number
+	FaxKeeperEntryType := GUI72_TypeLabel
+	FaxKeeperAction := "Edit"
+	; FaxKeeperOldName and FaxKeeperOldNumber were set in 70EditFaxEntry
+
+	submitMode := CachedFaxSubmitMode[GUI72_Type]
+	if (submitMode = "F")
+		gosub EmailFaxSuggestion
+	else
+		gosub ShareFaxToKeeper
+return
+
+72GoBack:
+	; Destroy GUI 72 and re-open GUI 71 with the same values
+	Gui, 72: Destroy
+
+	; Rebuild GUI 71 for editing (re-use the stored values)
+	Gui, 71: Destroy
+	Gui, 71: +AlwaysOnTop +ToolWindow +Owner70
+	Gui, 71: Font, s11, Verdana
+	Gui, 71: Margin, 10, 10
+	if (FaxBookEditSource = "Facility") {
+		Gui, 71: Font, s11 Bold, Verdana
+		Gui, 71: Add, Text, x10 y10 w400, NOTE: You are changing this entry for EVERYONE at your facility. Please be certain the fax# is correct AND the facility name is clear.
+		Gui, 71: Font, s11 Norm, Verdana
+		Gui, 71: Add, Text, x10 y+10 w350 h25, Facility / Name:
+	} else {
+		Gui, 71: Add, Text, x10 y10 w350 h25, Facility / Name:
+	}
+	Gui, 71: Add, Edit, x10 y+5 w350 h28 vFaxBookEntryName, %GUI72_Name%
+	Gui, 71: Add, Text, x10 y+10 w350 h25, Fax Number:
+	Gui, 71: Add, Edit, x10 y+5 w350 h28 vFaxBookEntryNumber, %GUI72_Number%
+	Gui, 71: Add, Text, x10 y+10 w350 h25, This fax number is for:
+	if (GUI72_Type = "MedRecords") {
+		Gui, 71: Add, Radio, x10 y+5 w200 h20 vFaxBookEntryType, Radiology / Imaging
+		Gui, 71: Add, Radio, x10 y+3 w200 h20 Checked, ROI / Records
+	} else {
+		Gui, 71: Add, Radio, x10 y+5 w200 h20 vFaxBookEntryType Checked, Radiology / Imaging
+		Gui, 71: Add, Radio, x10 y+3 w200 h20, ROI / Records
+	}
+	Gui, 71: Add, Button, g71SaveFaxEntry x10 y+15 w100 h30 Default, Save
+	Gui, 71: Add, Button, g71CancelFaxEntry x+10 yp w100 h30, Cancel
+	Gui, 71: Show, , Edit Facility Fax Number
+return
+
+72CancelAll:
+72GuiClose:
+72GuiEscape:
+	Gui, 72: Destroy
+	Gui, 71: Destroy
+return
+
+70CloseFaxBook:
+70GuiClose:
+70GuiEscape:
+	Gui, 70: Destroy
+	; Rebuild merged list and refresh GUI 68 ListBox + clear search
+	gosub BuildMergedFaxList
+	GuiControl, 68:, FaxSearchBox,
+	GuiControl, 68:, FaxSelection, |%FaxDisplayList%
+	FilteredIndexMap := []
+return
+
+;--- Helper: Save personal fax arrays to file ---
+SavePersonalFaxFile:
+	FileDelete, %PersonalFaxFile%
+	for idx, name in PersonalFaxFacilityNames {
+		fileLine := name . "|" . PersonalFaxNumbers[idx] . "|" . PersonalFaxTypes[idx]
+		FileAppend, %fileLine%`n, %PersonalFaxFile%
+	}
+return
+
+;--- Helper: Refresh ListBox on GUI 70 ---
+RefreshFaxBookListBox:
+	; Rebuild the tracking arrays and listbox content for the unified list
+	MgmtSource := []
+	MgmtSourceIndex := []
+	MgmtNames := []
+	MgmtNumbers := []
+	MgmtIsHeader := []
+	mgmtListBoxContent := ""
+
+	; Add personal entries that match the active request type
+	hasPersonal := 0
+	for idx, name in PersonalFaxFacilityNames {
+		if (PersonalFaxTypes[idx] != ActiveRequestType)
+			continue
+		if (hasPersonal = 0) {
+			MgmtSource.Push("")
+			MgmtSourceIndex.Push(0)
+			MgmtNames.Push("")
+			MgmtNumbers.Push("")
+			MgmtIsHeader.Push(1)
+			mgmtListBoxContent := "*****My Fax Numbers*****"
+			hasPersonal := 1
+		}
+		MgmtSource.Push("Personal")
+		MgmtSourceIndex.Push(idx)
+		MgmtNames.Push(name)
+		MgmtNumbers.Push(PersonalFaxNumbers[idx])
+		MgmtIsHeader.Push(0)
+		if (mgmtListBoxContent != "")
+			mgmtListBoxContent .= "|"
+		mgmtListBoxContent .= name . " (" . PersonalFaxNumbers[idx] . ")"
+	}
+
+	; Add facility entries
+	if (FaxFacilityNames.Length() > 0) {
+		MgmtSource.Push("")
+		MgmtSourceIndex.Push(0)
+		MgmtNames.Push("")
+		MgmtNumbers.Push("")
+		MgmtIsHeader.Push(1)
+		if (mgmtListBoxContent != "")
+			mgmtListBoxContent .= "|"
+		mgmtListBoxContent .= "*****Shared Fax Numbers*****"
+	}
+	for idx, name in FaxFacilityNames {
+		MgmtSource.Push("Facility")
+		MgmtSourceIndex.Push(idx)
+		MgmtNames.Push(name)
+		MgmtNumbers.Push(FaxNumbers[idx])
+		MgmtIsHeader.Push(0)
+		if (mgmtListBoxContent != "")
+			mgmtListBoxContent .= "|"
+		mgmtListBoxContent .= name . " (" . FaxNumbers[idx] . ")"
+	}
+
+	GuiControl, 70:, FaxBookSelection, |%mgmtListBoxContent%
+return
+
+;--- Helper: Validate fax number (10 digits, or 11 starting with 1) ---
+ValidateFaxNumber:
+	FaxValidationError := 0
+	FaxValidationMsg := ""
+	digitsOnly := RegExReplace(FaxToValidate, "[^\d]", "")
+	digitCount := StrLen(digitsOnly)
+
+	if (digitCount = 0) {
+		FaxValidationError := 1
+		FaxValidationMsg := "Fax number contains no digits. Please enter a valid fax number."
+	} else if (digitCount = 11 && SubStr(digitsOnly, 1, 1) = "1") {
+		; Valid: 11 digits starting with 1 (e.g. 1-612-555-1234)
+	} else if (digitCount = 10) {
+		; Valid: 10 digits (e.g. 612-555-1234)
+	} else {
+		FaxValidationError := 1
+		FaxValidationMsg := "Fax number must be 10 digits (or 11 starting with 1).`n`nEntered: " . FaxToValidate . "`nDigits found: " . digitCount
+	}
+return
+
+
+;############################################################################################
+;###################Load Fax Keeper URL from Config File###################################
+;############################################################################################
+
+LoadFaxKeeperURL:
+	FaxKeeperURL := ""
+
+	; Prefer W: drive if available, fall back to local OneDrive cache
+	if (WDriveAvailable = 1 && FileExist(FaxKeeperURLStorageFile)) {
+		FileReadLine, FaxKeeperURL, %FaxKeeperURLStorageFile%, 1
+	} else if FileExist(FaxKeeperURLStorageFileLocal) {
+		FileReadLine, FaxKeeperURL, %FaxKeeperURLStorageFileLocal%, 1
+	}
+
+	FaxKeeperURL := Trim(FaxKeeperURL)
+	FaxKeeperURLLoaded := 1
+return
+
+
+;############################################################################################
+;###################Share Fax Number to Fax Keeper (shared OneDrive file)###################
+;############################################################################################
+
+ShareFaxToKeeper:
+	; Load the Fax Keeper URL if not already loaded
+	if (FaxKeeperURLLoaded = 0) {
+		gosub LoadFaxKeeperURL
+	}
+
+	if (FaxKeeperURL = "") {
+		MsgBox, 262160, HELP COLLECT FAX NUMBERS, Sorry: Sharing fax numbers may not be set up correctly at your facility
+		return
+	}
+
+	; Open the shared document in Edge
+	Run, %FaxKeeperURL%
+
+	; Show splash while Edge loads the document
+	SplashTextOn, 400, 80, Fax Keeper, Please Wait. Getting ready to share fax info with the world
+
+	; Poll for the Edge tab with the document title (more reliable than WinWait when splash steals focus)
+	SetTitleMatchMode, 2
+	faxEdgeHwnd := 0
+	Loop, 40 {  ; 40 x 500ms = 20 seconds max
+		faxEdgeHwnd := WinExist("FAX_KEEPER_PENDING_CHANGES")
+		if (faxEdgeHwnd)
+			break
+		sleep 500
+	}
+	if (faxEdgeHwnd = 0) {
+		SplashTextOff
+		MsgBox, 262160, HELP COLLECT FAX NUMBERS, Sorry: there was a problem sharing the fax information.
+		return
+	}
+	; Activate the found Edge tab and give it time to fully render
+	WinActivate, ahk_id %faxEdgeHwnd%
+	sleep 2500
+	SplashTextOff
+
+	; Warn user not to touch anything during automation
+	SplashTextOn, 500, 80, PLEASE WAIT, DON'T TOUCH ANYTHING UNTIL I SAY DONE
+
+	; Re-activate browser since SplashTextOn steals focus
+	WinActivate, ahk_id %faxEdgeHwnd%
+	sleep 300
+
+	; Navigate to end of file and append the new entry
+	send {Tab}
+	sleep 500
+	send ^{End}
+	sleep 100
+	send {Enter}
+	sleep 50
+
+	; Write the fax entry in 7-field format: Name|Number|Type|Username|Action|OldName|OldNumber
+	faxKeeperLine := FaxKeeperEntryName . "|" . FaxKeeperEntryNumber . "|" . FaxKeeperEntryType . "|" . A_UserName . "|" . FaxKeeperAction . "|" . FaxKeeperOldName . "|" . FaxKeeperOldNumber
+	sendraw, %faxKeeperLine%
+	sleep 400
+
+	; Save and close the browser tab
+	send ^s
+	sleep 2000
+	send ^w
+
+	; Dismiss the warning splash
+	SplashTextOff
+
+	; Show completion splash briefly
+	SplashTextOn, 500, 80, ALL DONE, DONE.. you can resume work
+	sleep 1200
+	SplashTextOff
+
+	; Bring CPRS back to the foreground
+	gosub ActivateCPRS
+
+	if (FaxKeeperAction = "Edit")
+		MsgBox, 262208, HELP COLLECT FAX NUMBERS, Your change request has been submitted. It may take 1-2 days for the update to appear in the facility fax list.`n`nThank you for helping keep the fax list accurate!
+	else if (FaxKeeperAction = "Delete")
+		MsgBox, 262208, HELP COLLECT FAX NUMBERS, Your removal request has been submitted. It may take 1-2 days for this entry to be removed from the facility fax list.`n`nThank you for helping keep the fax list accurate!
+	else
+		MsgBox, 262208, HELP COLLECT FAX NUMBERS, Thank you! Your fax number has been shared to help your colleagues. It may take 1-2 days to appear in the facility fax list.
+return
+
+
+;############################################################################################
+;###################Email Fax Suggestion to Internal Contact (Facilitated Mode)#############
+;############################################################################################
+
+EmailFaxSuggestion:
+	; Determine the internal key for the request type
+	emailFaxReqType := (FaxKeeperEntryType = "Records") ? "MedRecords" : "Radiology"
+	emailFaxRecipient := CachedInternalEmail[emailFaxReqType]
+
+	if (emailFaxRecipient = "") {
+		MsgBox, 262160, HELP COLLECT FAX NUMBERS, Sorry — I don't have a contact email address for your facility's %FaxKeeperEntryType% coordinator.`n`nThe fax number was saved to your personal book but could not be forwarded.
+		return
+	}
+
+	try {
+		olApp := ComObjActive("Outlook.Application")
+	} catch {
+		try {
+			olApp := ComObjCreate("Outlook.Application")
+		} catch {
+			MsgBox, 262160, HELP COLLECT FAX NUMBERS, Sorry — Outlook doesn't appear to be running.`n`nThe fax number was saved to your personal book but the suggestion email could not be created.
+			return
+		}
+	}
+
+	try {
+		olMail := olApp.CreateItem(0)
+		olMail.To := emailFaxRecipient
+		olMail.Subject := "Fax Number " . FaxKeeperAction . " Request - " . FaxKeeperEntryType
+
+		; Build action-aware email body
+		if (FaxKeeperAction = "Edit") {
+			olMail.Body := "Hello,`n`nA Booster Record Retriever user is requesting the following entry be CHANGED in the facility list:`n`nOLD Entry:`nFacility: " . FaxKeeperOldName . "`nFax Number: " . FaxKeeperOldNumber . "`n`nNEW Entry:`nFacility: " . FaxKeeperEntryName . "`nFax Number: " . FaxKeeperEntryNumber . "`nType: " . FaxKeeperEntryType . "`nSubmitted by: " . A_UserName . "`n`nThank you!"
+		} else if (FaxKeeperAction = "Delete") {
+			olMail.Body := "Hello,`n`nA Booster Record Retriever user is requesting the following entry be REMOVED from the facility list:`n`nFacility: " . FaxKeeperEntryName . "`nFax Number: " . FaxKeeperEntryNumber . "`nType: " . FaxKeeperEntryType . "`nSubmitted by: " . A_UserName . "`n`nThank you!"
+		} else {
+			olMail.Body := "Hello,`n`nA Booster Record Retriever user is suggesting the following fax number be ADDED to the facility list:`n`nFacility: " . FaxKeeperEntryName . "`nFax Number: " . FaxKeeperEntryNumber . "`nType: " . FaxKeeperEntryType . "`nSubmitted by: " . A_UserName . "`n`nThank you!"
+		}
+		olMail.Display
+	} catch {
+		MsgBox, 262160, HELP COLLECT FAX NUMBERS, Sorry — there was a problem creating the suggestion email.`n`nThe fax number was saved to your personal book but the email could not be created.
+		return
+	}
+
+	emailActionVerb := (FaxKeeperAction = "Edit") ? "change" : (FaxKeeperAction = "Delete") ? "removal" : "addition"
+	MsgBox, 262208, HELP COLLECT FAX NUMBERS, I created an email to your facility's %FaxKeeperEntryType% coordinator requesting a fax number %emailActionVerb%.`n`nPlease review and click SEND on that email.`n`nChanges may take 1-2 days to take effect.`n`nThank you for helping keep the fax list accurate!
+return
+
+
+;############################################################################################
+;###################Check If Current User Is the Fax Keeper#################################
+;############################################################################################
+
+CheckIfFaxKeeper:
+	IsFaxKeeper := 0
+
+	; Only check if W: drive is available (identity file lives on W:)
+	if (WDriveAvailable != 1) {
+		gosub CheckWDrive
+	}
+	if (WDriveAvailable != 1) {
+		return
+	}
+
+	if !FileExist(FaxKeeperIdentityFile) {
+		return
+	}
+
+	; Read all lines: each line format is username|email
+	Loop, Read, %FaxKeeperIdentityFile%
+	{
+		faxKeeperLine := Trim(A_LoopReadLine)
+		if (faxKeeperLine = "")
+			continue
+
+		; Parse the username (before the first pipe)
+		StringSplit, fkParts, faxKeeperLine, |
+		faxKeeperUsername := Trim(fkParts1)
+
+		; Compare case-insensitively with current user
+		if (faxKeeperUsername = A_UserName) {
+			IsFaxKeeper := 1
+			return
+		}
+	}
+return
+
+
+;############################################################################################
+;###################Load Fax Keeper Collection File Path from W: Config####################
+;############################################################################################
+
+LoadFaxKeeperCollectionPath:
+	FaxKeeperCollectionFile := ""
+
+	; W: drive must be available (CheckIfFaxKeeper already confirmed this)
+	if !FileExist(FaxKeeperCollectionConfigFile) {
+		return
+	}
+
+	; Read the template path (e.g. C:\Users\SomeUser\Department of Veterans Affairs\Fax Keepers - Fax Keepers\FAX_KEEPER_PENDING_CHANGES.txt)
+	FileReadLine, fkTemplatePath, %FaxKeeperCollectionConfigFile%, 1
+	fkTemplatePath := Trim(fkTemplatePath)
+	if (fkTemplatePath = "") {
+		return
+	}
+
+	; Swap the username in the path with the current logged-in user
+	; Template has: C:\Users\<someone>\Department...  ->  C:\Users\<A_UserName>\Department...
+	FaxKeeperCollectionFile := RegExReplace(fkTemplatePath, "(?i)C:\\Users\\[^\\]+\\", "C:\Users\" . A_UserName . "\")
+return
+
+
+;############################################################################################
+;###################Sweep Fax Keeper Collection File into W: Drive Masters##################
+;############################################################################################
+
+SweepFaxKeeperFile:
+	; Skip if collection file path was not loaded from config
+	if (FaxKeeperCollectionFile = "") {
+		if (FaxSweepErrorNotified = 0) {
+			FaxSweepErrorNotified := 1
+			MsgBox, 262192, BOOSTER FAX KEEPER, You are a Booster Fax Keeper. The automatic sweep of fax number changes failed because:`n`nThe path to the pending fax changes file could not be loaded from the config file: %FaxKeeperCollectionConfigFile%`n`nThis message will only appear once. The sweep will keep retrying in the background.
+		}
+		return
+	}
+
+	; Ensure W: drive is available (needed to write to master fax files)
+	if (WDriveAvailable != 1) {
+		gosub CheckWDrive
+	}
+	if (WDriveAvailable != 1) {
+		if (FaxSweepErrorNotified = 0) {
+			FaxSweepErrorNotified := 1
+			MsgBox, 262192, BOOSTER FAX KEEPER, You are a Booster Fax Keeper. The automatic sweep of fax number changes failed because:`n`nThe W: drive is not available.`n`nThis message will only appear once. The sweep will keep retrying in the background.
+		}
+		return
+	}
+
+	; Check if the collection file exists and has content
+	if !FileExist(FaxKeeperCollectionFile) {
+		if (FaxSweepErrorNotified = 0) {
+			FaxSweepErrorNotified := 1
+			MsgBox, 262192, BOOSTER FAX KEEPER, You are a Booster Fax Keeper. The automatic sweep of fax number changes failed because:`n`nThe pending fax changes file was NOT found on your C drive (sync'd from Teams group). Please verify that you have access to the "Fax Keepers" Teams shared folder and that sync is active.`n`nExpected path: %FaxKeeperCollectionFile%`n`nThis message will only appear once. The sweep will keep retrying in the background.
+		}
+		return
+	}
+
+	FileRead, faxKeeperContents, %FaxKeeperCollectionFile%
+	faxKeeperContents := Trim(faxKeeperContents)
+	if (faxKeeperContents = "") {
+		return
+	}
+
+	sweepAddCount := 0
+	sweepEditCount := 0
+	sweepDeleteCount := 0
+	sweepSkipCount := 0
+	sweepWriteErrors := 0
+
+	; Cache W: drive master file contents (loaded once per type per sweep)
+	sweepRadMaster := ""
+	sweepMRMaster := ""
+	sweepRadMasterLoaded := 0
+	sweepMRMasterLoaded := 0
+
+	; Process each line: new format is Name|Number|Type|Username|Action|OldName|OldNumber
+	; Legacy format (3 fields): Name|Number|Type — treated as Add
+	Loop, Parse, faxKeeperContents, `n, `r
+	{
+		thisLine := Trim(A_LoopField)
+		if (thisLine = "") {
+			continue
+		}
+
+		StringSplit, sweepParts, thisLine, |
+
+		if (sweepParts0 < 3) {
+			continue  ; Malformed line
+		}
+
+		sweepName := Trim(sweepParts1)
+		sweepNumber := Trim(sweepParts2)
+		sweepType := Trim(sweepParts3)
+
+		; Parse extended fields (backward compat: default to Add if missing)
+		sweepAction := (sweepParts0 >= 5) ? Trim(sweepParts5) : "Add"
+		sweepOldName := (sweepParts0 >= 6) ? Trim(sweepParts6) : ""
+		sweepOldNumber := (sweepParts0 >= 7) ? Trim(sweepParts7) : ""
+
+		if (sweepName = "" || sweepNumber = "") {
+			continue
+		}
+
+		; Determine target master file based on type
+		if (sweepType = "Radiology") || (sweepType = "Imaging") {
+			targetFile := RT_FaxFile["Radiology"]
+			if (sweepRadMasterLoaded = 0) {
+				FileRead, sweepRadMaster, %targetFile%
+				sweepRadMasterLoaded := 1
+			}
+			sweepMasterKey := "Radiology"
+		} else if (sweepType = "MedRecords") || (sweepType = "Records") {
+			targetFile := RT_FaxFile["MedRecords"]
+			if (sweepMRMasterLoaded = 0) {
+				FileRead, sweepMRMaster, %targetFile%
+				sweepMRMasterLoaded := 1
+			}
+			sweepMasterKey := "MedRecords"
+		} else {
+			continue  ; Unknown type — skip
+		}
+
+		; Get the current master content reference
+		if (sweepMasterKey = "Radiology")
+			sweepMasterRef := sweepRadMaster
+		else
+			sweepMasterRef := sweepMRMaster
+
+		if (sweepAction = "Add") {
+			; --- ADD: append if not already present ---
+			sweepCheckLine := sweepName . "|" . sweepNumber
+			if (InStr(sweepMasterRef, sweepCheckLine)) {
+				sweepSkipCount++
+				continue
+			}
+			sweepAppendLine := sweepName . "|" . sweepNumber . "`n"
+			FileAppend, %sweepAppendLine%, %targetFile%
+			if (ErrorLevel) {
+				sweepWriteErrors++
+				continue
+			}
+			if (sweepMasterKey = "Radiology")
+				sweepRadMaster .= sweepAppendLine
+			else
+				sweepMRMaster .= sweepAppendLine
+			sweepAddCount++
+
+		} else if (sweepAction = "Edit") {
+			; --- EDIT: find old entry and replace with new ---
+			sweepOldCheck := sweepOldName . "|" . sweepOldNumber
+			if (!InStr(sweepMasterRef, sweepOldCheck)) {
+				sweepSkipCount++
+				continue  ; Old entry not found — already changed or removed
+			}
+			; Rebuild master file content: replace first matching line
+			newMasterContent := ""
+			editDone := 0
+			Loop, Parse, sweepMasterRef, `n, `r
+			{
+				masterLine := Trim(A_LoopField)
+				if (masterLine = "")
+					continue
+				if (editDone = 0 && masterLine = sweepOldCheck) {
+					newMasterContent .= sweepName . "|" . sweepNumber . "`n"
+					editDone := 1
+				} else {
+					newMasterContent .= masterLine . "`n"
+				}
+			}
+			; Safe write: write to temp file first, then replace original
+			sweepTempFile := targetFile . ".tmp"
+			FileDelete, %sweepTempFile%
+			FileAppend, %newMasterContent%, %sweepTempFile%
+			if (ErrorLevel) {
+				sweepWriteErrors++
+				continue
+			}
+			FileDelete, %targetFile%
+			FileMove, %sweepTempFile%, %targetFile%
+			if (ErrorLevel) {
+				sweepWriteErrors++
+				continue
+			}
+			if (sweepMasterKey = "Radiology")
+				sweepRadMaster := newMasterContent
+			else
+				sweepMRMaster := newMasterContent
+			sweepEditCount++
+
+		} else if (sweepAction = "Delete") {
+			; --- DELETE: find entry and remove the line ---
+			sweepDeleteCheck := sweepName . "|" . sweepNumber
+			if (!InStr(sweepMasterRef, sweepDeleteCheck)) {
+				sweepSkipCount++
+				continue  ; Entry not found — already removed
+			}
+			; Rebuild master file content: skip matching line
+			newMasterContent := ""
+			deleteDone := 0
+			Loop, Parse, sweepMasterRef, `n, `r
+			{
+				masterLine := Trim(A_LoopField)
+				if (masterLine = "")
+					continue
+				if (deleteDone = 0 && masterLine = sweepDeleteCheck) {
+					deleteDone := 1
+					continue  ; Skip this line (delete it)
+				}
+				newMasterContent .= masterLine . "`n"
+			}
+			; Safe write: write to temp file first, then replace original
+			sweepTempFile := targetFile . ".tmp"
+			FileDelete, %sweepTempFile%
+			FileAppend, %newMasterContent%, %sweepTempFile%
+			if (ErrorLevel) {
+				sweepWriteErrors++
+				continue
+			}
+			FileDelete, %targetFile%
+			FileMove, %sweepTempFile%, %targetFile%
+			if (ErrorLevel) {
+				sweepWriteErrors++
+				continue
+			}
+			if (sweepMasterKey = "Radiology")
+				sweepRadMaster := newMasterContent
+			else
+				sweepMRMaster := newMasterContent
+			sweepDeleteCount++
+		}
+	}
+
+	; If any writes failed, do NOT clear the collection file (entries will be retried next sweep)
+	if (sweepWriteErrors > 0) {
+		if (FaxSweepErrorNotified = 0) {
+			FaxSweepErrorNotified := 1
+			MsgBox, 262192, BOOSTER FAX KEEPER, You are a Booster Fax Keeper. The automatic sweep of fax number changes failed because:`n`nChanges could not be written to the master fax list on the W: drive. The W: drive may have become disconnected or you may not have write access to it.`n`nYour pending changes have been preserved and will be retried on the next sweep.`n`nThis message will only appear once. The sweep will keep retrying in the background.
+		}
+		return
+	}
+
+	; Clear the collection file after processing (only if no write errors)
+	sweepTotalProcessed := sweepAddCount + sweepEditCount + sweepDeleteCount
+	if (sweepTotalProcessed > 0 || sweepSkipCount > 0) {
+		fkFile := FileOpen(FaxKeeperCollectionFile, "w")
+		if (fkFile)
+			fkFile.Close()
+
+		ToolTip, Fax Keeper: %sweepAddCount% added`, %sweepEditCount% edited`, %sweepDeleteCount% deleted`, %sweepSkipCount% skipped
+		SetTimer, RemoveFaxKeeperTip, -3000
+	}
+	; Reset error notification flag on successful sweep so new failures get reported
+	FaxSweepErrorNotified := 0
+return
+
+RemoveFaxKeeperTip:
+	ToolTip
+return
+
+
+68EmailLocalContact:
+	activeMsgTitle := RT_MsgBoxTitle[ActiveRequestType]
+	HelpContactEmail := CachedInternalEmail[ActiveRequestType]
+	if (HelpContactEmail = "") {
+		MsgBox, 262160, %activeMsgTitle%, No local contact email is configured for this request type.
+		return
+	}
+	try {
+		olApp := ComObjActive("Outlook.Application")
+	} catch {
+		try {
+			olApp := ComObjCreate("Outlook.Application")
+		} catch {
+			MsgBox, 262160, %activeMsgTitle%, Could not connect to Outlook.`n`nPlease make sure Outlook is running.
+			return
+		}
+	}
+	try {
+		helpMail := olApp.CreateItem(0)
+		helpMail.To := HelpContactEmail
+		helpMail.Subject := RT_EmailSubjectPrefix[ActiveRequestType] . " - Help Request"
+		; Set S/MIME encryption via MAPI property
+		try {
+			helpMail.PropertyAccessor.SetProperty("http://schemas.microsoft.com/mapi/proptag/0x6E010003", 1)
+		} catch {
+		}
+		helpMail.Display
+	} catch {
+		MsgBox, 262160, %activeMsgTitle%, Failed to create the email.`n`nPlease make sure Outlook is running.
+	}
+return
+
+68CancelFax:
+68GuiClose:
+68GuiEscape:
+	Gui, 68: Destroy
 return
 
 
@@ -5588,7 +8402,7 @@ Gui, 18: Add, Text, X552 y270 w500 R2, %instru%
 
 
 ; VARIABLE TEXT FOR AMB PILOT PARTICIPANTS
-If (AmbScribePilotParticipant = 1)
+If (AnyAmbScribeParticipant = 1)
 {
 
 
@@ -6479,7 +9293,7 @@ return
     ; Restore the previous clipboard content if needed
      Clipboard := savedClipboard
 return
-*/
+
 
 
 	
@@ -6500,11 +9314,15 @@ return
   
 
 dragon: ; section for gosub that starts dragon
-
+     
 		if (AutoDragon <> 1)
 		{
 		return ; don't start dragon if user configured out of it in settings.
 		}
+		;SplashTextOn ,150 ,100, CPRS Booster, START DRAGON Manually for Now.
+		;sleep 2000
+		;SplashTextOff
+		;return
 dragonherebutoff := 0
 ; westartedDragon := 0
 ;Ifexist C:\Program Files (x86)\Nuance\Dragon Medical One 2023\SoD.exe
@@ -6907,10 +9725,10 @@ return
 +F1::
 ;;****************NOTE THIS IS NOW INSIDE OF BOOSTER LOGIC
 
-    ; Activate the window title starting with 'Vista Cprs in use by'
+    ; Activate the window title starting with 'VistA CPRS in use'
     SetTitleMatchMode, 2
   
-        Winactivate, VistA CPRS in use by
+        Winactivate, VistA CPRS in use
         MouseClick,, ,, 2
         sleep 100
         ; Send Ctrl+A to select all text and Ctrl+C to copy to clipboard
@@ -7459,6 +10277,613 @@ send !am
 	RuleString:= ""
 	Gosub logit
 	; **************end of log entry
+
+return
+
+;############################################################################################
+;#################### CTRL+ALT+W: Copy Progress Notes for AI Analysis ####################
+;############################################################################################
+
+;############################################################################################
+;#################### SUBROUTINE: Fetch All Progress Notes ####################
+;############################################################################################
+
+FetchAllNotes:
+; Note: Caller (HandleFetchData) already shows overlay with timeout
+
+; Save current clipboard
+ClipSaved := ClipboardAll
+
+; Get patient information first
+gosub Getpatientinfo
+
+; Store patient identifiers for pipe transmission
+AI_PatientSSN := reformattedSSN
+AI_PatientName := PatientName
+AI_PatientDOB := ptDOB
+AI_PatientLast4 := lastFour
+
+; Get active CPRS window
+WinGet, cprsHwnd, ID, ahk_class TfrmFrame ahk_exe CPRSChart.exe
+if (!cprsHwnd) {
+    MsgBox, 262144, CPRS Booster, CPRS not found
+    Clipboard := ClipSaved
+    return
+}
+
+; Activate CPRS and navigate to Reports tab
+WinActivate, ahk_id %cprsHwnd%
+Sleep, 200
+Send, ^r
+Sleep, 500  ; Wait for Reports tab to load
+
+; Get the Available Reports TreeView with retry logic
+treeHwnd := 0
+retryCount := 0
+Loop, 3  ; Try up to 3 times
+{
+    treeHwnd := GetAvailableReportsTreeView(cprsHwnd)
+    if (treeHwnd) {
+        break  ; Success - exit loop
+    }
+    retryCount++
+    if (retryCount < 3) {
+        Sleep, 1500  ; Wait before retry (treeview may still be painting)
+    }
+}
+
+if (!treeHwnd) {
+    MsgBox, 262144, CPRS Booster, Available Reports TreeView not found after 3 attempts
+    Clipboard := ClipSaved
+    return
+}
+
+; Create RemoteTreeView instance
+MyTV := new RemoteTreeView(treeHwnd)
+
+; Navigate: Clinical Reports -> Progress Notes -> Progress Notes
+path := ["Clinical Reports", "Progress Notes", "Progress Notes"]
+targetItem := NavigateTreePath(MyTV, path)
+
+if (targetItem) {
+    ; Select the final item
+    MyTV.SetSelection(targetItem, false)
+    Sleep, 100
+    
+    ; Press Enter to open Progress Notes
+    ControlFocus, TORTreeView1, ahk_id %cprsHwnd%
+    ControlSend, TORTreeView1, {Enter}, ahk_id %cprsHwnd%
+    Sleep, 2000  ; Wait for list to load
+    
+    ; Select appropriate lookback radio button (unless using Current Note)
+    if (lookback != "Current Note" && lookback != "") {
+        ; Map "> 2 Years" to "All Results" for CPRS
+        radioButtonText := lookback
+        if (lookback = "> 2 Years") {
+            radioButtonText := "All Results"
+        }
+        
+        ; Find and click the matching radio button
+        radioFound := false
+        Loop, 20 {  ; Check up to 20 radio buttons
+            controlName := "TRadioButton" . A_Index
+            ControlGetText, buttonText, %controlName%, ahk_id %cprsHwnd%
+            if (buttonText = radioButtonText) {
+                ControlClick, %controlName%, ahk_id %cprsHwnd%
+                radioFound := true
+                Sleep, 4000  ; Wait 4 seconds after clicking radio button
+                
+                ; Send Tab to get to notes list
+                Send, {Tab}
+                Sleep, 200
+                break
+            }
+        }
+        
+        if (!radioFound) {
+            MsgBox, 262144, CPRS Booster, Radio button not found for lookback: %lookback%
+            Clipboard := ClipSaved
+            return
+        }
+    }
+    
+    ; Select all items in Progress Notes list
+    WinActivate, ahk_id %cprsHwnd%
+    Sleep, 200
+    
+    ; Click on list to ensure focus
+    ControlClick, TCaptionListView1, ahk_id %cprsHwnd%,,,, NA x10 y10
+    Sleep, 200
+    
+    ; Send Ctrl+A to select all
+    Send, ^a
+    
+    ; Wait 3 seconds then Tab to text window
+    Sleep, 3000
+    Send, {Tab}
+    Sleep, 200
+    
+    ; Loop to copy text with retry logic
+    maxWaitTime := 60000
+    checkInterval := 3000
+    totalWaited := 0
+    listText := ""
+    
+    Loop {
+        ; Check if user cancelled
+        if (dataFetchCancelled) {
+            ToolTip  ; Clear
+            break  ; Exit loop immediately
+        }
+        
+        ; Send Left Arrow to move cursor to beginning
+        Send, {Left}
+        Sleep, 100
+        
+        ; Send Ctrl+A to select all text
+        Send, ^a
+        Sleep, 500  ; Extra time for CPRS to select all
+        
+        ; Use centralized clipboard management (ultra-conservative timing)
+        clipboardSuccess := SafeClearAndCopyClipboard(listText, 3)
+        
+        if (!clipboardSuccess) {
+            ; Clipboard operation failed
+            listText := "ERROR: Failed to copy text from CPRS. Clipboard may be locked."
+        }
+        textLength := StrLen(listText)
+        
+        ToolTip, Copying medical data: %textLength% characters (%totalWaited%ms elapsed)
+        
+        ; Exit if we have substantial text
+        if (textLength > 300) {
+            ToolTip  ; Clear
+            break
+        }
+        
+        ; Check for timeout
+        totalWaited += checkInterval
+        if (totalWaited >= maxWaitTime) {
+            ToolTip  ; Clear
+            break
+        }
+        
+        ; Wait before next attempt
+        Sleep, %checkInterval%
+    }
+    
+    ; Now medical data is in clipboard (listText variable)
+    ; Write to named pipe for Python to receive
+    if (textLength > 300) {
+        ; Build JSON data packet
+        FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
+        
+        ; Encode medical data as Base64 to avoid JSON escaping issues
+        base64Data := Base64Encode(listText)
+        
+        ; Escape patient name for JSON
+        StringReplace, escapedName, AI_PatientName, \, \\, All
+        StringReplace, escapedName, escapedName, ", \", All
+        
+        ; Build JSON structure (medical_data_b64 is Base64 encoded)
+        jsonData := "{""sentinel"": ""CPRS_BOOSTER_DATA"", ""patient"": {""ssn"": """ . AI_PatientSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . AI_PatientDOB . """, ""last4"": """ . AI_PatientLast4 . """}, ""medical_data_b64"": """ . base64Data . """, ""data_length"": " . textLength . ", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
+        
+        ; Send data through persistent pipe
+        gosub SendDataToPipe
+        
+        ; Show result and restore clipboard
+        SplashTextOff  ; Remove splash - data sent successfully
+        ToolTip, Medical data sent to AI (%textLength% chars) for patient: %AI_PatientName% (%AI_PatientLast4%), 10, 10
+        SetTimer, RemoveToolTip, 3000
+        
+        ; Restore original clipboard
+        Clipboard := ClipSaved
+        
+        ; Return to Notes tab in CPRS
+        gosub ActivateCPRS
+        Sleep, 100
+        Send, ^n
+        
+    } else {
+        MsgBox, 262144, CPRS Booster, Could not capture medical data (timeout or empty)
+        ; Restore original clipboard
+        Clipboard := ClipSaved
+    }
+} else {
+    MsgBox, 262144, CPRS Booster, Could not navigate to Progress Notes
+    ; Restore original clipboard
+    Clipboard := ClipSaved
+}
+
+return
+
+RemoveToolTip:
+SetTimer, RemoveToolTip, Off
+ToolTip
+return
+
+; Safety timer to force unblock input after 30 seconds
+; Note: Old ForceUnblockInput and BlockingGui overlay system removed
+; Now using centralized DataOverlay with dynamic timeout in HandleFetchData
+
+;############################################################################################
+;#################### CTRL+F1: Send Current Note to AI ####################
+;############################################################################################
+
+;############################################################################################
+;#################### SUBROUTINE: Fetch Current Note Only ####################
+;############################################################################################
+
+FetchCurrentNote:
+; Note: Overlay is now shown by caller (HandleFetchData)
+
+gosub ActivateCPRS
+sleep 200
+send ^n ; go to notes tab so we will get relevant TRichEdit control
+sleep 100
+; Get patient information first
+gosub Getpatientinfo
+
+; Store patient identifiers for pipe transmission
+AI_PatientSSN := reformattedSSN
+AI_PatientName := PatientName
+AI_PatientDOB := ptDOB
+AI_PatientLast4 := lastFour
+
+; Determine which window identifier to use (mirrors CheckToolbars logic)
+; Try title first, fall back to stored handle if title unstable
+if WinExist("VistA CPRS in use") {
+    winIdentifier := "VistA CPRS in use"
+} else if (CPRSWindowHandle != 0) {
+    winIdentifier := "ahk_id " . CPRSWindowHandle
+} else {
+    ToolTip, CPRS window not found
+    SetTimer, RemoveToolTip, 2000
+    return
+}
+
+; Find TRichEdit control that contains note indicators (Local Title, Visit, etc.)
+noteText := ""
+foundNote := false
+
+; First pass: Try ControlGetText on TRichEdit1 through TRichEdit10
+Loop, 10
+{
+    currentControl := "TRichEdit" . A_Index
+    ControlGetText, tempText, %currentControl%, %winIdentifier%
+    
+    ; Check if this control contains note indicators (case-insensitive)
+    ; Accept: "Local Title:", "Visit:", or "Vst:"
+    if (ErrorLevel = 0 && tempText != "" && (InStr(tempText, "Local Title:") || InStr(tempText, "Visit:") || InStr(tempText, "Vst:")))
+    {
+        noteText := tempText
+        foundNote := true
+        break  ; Found the note, stop searching
+    }
+}
+
+; Second pass: If not found, try clipboard method on TRichEdit4 (unsigned notes)
+if (!foundNote)
+{
+    ; Save current clipboard (SafeClearAndCopyClipboard will handle clearing and copying)
+    ClipSaved := ClipboardAll
+    
+    currentControl := "TRichEdit4"
+    
+    ; Get control position and calculate center (like 4-year summary approach)
+    ControlGetPos, cx, cy, cw, ch, %currentControl%, %winIdentifier%
+    
+    if (cx != "" && cy != "")
+    {
+        ; Calculate center of control
+        clickX := cx + (cw // 2)
+        clickY := cy + (ch // 2)
+        
+        ; Activate window and click at center with coordinates
+        WinActivate, %winIdentifier%
+        Sleep, 100
+        ControlClick, X%clickX% Y%clickY%, %winIdentifier%
+        Sleep, 100
+        
+        ; Also try regular click as backup (calculate screen coordinates)
+        WinGetPos, winX, winY, , , %winIdentifier%
+        screenX := winX + clickX
+        screenY := winY + clickY
+        Click, %screenX%, %screenY%
+        Sleep, 200
+        
+        ; Select all text using Send (not ControlSend)
+        Send, ^a
+        Sleep, 500  ; Extra time for selection
+        
+        ; SafeClearAndCopyClipboard will clear clipboard, send ^c, and wait for data
+        clipboardSuccess := SafeClearAndCopyClipboard(tempText, 3)
+        
+        ; Accept clipboard text if we got any substantial content (>50 chars)
+        ; Don't require note indicators since unsigned notes may format differently
+        if (clipboardSuccess && StrLen(tempText) > 50)
+        {
+            noteText := tempText
+            foundNote := true
+            ; Deselect text to prevent accidental deletion
+            Send, {Left}
+        }
+    }
+    
+    ; Restore clipboard
+    Clipboard := ClipSaved
+    ClipSaved := ""
+}
+
+; Check if we got any text
+if (!foundNote || noteText = "")
+{
+    ToolTip, No note found in any TRichEdit control
+    SetTimer, RemoveToolTip, 2000
+    return
+}
+
+; Check if we have enough text
+textLength := StrLen(noteText)
+if (textLength < 100)
+{
+    ToolTip, Note text too short
+    SetTimer, RemoveToolTip, 2000
+    return
+}
+
+; Build JSON data packet
+FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
+
+; Encode medical data as Base64 to avoid JSON escaping issues
+base64Data := Base64Encode(noteText)
+
+; Escape patient name for JSON
+StringReplace, escapedName, AI_PatientName, \, \\, All
+StringReplace, escapedName, escapedName, ", \", All
+
+; Build JSON structure
+jsonData := "{""sentinel"": ""CPRS_BOOSTER_DATA"", ""patient"": {""ssn"": """ . AI_PatientSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . AI_PatientDOB . """, ""last4"": """ . AI_PatientLast4 . """}, ""medical_data_b64"": """ . base64Data . """, ""data_length"": " . textLength . ", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
+
+; Send data through persistent pipe
+gosub SendDataToPipe
+
+; Show result
+ToolTip, Note sent to AI (%textLength% chars) for patient: %AI_PatientName% (%AI_PatientLast4%)
+SetTimer, RemoveToolTip, 3000
+
+return
+
+;############################################################################################
+;#################### SUBROUTINE: Fetch 4-Year Health Summary ####################
+;############################################################################################
+
+FetchHealthSummary4yr:
+; Note: Caller (HandleFetchData) already shows overlay with timeout
+
+; Save current clipboard
+ClipSaved := ClipboardAll
+
+; Get patient information first
+gosub Getpatientinfo
+
+; Store patient identifiers for pipe transmission
+AI_PatientSSN := reformattedSSN
+AI_PatientName := PatientName
+AI_PatientDOB := ptDOB
+AI_PatientLast4 := lastFour
+
+; Get active CPRS window
+WinGet, cprsHwnd, ID, ahk_class TfrmFrame ahk_exe CPRSChart.exe
+if (!cprsHwnd) {
+    MsgBox, 262144, CPRS Booster, CPRS not found
+    Clipboard := ClipSaved
+    return
+}
+
+; Activate CPRS and navigate to Reports tab
+WinActivate, ahk_id %cprsHwnd%
+Sleep, 200
+Send, ^r
+Sleep, 500  ; Wait for Reports tab to load
+
+; Get the Available Reports TreeView with retry logic
+treeHwnd := 0
+retryCount := 0
+Loop, 3  ; Try up to 3 times
+{
+    treeHwnd := GetAvailableReportsTreeView(cprsHwnd)
+    if (treeHwnd) {
+        break  ; Success - exit loop
+    }
+    retryCount++
+    if (retryCount < 3) {
+        Sleep, 1500  ; Wait before retry (treeview may still be painting)
+    }
+}
+
+if (!treeHwnd) {
+    MsgBox, 262144, CPRS Booster, Available Reports TreeView not found after 3 attempts
+    Clipboard := ClipSaved
+    return
+}
+
+; Create RemoteTreeView instance
+MyTV := new RemoteTreeView(treeHwnd)
+
+; Navigate: Clinical Reports -> Health Summary -> Remote Clinical Data (4y)
+path := ["Health Summary", "Remote Clinical Data (4y)"]
+targetItem := NavigateTreePath(MyTV, path)
+
+if (targetItem) {
+    ; Select the final item
+    MyTV.SetSelection(targetItem, false)
+    Sleep, 100
+    
+    ; Press Enter to open Health Summary
+    ControlFocus, TORTreeView1, ahk_id %cprsHwnd%
+    ControlSend, TORTreeView1, {Enter}, ahk_id %cprsHwnd%
+    Sleep, 4000  ; Wait for health summary to load
+    
+    ; Find Shell Embedding control to click on
+    WinGet, controlList, ControlList, ahk_id %cprsHwnd%
+    shellControlName := ""
+    
+    Loop, Parse, controlList, `n
+    {
+        currentControl := A_LoopField
+        if InStr(currentControl, "Shell Embedding") {
+            shellControlName := currentControl
+            break
+        }
+    }
+    
+    ; Check if Shell Embedding control was found - fail fast if not
+    if (shellControlName = "") {
+        MsgBox, 262144, CPRS Booster, Could not find Shell Embedding control for health summary
+        Clipboard := ClipSaved
+        return
+    }
+    
+    ; Get control position and click center
+    ControlGetPos, cx, cy, cw, ch, %shellControlName%, ahk_id %cprsHwnd%
+    
+    if (cx = "" || cy = "") {
+        MsgBox, 262144, CPRS Booster, Could not get Shell Embedding control position
+        Clipboard := ClipSaved
+        return
+    }
+    
+    ; Calculate center of control for clicking
+    clickX := cx + (cw // 2)
+    clickY := cy + (ch // 2)
+    
+    ; Use ControlClick with client coordinates (works through overlay)
+    WinActivate, ahk_id %cprsHwnd%
+    Sleep, 100
+    ControlClick, X%clickX% Y%clickY%, ahk_id %cprsHwnd%
+    Sleep, 200
+    
+    ; Extract text using clipboard copy with retry logic
+    summaryText := ""
+    foundSummary := false
+    maxWaitTime := 30000  ; 30 seconds max (within 60-second overall timeout)
+    checkInterval := 4000  ; Check every 4 seconds
+    totalWaited := 0
+    attemptCount := 0
+    
+    ; Loop with retry logic
+    Loop {
+		; Check if user cancelled
+		if (dataFetchCancelled) {
+			ToolTip  ; Clear
+			break  ; Exit loop immediately
+		}
+		
+        ; Click on Shell Embedding control to ensure it has focus before each copy attempt
+        ; Try ControlClick first (works through banner)
+        WinActivate, ahk_id %cprsHwnd%
+        Sleep, 100
+        ControlClick, X%clickX% Y%clickY%, ahk_id %cprsHwnd%
+        Sleep, 100
+        
+        ; Also try regular click as backup (calculate screen coordinates avoiding banner)
+        WinGetPos, winX, winY, , , ahk_id %cprsHwnd%
+        screenX := winX + clickX
+        screenY := winY + clickY
+        ; Only use Click if control is below the 150px banner
+        if (cy > 150) {
+            Click, %screenX%, %screenY%
+            Sleep, 100
+        }
+        
+        ; Select all text first
+        Sleep, 200
+        Send, ^a
+        Sleep, 500  ; Extra time for CPRS to select all
+        
+        ; Use centralized clipboard management (ultra-conservative timing)
+        clipboardSuccess := SafeClearAndCopyClipboard(summaryText, 3)
+        
+        if (clipboardSuccess) {
+            textLength := StrLen(summaryText)
+            
+            ; Check if we got valid data (length > 100 and contains delimiter)
+            if (textLength > 100 && InStr(summaryText, "*** END ***  CONFIDENTIAL Remote Clinical Data")) {
+                foundSummary := true
+
+                SplashTextOn ,150 ,100, CPRS Booster, GOT IT!
+                sleep 600
+                SplashTextOff
+                
+                ToolTip, Found health summary (%textLength% chars)
+                Sleep, 500
+                ToolTip  ; Clear
+                break
+            }
+        }
+        
+        ; Update progress tooltip
+        ToolTip, Waiting for 4-year health summary to load... (%totalWaited%ms elapsed)
+        
+        ; Check for timeout
+        totalWaited += checkInterval
+        if (totalWaited >= maxWaitTime) {
+            ToolTip  ; Clear
+            break
+        }
+        
+        ; Wait before next attempt
+        Sleep, %checkInterval%
+    }
+    
+    ; Check if we got the summary text
+    if (!foundSummary || summaryText = "") {
+        MsgBox, 262144, CPRS Booster, Could not extract 4-year health summary text after %totalWaited%ms
+        ; Don't restore clipboard - leave captured text for debugging
+        return
+    }
+    
+    ; Validate text length
+    textLength := StrLen(summaryText)
+    if (textLength < 100) {
+        MsgBox, 262144, CPRS Booster, Health summary text too short (%textLength% chars)
+        ; Don't restore clipboard - leave captured text for debugging
+        return
+    }
+    
+    ; Build JSON data packet
+    FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
+    
+    ; Encode medical data as Base64 to avoid JSON escaping issues
+    base64Data := Base64Encode(summaryText)
+    
+    ; Escape patient name for JSON
+    StringReplace, escapedName, AI_PatientName, \, \\, All
+    StringReplace, escapedName, escapedName, ", \", All
+    
+    ; Build JSON structure
+    jsonData := "{""sentinel"": ""CPRS_BOOSTER_DATA"", ""patient"": {""ssn"": """ . AI_PatientSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . AI_PatientDOB . """, ""last4"": """ . AI_PatientLast4 . """}, ""medical_data_b64"": """ . base64Data . """, ""data_length"": " . textLength . ", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
+    
+    ; Send data through persistent pipe
+    gosub SendDataToPipe
+    
+    ; Restore original clipboard
+    Clipboard := ClipSaved
+    
+    ; Show result
+    ToolTip, 4-year health summary sent to AI (%textLength% chars) for patient: %AI_PatientName% (%AI_PatientLast4%)
+    SetTimer, RemoveToolTip, 3000
+    
+    ; Return to Notes tab in CPRS
+    gosub ActivateCPRS
+    Sleep, 100
+    Send, ^n
+    
+} else {
+    MsgBox, 262144, CPRS Booster, Could not navigate to Health Summary path
+    ; Don't restore clipboard
+}
 
 return
 
@@ -8013,6 +11438,48 @@ send !ag
 
 ; look at code capture from note concept
 
+	; ====== NEW: Capture note text before signing ======
+	Global noteText := ""
+	
+	; Try different TRichEdit controls (CPRS uses various ones for notes)
+	ControlGetText, noteText, TRichEdit4, VistA CPRS in use
+	if (noteText = "" || ErrorLevel)
+		ControlGetText, noteText, TRichEdit6, VistA CPRS in use
+	if (noteText = "" || ErrorLevel)
+		ControlGetText, noteText, TRichEdit3, VistA CPRS in use
+
+	
+	; For testing: Open Notepad and paste the captured text
+	/*
+
+
+	if (noteText != "") {
+		; Save old clipboard
+		oldNoteClipboard := ClipboardAll
+		
+		; Put note text on clipboard
+		Clipboard := noteText
+		ClipWait, 1
+		
+		Run, notepad.exe
+		WinWait, Untitled - Notepad, , 3
+		if !ErrorLevel {
+			WinActivate, Untitled - Notepad
+			Sleep, 200
+			Send, ^v
+			Sleep, 300
+		}
+		
+		; Restore old clipboard
+		Clipboard := oldNoteClipboard
+		oldNoteClipboard := ""
+		*/
+		
+		; Reactivate CPRS to continue with signing
+		gosub ActivateCPRS
+		Sleep, 200
+	}
+	; ====== END NEW CODE ======
 
 	send ^+g
 	
@@ -8039,7 +11506,7 @@ send !ag
 
  ;-----}
 
-   } ;-***********RIGHT 1:--------end of logic to do something besides just pound in the sig code
+   ; } ;-***********RIGHT 1:--------end of logic to do something besides just pound in the sig code
 
 
 winactivate, Sign ; Floating bar drawing may take focus off; I think there has to be a sign box right??***
@@ -8361,7 +11828,7 @@ NoteFavsArray[8] :=Array[67]
 NoteFavsArray[9] :=Array[68]
 NoteFavsArray[10] :=Array[69]
 tempNote1 :=Array[70]
-tempNote2 :=Arrays[71]
+tempNote2 :=Array[71]
 tempNote3 :=Array[72]
 tempNote4 :=Array[73]
 tempNote5 :=Array[74]
@@ -8371,7 +11838,8 @@ OneTimeAddPCPEducation :=Array[77]
 SiteSpecificDownKeysToMedOrderMenu :=Array[78]
 GotRxQOInstructions :=Array[79]
 AmbDictationDone :=Array[80]
-lastprompttype := Array[81] 
+lastprompttype := Array[81]
+OneTimeNonDragonScribeEducation := Array[82]
 
  ; msgbox, %NoShortcut%  ;
 
@@ -8569,6 +12037,7 @@ writeArray[78] := SiteSpecificDownKeysToMedOrderMenu
 writeArray[79] := GotRxQOInstructions
 writeArray[80] := AmbDictationDone
 WriteArray[81] := lastprompttype
+WriteArray[82] := OneTimeNonDragonScribeEducation
 
 
 
@@ -9144,13 +12613,6 @@ if (AutoDragon <> 1)
 return ; don't start dragon if user configured out of it in settings.
 }
 
-SplashTextOn ,300 ,100, CPRS Booster, FINISH Dragon Login in MANUALLY FOR NOW
-sleep 4000
-SplashTextOff
-
-Return
-
-
 
 ; Wait for either of the windows to appear
 WinWait, Authenticating, , 45 ; Adjust timeout as needed
@@ -9165,20 +12627,21 @@ Loop
 		; Check if the 'Authenticating' window exists
 		if WinExist("Authenticating") 
 		{
+			; Activate window FIRST so we can reliably get text and interact with it
+			WinActivate, Authenticating
+			WinWaitActive, Authenticating, , 2
+			
 			; Retrieve visible text from the 'Authenticating' window
 			WinGetText, windowText, Authenticating
 			
 			; Look for 'Home Realm Discovery' text for VA Users window
 			if InStr(windowText, "Home Realm Discovery")
 				 {
-				
+				sleep 3000
 				Gosub, VAUsers ; Call the VAUsers processing section
 				continue ; Go back to the loop to check for the PIV window
 				}
 
-
-				WinActivate, Authenticating
-				WinGetText, windowText, Authenticating
 			; Look for 'VA Identity and Access Management System' text for PIV window
 			if InStr(windowText, "VA Identity and Access Management System")
 				{		
@@ -9218,33 +12681,49 @@ Loop
 				break ; End the loop as PIV window has been processed
 				} ; End of PIV loop
 		} ; End of Look for authenticating window
+
+		If WinExist ("Dragon Medical One") 
+		{
+			; NOW CLEAR THE LAST DRAGON SCREEN
+			Winwait Dragon Medical One,,10     ; this is the last screen: the use past settings 
+			sleep 4000 ; wait for screen to load
+			
+			/*
+
+
+			coords := []
+			coords := ColorSearch("Authenticating", "0x2DC6D6", 7000 , "q2", "TR") 
+			; The line above basically just pauses us until that color is there.
+			winactivate Dragon Medical One
+			foundcolor := coords.color
+			; MsgBox, 262144, CPRS Booster, %foundcolor% 
+			; 36C8D8  color on this last page: b/c page doesn't load its content even when title present
+			
+					if (coords !=false)
+					{
+					sleep 2200
+					winactivate Dragon Medical One
+					send {tab 5}
+					sleep 60
+					winactivate Dragon Medical One
+					send {enter}
+					}
+				
+			*/
+					winactivate Dragon Medical One
+					send {tab 5}
+					sleep 60
+					winactivate Dragon Medical One
+					send {enter}
+				SplashTextOn ,300 ,100, CPRS Booster, Ok - Mouse is all yours
+				sleep 2000
+				SplashTextOff
+		}
+			break ; End the loop as Dragon Medical One window has been processed
 	} ; end of loop 
 
 
 
-; NOW CLEAR THE LAST DRAGON SCREEN
-	Winwait Dragon Medical One,,10     ; this is the last screen: the use past settings 
-	coords := []
-	coords := ColorSearch("Authenticating", "0x2DC6D6", 7000 , "q2", "TR") 
-	; The line above basically just pauses us until that color is there.
-	winactivate Dragon Medical One
-	foundcolor := coords.color
-	; MsgBox, 262144, CPRS Booster, %foundcolor% 
-	; 36C8D8  color on this last page: b/c page doesn't load its content even when title present
-	
-			if (coords !=false)
-			{
-			sleep 2200
-			winactivate Dragon Medical One
-			send {tab 5}
-			sleep 60
-			winactivate Dragon Medical One
-			send {enter}
-			}
-			
-		  SplashTextOn ,300 ,100, CPRS Booster, Ok - Mouse is all yours
-		  sleep 2000
-			SplashTextOff
 
 
  return 
@@ -9253,11 +12732,45 @@ Loop
 ; SUPPORT FUNCTIONS FOR DRAGON PROCESSING WINDOWS
  ; VA Users processing
  VAUsers:
-		; code to handle the VA Users window goes here
+		; Click left 1/3 of screen then tab once to reach button
 		winactivate Authenticating
-		sleep 50
+		WinWaitActive, Authenticating, , 5
+		
+		sleep 500  ; Time for activation to complete
+		
+		; Set coordinate mode to screen to ensure proper positioning
+		CoordMode, Mouse, Screen
+		
+		; Get window position and size
+		WinGetPos, xPos, yPos, width, height, Authenticating
+		
+		; Verify window was found
+		if (ErrorLevel)
+		{
+			; MsgBox, Failed to get window position
+			Return
+		}
+		Else
+		{
+			sleep 1000
+			; SplashTextOn ,150 ,100, CPRS Booster, Window position: X=%xPos% Y=%yPos% Width=%width% Height=%height%
+			; sleep 600
+			; SplashTextOff
+		}
+		
+		; Click on left 1/3 of the screen (vertical center)
+		clickX := xPos + (width / 3)
+		clickY := yPos + (height / 2)
+		
+		; Click directly at the calculated position
+		Click, %clickX%, %clickY%
+		sleep 300  ; Increased delay after click
+		
+		; Now tab once to get to the button
 		send {tab}
-		sleep 50
+		sleep 200  ; Increased delay after tab
+		
+		; Press enter
 		send {enter}
 		sleep 3000
  Return
@@ -11460,11 +14973,22 @@ return  ;*************************end logging
 
 Getpatientinfo:  
 
-; gosub ActivateCPRS
-WinGetText, SSVoogle, A  ; need to get patient info from CPRS
+; Read text from CPRS by handle (works even if not active window)
+WinGetText, SSVoogle, ahk_id %CPRSWindowHandle%
+
+; Initialize variables
 SensitiveInfo := ""  ; Initialize the variable to store sensitive information
 PatientName := ""    ; Initialize the variable to store the patient's name
-reformattedSSN :=""
+reformattedSSN := ""
+
+; Validate we got text from the window
+if (SSVoogle = "") {
+	; No text retrieved - window may be in system tray or inaccessible
+	TextRetrievalFailed := true
+	return
+}
+
+TextRetrievalFailed := false
 
 
 ; Use RegExMatch to find the first SSN in the SSVoogle variable
@@ -13380,11 +16904,10 @@ return ; ***************************** end of order start
 
 
 	
-  /*  ; BETA must activate
+ /*  ; BETA must activate
 
 	; -------CPRS HAS to be OPEN for this hotkey to work
-	^z::  ;----------------------ctrl-shift Z------*********************TESTING Key
-	gosub DM1_CheckColorTimer
+^z::  ;----------------------ctrl-shift Z------*********************TESTING Key
 
 Return
  */   ; BETA must activate
@@ -13567,6 +17090,8 @@ BAT:
 BUF:
 CAN:
 HVH:
+
+NYH:
 SYR:
 WNY:
 V02:
@@ -13651,7 +17176,6 @@ LYN:
 MOR:
 NOP:
 BRX:
-NYH:
 V03:
 Visn := "V03"
 CprsStartwarn := 0
@@ -14693,13 +18217,14 @@ Loop, %dotPhrasesBackupFolder%\*.bstr, R
 	; Show the number of files 'restored' in a message box
     if (filesAdded = 0)
         {
-            MsgBox, 262144, CPRS Booster, Did not find any missing dot phrases`n`n Try going to Ctrl-H and click the troubleshooting link for more ideas. 
+        MsgBox, 262144, CPRS Booster, Did not find any missing dot phrases`n`n Try going to Ctrl-H and click the troubleshooting link for more ideas. 
         }
         else
         {
         MsgBox, 262144, CPRS Booster, %filesAdded% files restored. `n`n YOU MUST RESTART CPRS Booster (double click destop icon or use your normal Booster start procedure) to use restored dot phrases.`n`n If you still see missing dot phrases, try going to Ctrl-H ---> Troubleshooting for more ideas.
        ; run, \\v23.med.va.gov\apps\GUI\Local_Site_GUI\MIN\CPRSBOOSTER\CPRSBooster.exe
         }
+	
 	
 return
 ;############################################################################################
@@ -19376,7 +22901,7 @@ LoadAndUpdatePrompts()
 
 
 ;############################################################################################
-;################Ambient Dictation Toolbar:Main#######################################
+;#############DRAGON ###Ambient Dictation Toolbar:Main#######################################
 ;############################################################################################
 
 gui64:
@@ -19403,15 +22928,21 @@ Gui, 64: Color, 0xFFFFE1
 Gui, 64: Add, Picture, x0 y0 w30 h30 gDragADGUI +BackgroundTrans, %HandGraphicPath%
 ;Gui, 64: Add, Picture, x0 y0 w30 h30 gDragADGUI +BackgroundTrans,
 Gui, 64: Add, Button, gToggleListening vToggleBtn x40 y5 w260 h25, START LISTENING/TRANSCRIBING
-Gui, 64: Add, Button, gLaunchAINote vCreateBtn x310 y5 w180 h25, CREATE AI NOTE
-Gui, 64: Add, ComboBox, vNoteType x510 y6 w350, |  ; dynamic content
-Gui, 64: Font, s8 cBlue underline
-Gui, 64: Add, Text, gOpenConfigure VConfigText x870 y8 w78 h20, Configure/Help
-Gui, 64: Font, s10, Verdana
-Gui, 64: Add, Button, gCloseGui64 vCloseBtn x960 y5 w25 h25, X
-Gui, 64: Add, Text, vListeningText x310 y8 w640 +Center +BackgroundTrans Hidden, *******************Listening*********************
+
+; Conditionally add CREATE AI NOTE button and adjust layout based on engine
+
+    ; Dragon: Show CREATE AI NOTE button (original layout)
+    Gui, 64: Add, Button, gLaunchAINote vCreateBtn x310 y5 w180 h25, CREATE AI NOTE
+    Gui, 64: Add, ComboBox, vNoteType x510 y6 w350, |  ; dynamic content
+    Gui, 64: Font, s8 cBlue underline
+    Gui, 64: Add, Text, gOpenConfigure VConfigText x870 y8 w78 h20, Configure/Help
+    Gui, 64: Font, s10, Verdana
+    Gui, 64: Add, Button, gCloseGui64 vCloseBtn x960 y5 w25 h25, X
+    Gui, 64: Add, Text, vListeningText x310 y8 w640 +Center +BackgroundTrans Hidden, *******************Listening*********************
+    guiWidth := 990
+
 LoadAndUpdatePrompts() ; this has to update control which is already there
-Gui, 64: Show, x145 y200 w990 h35, Ambient Scribe Toolbar
+Gui, 64: Show, x145 y200 w%guiWidth% h35, Ambient Scribe Toolbar
 Return
 
 OpenConfigure:
@@ -19448,58 +22979,503 @@ DragADGUI:
 PostMessage, 0xA1, 2,,, A
 Return
 
-ToggleListening:
+;############################################################################################
+;##################VA GPT Dictation Mode Toggle Function###################################
+;############################################################################################
 
+ToggleDictationMode:
+    global PromptText
+    global EdgePasteAllowed
+    global ADPrompts
+    
+    ; Get the selected note type from GUI 64's dropdown
+    GuiControlGet, SelectedNoteType, 64:, NoteType
+    
+    ; Look up the prompt for this note type, or use default if not found
+    if (SelectedNoteType != "" && ADPrompts.HasKey(SelectedNoteType)) {
+        PromptText := ADPrompts[SelectedNoteType].Prompt
+    } else {
+        PromptText := "Please summarize the following: "  ; Fallback default
+    }
+    
+	; Add sentence to the end of every prompt
+	PromptText := PromptText . " BELOW IS THE RECORDED DOCTOR-PATIENT CONVERSATION TRANSCRIPT ON WHICH YOU WILL BASE YOUR OUTPUT."
 
-		;MsgBox, 262144, CPRS Booster, %dragonNotInstalled%
-		Listening := !Listening
-		if (Listening)
-		{
-			Gui, 64: Color, FFFF00
-			GuiControl,, ToggleBtn, STOP LISTENING/TRANSCRIBING
-			GuiControl, Hide, CreateBtn
-			GuiControl, Hide, NoteType
-			GuiControl, Hide, CloseBtn
-			guicontrol, Hide, ConfigText
-			GuiControl, Show, ListeningText
-
-
-			IfWinNotExist, Booster Dictation Box
-			{
-				Gosub ListenFromScratch
-			}
-			Else ; Box is already there: user didn't hit make AI note button yet.
-				{
-					; Check if there is already transcribed text in the dictation box: DANGER of mixing pts
-					GuiControlGet, existingText, 65:, DragonAnchor
-					cleanedText := StrReplace(existingText, "+", "")
-					cleanedText := RegExReplace(cleanedText, "\s", "")
-					if (StrLen(cleanedText) > 10)
-					{
-						Gosub Gui66
-						; Gui66 will handle the user's choice and proceed accordingly
-					}
-					else
-					{
-						WinActivate, Booster Dictation Box
-						Gosub startDragonListening ; start listening
-					}
-				}	
+    ; Release all modifier keys first (prevents stuck keys)
+    Send, {Ctrl Up}{Shift Up}{Alt Up}
+    
+    ; Try to find Edge window with vagptbeta.va.gov
+    WinGet, edgeList, List, ahk_exe msedge.exe
+    
+    foundPage := false
+    Loop, %edgeList%
+    {
+        hwnd := edgeList%A_Index%
+        WinGetTitle, title, ahk_id %hwnd%
+        if (InStr(title, "VA GPT") || InStr(title, "vagptbeta")) {
+            WinActivate, ahk_id %hwnd%
+            foundPage := true
+            break
+        }
+    }
+    
+    if (!foundPage) {
+       ; run https://vagptbeta.va.gov/
+	   Run http://vagpt.va.gov
+        MsgBox, 262144, CPRS Booster,I've loaded VA GPT (behind this box). Log into VA GPT and Try Again (Click 'Start listening' again). Need VA GPT Open.
+      
+        Send, {Ctrl Up}{Shift Up}{Alt Up}  ; Release keys before returning
+        ; Keep button as START LISTENING/TRANSCRIBING on error
+        GuiControl, 64:, ToggleBtn, START LISTENING/TRANSCRIBING
+        GuiControl, 64: Enable, ToggleBtn
+        Gui, 64: Color, 0xFFFFE1
+       	GuiControl, 64: Show, CreateBtn
+        GuiControl, 64: Show, NoteType
+        GuiControl, 64: Show, CloseBtn
+        GuiControl, 64: Show, ConfigText
+        GuiControl, 64: Hide, ListeningText
+        return
+    }
+    
+    ; Wait for window to be active
+    WinWaitActive, ahk_id %hwnd%, , 2
+  
+	; Open Edge DevTools Console
+    ; Open Edge DevTools Console directly (Ctrl+Shift+J)
+    SendEvent, {Ctrl Down}{Shift Down}j{Shift Up}{Ctrl Up}
+    Sleep, 1000
+    ; Ensure all keys are released
+    Send, {Ctrl Up}{Shift Up}{Alt Up}
+	
+	Sleep, 500  ; Longer wait for potential dialog
+	Send, {left}{Enter}  ; this will clear pop up prn
+	Sleep, 300
+	/*
+    ; Open Edge DevTools Console directly (Ctrl+Shift+J or F12 then Ctrl+2)
+    SendEvent, {Ctrl Down}{Shift Down}j{Shift Up}{Ctrl Up}
+    Sleep, 500
+    
+    ; Ensure all keys are released
+    Send, {Ctrl Up}{Shift Up}{Alt Up}
+	*/
+    
+	; Allow pasting in Edge 
+		if (!EdgePasteAllowed) {
+			sleep 500
+			Send, allow pasting
+			Sleep, 200
+			Send, {Enter}  ; Press Enter to confirm (Edge may require this)
+			Sleep, 300
+			EdgePasteAllowed := true
 		}
-		else  ; listening = false = stop listening
-		{
-			Gui, 64: Color, 0xFFFFE1
-			GuiControl,, ToggleBtn, START LISTENING/TRANSCRIBING
-			GuiControl, Show, CreateBtn
-			GuiControl, Show, NoteType
-			GuiControl, Show, CloseBtn
-			GuiControl, Show, ConfigText
-			GuiControl, Hide, ListeningText
-			Gosub, StopListenting
-		}
+    
+    ; Give console time to be ready for JavaScript input
+    Sleep, 300
+    
+    ; Escape the prompt text for JavaScript (replace quotes and newlines)
+    EscapedPrompt := StrReplace(PromptText, "\", "\\")
+    EscapedPrompt := StrReplace(EscapedPrompt, "'", "\'")
+    EscapedPrompt := StrReplace(EscapedPrompt, """", "\""")
+    EscapedPrompt := StrReplace(EscapedPrompt, "`n", "\n")
+    EscapedPrompt := StrReplace(EscapedPrompt, "`r", "")
+    
+    ; First JavaScript - Detect button, click it, and report which one
+    JSCode1 := "(function() {"
+    JSCode1 .= "  window.testVariable = 'SCRIPT STARTED';"
+    JSCode1 .= "  var enableBtn = document.querySelector('button[aria-label=""Enable Dictation Mode""]');"
+    JSCode1 .= "  var activeBtn = document.querySelector('button[aria-label=""Dictation Mode Active""]');"
+    JSCode1 .= "  if(enableBtn) {"
+    JSCode1 .= "    var textarea = document.querySelector('textarea[placeholder=""Type a new question...""]');"
+    JSCode1 .= "    if(textarea) {"
+    JSCode1 .= "      if(!textarea.hasAttribute('data-resized')) {"
+    JSCode1 .= "        textarea.style.height = '250px';"
+    JSCode1 .= "        textarea.setAttribute('data-resized', 'true');"
+    JSCode1 .= "      }"
+    JSCode1 .= "    }"
+    JSCode1 .= "    window.promptText = '" . EscapedPrompt . "';"
+    JSCode1 .= "    window.aggregatedContent = '';"
+    JSCode1 .= "    window.lastSavedText = '';"
+    JSCode1 .= "    window.userStoppedDictation = false;"
+    JSCode1 .= "    enableBtn.click();"
+    JSCode1 .= "    if(window.dictationObserver) { window.dictationObserver.disconnect(); }"
+    JSCode1 .= "    window.lastButtonState = 'ACTIVE';"
+    JSCode1 .= "    window.dictationObserver = new MutationObserver(function() {"
+    JSCode1 .= "      var restartBtn = document.querySelector('button[aria-label=""Enable Dictation Mode""]');"
+    JSCode1 .= "      var activeBtn = document.querySelector('button[aria-label=""Dictation Mode Active""]');"
+    JSCode1 .= "      var currentState = restartBtn ? 'ENABLE' : (activeBtn ? 'ACTIVE' : 'NONE');"
+    JSCode1 .= "      if(restartBtn && window.lastButtonState === 'ACTIVE' && currentState === 'ENABLE' && !window.userStoppedDictation) {"
+    JSCode1 .= "        window.lastButtonState = 'ENABLE';"
+    JSCode1 .= "        var textarea = document.querySelector('textarea[placeholder=""Type a new question...""]');"
+    JSCode1 .= "        if(textarea && textarea.value && textarea.value !== window.lastSavedText) {"
+    JSCode1 .= "          var textWithoutPrompt = textarea.value.replace(window.promptText, '');"
+    JSCode1 .= "          window.aggregatedContent += textWithoutPrompt + ' ';"
+    JSCode1 .= "          window.lastSavedText = textarea.value;"
+    JSCode1 .= "        }"
+    JSCode1 .= "        restartBtn.click();"
+    JSCode1 .= "        window.lastButtonState = 'ACTIVE';"
+    JSCode1 .= "      }"
+    JSCode1 .= "    });"
+    JSCode1 .= "    window.dictationObserver.observe(document, { childList: true, subtree: true });"
+    JSCode1 .= "    copy('ENABLE BUTTON CLICKED');"
+    JSCode1 .= "  } else if(activeBtn) {"
+    JSCode1 .= "    window.monitoringStarted = false;"
+    JSCode1 .= "    var textarea = document.querySelector('textarea[placeholder=""Type a new question...""]');"
+    JSCode1 .= "    if(textarea && textarea.value && window.aggregatedContent !== undefined && window.promptText) {"
+    JSCode1 .= "      var textWithoutPrompt = textarea.value.replace(window.promptText, '');"
+    JSCode1 .= "      window.aggregatedContent += textWithoutPrompt;"
+    JSCode1 .= "      var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;"
+    JSCode1 .= "      nativeInputValueSetter.call(textarea, window.promptText + window.aggregatedContent);"
+    JSCode1 .= "      textarea.dispatchEvent(new Event('input', { bubbles: true }));"
+    JSCode1 .= "      textarea.dispatchEvent(new Event('change', { bubbles: true }));"
+    JSCode1 .= "    }"
+    JSCode1 .= "    window.userStoppedDictation = true;"
+    JSCode1 .= "    if(window.dictationObserver) {"
+    JSCode1 .= "      window.dictationObserver.disconnect();"
+    JSCode1 .= "      window.dictationObserver = null;"
+    JSCode1 .= "    }"
+    JSCode1 .= "    activeBtn.click();"
+    JSCode1 .= "    var hasRealContent = window.aggregatedContent && window.aggregatedContent.trim().length > 0;"
+    JSCode1 .= "    if(!hasRealContent) {"
+    JSCode1 .= "      console.log('No dictated content detected - skipping send and AI monitoring');"
+    JSCode1 .= "      window.aiResponseReady = true;"
+    JSCode1 .= "      window.monitoringStarted = false;"
+    JSCode1 .= "      copy('NO_CONTENT_SKIP_SEND');"
+    JSCode1 .= "      return;"
+    JSCode1 .= "    }"
+    JSCode1 .= "    var sendBtn = document.querySelector('button[aria-label=""Press Enter to send message.""]');"
+    JSCode1 .= "    if(sendBtn && !window.monitoringStarted) {"
+    JSCode1 .= "      window.monitoringStarted = true;"
+    JSCode1 .= "      window.aiResponseReady = false;"
+    JSCode1 .= "      setTimeout(function() {"
+    JSCode1 .= "        sendBtn.click();"
+    JSCode1 .= "        console.log('Send button clicked, waiting for AI to start...');"
+    JSCode1 .= "        var waitForStart = setInterval(function() {"
+    JSCode1 .= "          var stopBtn = document.querySelector('button[aria-label=""Stop generating""]');"
+    JSCode1 .= "          var isVisible = stopBtn && stopBtn.offsetParent !== null;"
+    JSCode1 .= "          console.log('Waiting for AI to start... stopBtn exists:', !!stopBtn, 'visible:', isVisible);"
+    JSCode1 .= "          if (isVisible) {"
+    JSCode1 .= "            console.log('AI started generating! Now monitoring for completion...');"
+    JSCode1 .= "            clearInterval(waitForStart);"
+    JSCode1 .= "            var copyResponseInterval = setInterval(function() {"
+    JSCode1 .= "              var stopBtn = document.querySelector('button[aria-label=""Stop generating""]');"
+    JSCode1 .= "              var isVisible = stopBtn && stopBtn.offsetParent !== null;"
+    JSCode1 .= "              console.log('Checking for completion... stopBtn visible:', isVisible);"
+    JSCode1 .= "              if (!isVisible) {"
+    JSCode1 .= "                console.log('Stop button gone! Response complete.');"
+    JSCode1 .= "                clearInterval(copyResponseInterval);"
+    JSCode1 .= "                setTimeout(function() {"
+    JSCode1 .= "                  console.log('Copying response to clipboard...');"
+    JSCode1 .= "                  var assistantMessages = document.querySelectorAll('.assistantMessageContainer');"
+    JSCode1 .= "                  console.log('Found', assistantMessages.length, 'assistant messages');"
+    JSCode1 .= "                  var lastMessage = assistantMessages[assistantMessages.length - 1];"
+    JSCode1 .= "                  var textContent = '';"
+    JSCode1 .= "                  if (lastMessage) {"
+    JSCode1 .= "                    var contentElements = lastMessage.querySelectorAll('p, ol, ul');"
+    JSCode1 .= "                    console.log('Found', contentElements.length, 'content elements');"
+    JSCode1 .= "                    contentElements.forEach(function(el) {"
+    JSCode1 .= "                      textContent += el.innerText + '\\n\\n';"
+    JSCode1 .= "                    });"
+    JSCode1 .= "                  }"
+    JSCode1 .= "                  console.log('Text content length:', textContent.length);"
+    JSCode1 .= "                  window.aiResponseReady = true;"
+    JSCode1 .= "                  console.log('Flag set: window.aiResponseReady = true');"
+    JSCode1 .= "                  var notif = document.createElement('div');"
+    JSCode1 .= "                  notif.innerText = 'AI Response Ready - Copying...';"
+    JSCode1 .= "                  notif.style.cssText = 'position:fixed;top:20px;right:20px;background:#4CAF50;color:white;padding:15px 25px;border-radius:5px;font-size:16px;font-weight:bold;z-index:99999;box-shadow:0 4px 6px rgba(0,0,0,0.3);';"
+    JSCode1 .= "                  document.body.appendChild(notif);"
+    JSCode1 .= "                  setTimeout(function() { notif.remove(); }, 3000);"
+    JSCode1 .= "                }, 500);"
+    JSCode1 .= "              }"
+    JSCode1 .= "            }, 500);"
+    JSCode1 .= "            setTimeout(function() { console.log('Timeout reached, stopping monitor'); clearInterval(copyResponseInterval); }, 200000);"
+    JSCode1 .= "          }"
+    JSCode1 .= "        }, 500);"
+    JSCode1 .= "        setTimeout(function() { console.log('Start timeout reached'); clearInterval(waitForStart); }, 10000);"
+    JSCode1 .= "      }, 300);"
+    JSCode1 .= "    }"
+    JSCode1 .= "    if(window.dictationObserver) {"
+    JSCode1 .= "      window.dictationObserver.disconnect();"
+    JSCode1 .= "      window.dictationObserver = null;"
+    JSCode1 .= "    }"
+    JSCode1 .= "    window.aggregatedContent = '';"
+    JSCode1 .= "    window.lastSavedText = '';"
+    JSCode1 .= "    copy('ACTIVE BUTTON CLICKED');"
+    JSCode1 .= "  }"
+    JSCode1 .= "})();"
+    
+    ; Execute first JavaScript
+    Clipboard := JSCode1
+    Sleep, 300
+    SendEvent, {Ctrl Down}v{Ctrl Up}
+    Sleep, 100
+    Send, {Ctrl Up}{Shift Up}{Alt Up}
+    Send, {Enter}
+    Sleep, 300
+    
+    ; Get which button was clicked
+    clickedButton := Clipboard
+    
+    ; Wait for the page to update the button state
+    Sleep, 500
+    
+    ; Re-activate Edge window before second JavaScript execution
+    WinActivate, ahk_id %hwnd%
+    WinWaitActive, ahk_id %hwnd%, , 1
+    
+    ; Second JavaScript - Check which button exists now
+    JSCode2 := "(function() {"
+    JSCode2 .= "  var enableBtn = document.querySelector('button[aria-label=""Enable Dictation Mode""]');"
+    JSCode2 .= "  var activeBtn = document.querySelector('button[aria-label=""Dictation Mode Active""]');"
+    JSCode2 .= "  if(enableBtn) {"
+    JSCode2 .= "    copy('ENABLE');"
+    JSCode2 .= "  } else if(activeBtn) {"
+    JSCode2 .= "    copy('ACTIVE');"
+    JSCode2 .= "  }"
+    JSCode2 .= "})();"
+    
+    ; Execute second JavaScript
+    Clipboard := JSCode2
+    Sleep, 200
+    SendEvent, {Ctrl Down}v{Ctrl Up}
+    Sleep, 200
+    Send, {Ctrl Up}{Shift Up}{Alt Up}
+    Send, {Enter}
+    Sleep, 300
+    
+    ; Get the final button state
+    finalButton := Clipboard
+    
+    ; Check if send was skipped due to no content
+    if (finalButton = "NO_CONTENT_SKIP_SEND") {
+        SplashTextOn, 500, 50, No Content, No dictated content to send
+        Sleep, 2000
+        SplashTextOff
+        
+        ; Reset GUI to START state
+        GuiControl, 64:, ToggleBtn, START LISTENING/TRANSCRIBING
+        GuiControl, 64: Enable, ToggleBtn
+        Gui, 64: Color, 0xFFFFE1
+        GuiControl, 64: Show, CreateBtn
+        GuiControl, 64: Show, NoteType
+        GuiControl, 64: Show, CloseBtn
+        GuiControl, 64: Show, ConfigText
+        GuiControl, 64: Hide, ListeningText
+        
+        ; Close DevTools and minimize
+        SendEvent, {Ctrl Down}{Shift Down}j{Shift Up}{Ctrl Up}
+        Sleep, 200
+        Send, {Ctrl Up}{Shift Up}{Alt Up}
+        WinMinimize, ahk_id %hwnd%
+        Return
+    }
+    
+    ; Determine if click was confirmed
+    if (clickedButton = "ENABLE BUTTON CLICKED" && finalButton = "ACTIVE") {
+        clickConfirmed := "YES"
+    } else if (clickedButton = "ACTIVE BUTTON CLICKED" && finalButton = "ENABLE") {
+        clickConfirmed := "YES"
+    } else {
+        clickConfirmed := "NO"
+    }
+    
+    ; Determine status message and update GUI 64 based on final button state
+    if (finalButton = "ACTIVE") {
+        statusOutput := "LISTENING STARTED"
+        ; Update GUI 64 button to show STOP LISTENING/TRANSCRIBING
+        GuiControl, 64:, ToggleBtn, STOP LISTENING/TRANSCRIBING
+        GuiControl, 64: Enable, ToggleBtn
+        Gui, 64: Color, FFFF00
+        GuiControl, 64: Hide, CreateBtn
+        GuiControl, 64: Hide, NoteType
+        GuiControl, 64: Hide, CloseBtn
+        GuiControl, 64: Hide, ConfigText
+        GuiControl, 64: Show, ListeningText
+    } else if (finalButton = "ENABLE") {
+        statusOutput := "LISTENING STOPPED"
+        ; Update GUI 64 button to show PROCESSING and disable it
+        GuiControl, 64:, ToggleBtn, PROCESSING
+        GuiControl, 64: Disable, ToggleBtn
+        Gui, 64: Color, FFFF00
+        GuiControl, 64: Hide, CreateBtn
+        GuiControl, 64: Hide, NoteType
+        GuiControl, 64: Hide, CloseBtn
+        GuiControl, 64: Hide, ConfigText
+        GuiControl, 64: Show, ListeningText
+    } else {
+        statusOutput := "Hmmm. Something is wrong. NOT recording"
+        ; Keep button as START LISTENING/TRANSCRIBING on error
+        GuiControl, 64:, ToggleBtn, START LISTENING/TRANSCRIBING
+        GuiControl, 64: Enable, ToggleBtn
+        Gui, 64: Color, 0xFFFFE1
+        GuiControl, 64: Show, CreateBtn
+        GuiControl, 64: Show, NoteType
+        GuiControl, 64: Show, CloseBtn
+        GuiControl, 64: Show, ConfigText
+        GuiControl, 64: Hide, ListeningText
+    }
+    
+    ; If we stopped recording (and sent to AI), stay in Edge and poll for response completion
+    if (finalButton = "ENABLE") {
+        ; Show the status (Edge stays active with DevTools open)
+        SplashTextOn, 600, 50, Recording Status, %statusOutput%
+        Sleep, 1300
+        SplashTextOff
+        
+        
+        ; Wait a moment for the monitoring to start
+        Sleep, 1000
+        
+        ; Poll for AI response completion (up to 30 seconds)
+        ; DevTools is already open, so just paste and execute checks
+        Loop, 60 
+        {
+            ; Check if response is ready
+            ;JSCodeCheck := "console.clear(); copy(window.aiResponseReady || 'false');"
+            JSCodeCheck := "copy(window.aiResponseReady || 'false');"
+			
+			Clipboard := JSCodeCheck
+            Sleep, 100
+            SendEvent, {Ctrl Down}v{Ctrl Up}
+            Sleep, 100
+            Send, {Ctrl Up}{Shift Up}{Alt Up}
+            Sleep, 100
+            Send, {Enter}
+            Sleep, 200
+            
+            ; Check the flag
+            if (Clipboard = "true") {
+                ; Response is ready! Copy it using the same DevTools session
+                JSCodeCopy := "var assistantMessages = document.querySelectorAll('.assistantMessageContainer');"
+                JSCodeCopy .= "var lastMessage = assistantMessages[assistantMessages.length - 1];"
+                JSCodeCopy .= "var textContent = '';"
+                JSCodeCopy .= "if (lastMessage) {"
+                JSCodeCopy .= "  var contentElements = lastMessage.querySelectorAll('p, ol, ul');"
+                JSCodeCopy .= "  contentElements.forEach(function(el) {"
+                JSCodeCopy .= "    textContent += el.innerText + '\n\n';"
+                JSCodeCopy .= "  });"
+                JSCodeCopy .= "}"
+                JSCodeCopy .= "copy(textContent);"
+                JSCodeCopy .= "setTimeout(function() {"
+                JSCodeCopy .= "  var addConvoBtn = document.querySelector('div[aria-label=""Press Enter to add conversation.""]');"
+                JSCodeCopy .= "  if (addConvoBtn) {"
+                JSCodeCopy .= "    addConvoBtn.click();"
+                JSCodeCopy .= "  }"
+                JSCodeCopy .= "}, 1000);"
+                
+                ; Execute copy code
+                Clipboard := JSCodeCopy
+                Sleep, 100
+                SendEvent, {Ctrl Down}v{Ctrl Up}
+                Sleep, 100
+                Send, {Ctrl Up}{Shift Up}{Alt Up}
+                Send, {Enter}
+                Sleep, 300
+                
+                ; Show success message
+                SplashTextOn, 400, 50, Copy Response, AI Summary Copied to Clipboard
+                sleep 1000
+                SplashTextOff
+                
+                ; Re-enable button as START LISTENING/TRANSCRIBING and reset GUI 64
+                GuiControl, 64:, ToggleBtn, START LISTENING/TRANSCRIBING
+                GuiControl, 64: Enable, ToggleBtn
+                Gui, 64: Color, 0xFFFFE1
+                GuiControl, 64: Show, CreateBtn
+                GuiControl, 64: Show, NoteType
+                GuiControl, 64: Show, CloseBtn
+                GuiControl, 64: Show, ConfigText
+                GuiControl, 64: Hide, ListeningText
+                break
+            }
+            
+            ; Wait before next check
+            Sleep, 500
+        }
+        
+        ; If we got here without breaking, it's a timeout - re-enable button and reset GUI 64
+        GuiControl, 64:, ToggleBtn, START LISTENING/TRANSCRIBING
+        GuiControl, 64: Enable, ToggleBtn
+        Gui, 64: Color, 0xFFFFE1
+		GuiControl, 64: Show, CreateBtn
+        GuiControl, 64: Show, NoteType
+        GuiControl, 64: Show, CloseBtn
+        GuiControl, 64: Show, ConfigText
+        GuiControl, 64: Hide, ListeningText
+        
+        ; Now close DevTools and minimize Edge
+        SendEvent, {Ctrl Down}{Shift Down}j{Shift Up}{Ctrl Up}
+        Sleep, 200
+        Send, {Ctrl Up}{Shift Up}{Alt Up}
+        WinMinimize, ahk_id %hwnd%
+    } else {
+        ; For other states (ACTIVE or error), close DevTools and minimize normally
+        SendEvent, {Ctrl Down}{Shift Down}j{Shift Up}{Ctrl Up}
+        Sleep, 200
+        Send, {Ctrl Up}{Shift Up}{Alt Up}
+        WinMinimize, ahk_id %hwnd%
+        
+        ; Show the status
+        SplashTextOn, 600, 50, Recording Status, %statusOutput%
+        Sleep, 1500
+        SplashTextOff
+    }
 Return
 
-; =======================
+;############################################################################################
+;##################End VA GPT Dictation Mode Toggle########################################
+;############################################################################################
+
+ToggleListening:
+    
+        ; Use Dragon dictation engine (existing logic)
+        ;MsgBox, 262144, CPRS Booster, %dragonNotInstalled%
+        Listening := !Listening
+        if (Listening)
+        {
+            Gui, 64: Color, FFFF00
+            GuiControl,, ToggleBtn, STOP LISTENING/TRANSCRIBING
+            GuiControl, Hide, CreateBtn
+            GuiControl, Hide, NoteType
+            GuiControl, Hide, CloseBtn
+            guicontrol, Hide, ConfigText
+            GuiControl, Show, ListeningText
+
+
+            IfWinNotExist, Booster Dictation Box
+            {
+                Gosub ListenFromScratch
+            }
+            Else ; Box is already there: user didn't hit make AI note button yet.
+                {
+                    ; Check if there is already transcribed text in the dictation box: DANGER of mixing pts
+                    GuiControlGet, existingText, 65:, DragonAnchor
+                    cleanedText := StrReplace(existingText, "+", "")
+                    cleanedText := RegExReplace(cleanedText, "\s", "")
+                    if (StrLen(cleanedText) > 10)
+                    {
+                        Gosub Gui66
+                        ; Gui66 will handle the user's choice and proceed accordingly
+                    }
+                    else
+                    {
+                        WinActivate, Booster Dictation Box
+                        Gosub startDragonListening ; start listening
+                    }
+                }	
+        }
+        else  ; listening = false = stop listening
+        {
+            Gui, 64: Color, 0xFFFFE1
+            GuiControl,, ToggleBtn, START LISTENING/TRANSCRIBING
+            GuiControl, Show, CreateBtn
+            GuiControl, Show, NoteType
+            GuiControl, Show, CloseBtn
+            GuiControl, Show, ConfigText
+            GuiControl, Hide, ListeningText
+            Gosub, StopListenting
+        }
+    
+Return ; =======================
 ; GUI 66: Dictation Box Already Has Text
 ; =======================
 Gui66:
@@ -19620,7 +23596,9 @@ LaunchAINote:
 
 		Clipboard := finalText
 
-		Run, https://vagptbeta.va.gov/
+		;Run, https://vagptbeta.va.gov/
+		Run, http://vagpt.va.gov
+		
 
 		SplashTextOn ,150 ,100, CPRS Booster,  text on the CLIPBOARD
 		sleep 3000
@@ -19644,7 +23622,7 @@ Return
 
 CloseGui64:
 	Gui, 64: Destroy
-	; global lastprompttype := "" ; reset
+	; global lastprompttype := "" ; reset .... NO: this causes it to forget
 Return
 
 ; =======================
@@ -19826,3 +23804,4387 @@ Else
 	 }
 }	
 return
+
+
+
+;############################################################################################
+;###############TOOL BAR DISPLAY LOGIC##########################################	
+CheckToolbars: 
+
+; HOW THIS WORKS:
+; - Always check for "VistA CPRS in" title first - if found, capture/update the handle
+; - This ensures we get the NEW handle if CPRS closes and reopens
+; - If title not found, fall back to last known good handle (handles unstable title changes)
+; - Both toolbars position relative to the same CPRS window using the stored handle
+; - Handle is reset to 0 when the window is gone, so we look for title again
+; - No confusion with multiple CPRS windows - handle is unique to one specific window
+
+; LASTSCREEN KEY:
+
+ ;    CPRSMax
+ ;  CPRSMin
+ ;  NotCPRS
+ ; BoosterToolbar
+
+
+; gosub SaveLastActiveCPRSWindow   ; in this case: it will hold last CLICKED on active; ? we want that
+
+; First, try to find CPRS by its reliable title
+if WinExist("VistA CPRS in") {
+    ; Update/capture the handle whenever we find the title (catches CPRS restarts)
+    WinGet, CPRSWindowHandle, ID, VistA CPRS in
+    
+    ; Extract clinician name from window title for contact info
+    WinGetTitle, cprsTitle, ahk_id %CPRSWindowHandle%
+    colonPos := InStr(cprsTitle, ":")
+    parenPos := InStr(cprsTitle, "(", , colonPos)
+    if (colonPos > 0 && parenPos > colonPos) {
+        CPRSClinicianName := Trim(SubStr(cprsTitle, colonPos + 1, parenPos - colonPos - 1))
+    } else {
+        ; Fallback to username if extraction fails
+        CPRSClinicianName := A_UserName
+    }
+    
+    ; FIX: Check if CPRS is actually the ACTIVE window (not just running)
+    ; Without this, toolbars reappear even when another app is in the foreground
+    ; Also check ahk_exe CPRSChart.exe so CPRS subwindows (dialogs, encounters, orders) keep toolbars visible
+    if (!WinActive("ahk_id " . CPRSWindowHandle) && !WinActive("ahk_exe CPRSChart.exe")) {
+        ; CPRS exists but isn't active - hide toolbars unless a toolbar is active
+        if (!winactive("fxnbar") && !winactive("hyperdrivebar") && !winactive("hyperdriveSubbar") && !winactive("Booster Quick Orders") && !winactive("Ambient Scribe Toolbar") && !winactive("Booster Dictation Box") && !winactive("Booster AI Module") && !winactive("BAM:") && !winactive("BAM Quick AI")) {
+            Gui 14: Destroy
+            gui 7: destroy
+            gui 8: destroy
+            gui 28: destroy
+            Lastscreen := "notCPRS"
+            WinGetPos, CprsStartX, CprsStartY, CprsStartWidth, CprsStartHeight, ahk_id %CPRSWindowHandle%
+        } Else {
+            Lastscreen := "BoosterToolbar"
+        }
+        return
+    }
+    
+    sleep 100
+    WinGet, IsMax, MinMax, ahk_id %CPRSWindowHandle%
+} else if (CPRSWindowHandle != 0) {
+    ; Title not found, but we have a stored handle - try using it (handles title changes)
+    
+    ; First check if the window actually still exists
+    if !WinExist("ahk_id " . CPRSWindowHandle) {
+        ; Window really closed - reset handle AND hide toolbars
+        CPRSWindowHandle := 0
+        Gui 14: Destroy
+        gui 7: destroy
+        gui 8: destroy
+        gui 28: destroy
+        Lastscreen := "notCPRS"
+        return
+    }
+    
+    ; Window exists! Now check if CPRS is active or if we should hide toolbars
+    ; Also check ahk_exe CPRSChart.exe so CPRS subwindows (dialogs, encounters, orders) keep toolbars visible
+    if (!WinActive("ahk_id " . CPRSWindowHandle) && !WinActive("ahk_exe CPRSChart.exe")) {
+        ; CPRS not active - check if toolbars or exceptions are active
+        if (!winactive("fxnbar") && !winactive("hyperdrivebar") && !winactive("hyperdriveSubbar") && !winactive("Booster Quick Orders") && !winactive("Ambient Scribe Toolbar") && !winactive("Booster Dictation Box") && !winactive("Booster AI Module") && !winactive("BAM:") && !winactive("BAM Quick AI")) {
+            ; Neither CPRS nor toolbars active - HIDE toolbars but preserve handle
+            Gui 14: Destroy
+            gui 7: destroy
+            gui 8: destroy
+            gui 28: destroy
+            ; WinMinimize, Booster AI Module: Ask AI  ; Disabled - BAM windows handle themselves
+            Lastscreen := "notCPRS"
+            WinGetPos, CprsStartX, CprsStartY, CprsStartWidth, CprsStartHeight, ahk_id %CPRSWindowHandle%
+            ; DON'T reset handle - window still exists, just not focused
+        } Else {
+            Lastscreen := "BoosterToolbar"
+        }
+        return
+    }
+    ; If we get here, CPRS with our stored handle IS active
+    sleep 100
+    WinGet, IsMax, MinMax, ahk_id %CPRSWindowHandle%
+} else {
+    ; No title found and no stored handle - check if any CPRS window is active via exe
+    if WinActive("ahk_exe CPRSChart.exe") {
+        ; A CPRS subwindow is active but we have no handle - capture the main frame handle
+        WinGet, CPRSWindowHandle, ID, ahk_class TfrmFrame ahk_exe CPRSChart.exe
+        ; Don't destroy toolbars - CPRS is active via subwindow
+        return
+    }
+    if (!winactive("fxnbar") && !winactive("hyperdrivebar") && !winactive("hyperdriveSubbar") && !winactive("Booster Quick Orders") && !winactive("Ambient Scribe Toolbar") && !winactive("Booster Dictation Box") && !winactive("Booster AI Module") && !winactive("BAM:") && !winactive("BAM Quick AI")) {
+        Gui 14: Destroy
+        gui 7: destroy
+        gui 8: destroy
+        gui 28: destroy
+        ; WinMinimize, Booster AI Module: Ask AI  ; Disabled - BAM windows handle themselves
+        Lastscreen := "notCPRS"
+    } Else {
+        Lastscreen := "BoosterToolbar"
+    }
+    return
+}
+
+
+; HBO = 1 when top bar is configured to off by user
+; FBO = 1 when function bar is configured to off by user
+
+
+
+if (IsMax = 1)
+		{
+
+			lastscreen := "CPRSMax"
+			if !WinExist("fxnbar") && !(FBO = 1)  ; if function bar not there and user hasn't turned it off
+			{
+				gosub !+h ; gui 14 = function key bar
+				gosub ActivateCPRS ; 
+			}
+
+				if !WinExist("hyperdrivebar") && !(HBO = 1)  ; if hyperdrive bar not there and user hasn't turned it off
+			{
+				gosub !+z ; gui 7 = hyperdrive bar
+				gosub ActivateCPRS ; hopefully this solves both issue of focus on CPRS but not subscreen
+			}
+
+			if !WinExist("hyperdriveSubbar") && !(HBO = 1)  ; if hyperdrive bar not there and user hasn't turned it off
+			{
+				Gosub gui8 ; gui 8 = sub seven bar
+				gosub ActivateCPRS ; hopefully this solves both issue of focus on CPRS but not subscreen
+			}
+
+			; Position BAM window if it exists
+			if WinExist("Booster AI Module: Ask AI")
+			{
+				; Get CPRS window position first (need this to calculate BAM position)
+				WinGetPos, BamCprsX, BamCprsY, BamCprsWidth, BamCprsHeight, ahk_id %CPRSWindowHandle%
+				
+				; Calculate BAM position based on CPRS dimensions
+			bamX := BamCprsX + BamCprsWidth - 315  ; 15px from right edge (300px window + 15px)
+			bamY := BamCprsY + 210  ; 210px from top (avoids CPRS min/max buttons)
+			
+			; Position and show BAM (restore if minimized/hidden)
+			WinRestore, Booster AI Module: Ask AI
+			WinShow, Booster AI Module: Ask AI
+			WinMove, Booster AI Module: Ask AI,, %bamX%, %bamY%, 300, 700
+			WinSet, AlwaysOnTop, On, Booster AI Module: Ask AI
+		}
+			;WinGetPos , CPRSMaxX, CPRSMaxY, CPRSMaxWidth, CPRSMaxHeight, A   ; active window should be CPRS
+			WinGetPos, CPRSMaxX, CPRSMaxY, CPRSMaxWidth, CPRSMaxHeight, "Vista CPRS in use"
+		}
+	Else ; CPRS is active but NOT maximized
+		{
+			/*
+			SplashTextOn ,150 ,100, CPRS Booster, NOT Maxed
+			sleep 1000
+			SplashTextOff
+			*/
+			; ACTUALLY: when using 'Vista CPRS' instead of CPRS as the exe: seemed to work and don't need below
+			;    the max status to go to zero even though CPRS is still maximized and active. 
+
+			/*
+
+
+			If ((Lastscreen = "CPRSMax") || (Lastscreen = "BoosterToolbar"))  ; This could be a FALSE positive minimization due to tooltip; wait and recheck
+					{
+						loop, 4  ; Loop 8 times, each with a 1-second delay (total 8 seconds)
+						{
+							if (!WinActive("VistA CPRS in"))  ; Check if CPRS is no longer the active window
+							{
+								break  ; Exit the loop if CPRS is no longer active 
+										; continue to destroy toolbar GUIs
+							}
+							
+							sleep 1000  ; Wait for 1 second
+						}
+							
+						
+						WinGet, IsMax2, MinMax, ahk_exe CPRS
+						if (IsMax2 = 1)  ; Still maxed: ignore the first false positive
+							{
+								return
+							}
+					}
+			*/
+
+			if WinExist("fxnbar")  ; if function bar there
+					{
+							Gui 14: Destroy
+					}
+			if WinExist("hyperdrivebar")  ; if hyperdrive bar there
+					{
+							Gui 7: Destroy
+						
+					}
+			if WinExist("hyperdriveSubbar")  ; if hyperdrive bar there
+					{
+							gui 8: destroy
+					}
+			
+			; Hide BAM window when CPRS not maximized (WinMinimize works better for Tkinter windows)
+			if WinExist("Booster AI Module: Ask AI")
+					{
+							WinMinimize, Booster AI Module: Ask AI
+					}
+		}
+
+
+
+return
+
+;############################################################################################
+;###############END of TOOLBar ON/OFF logic#######################################################
+;############################################################################################
+;############################################################################################
+;############################################################################################
+
+;############################################################################################
+;############### TreeView Helper Functions for Progress Notes Extraction ##################
+;############################################################################################
+
+; SafeClearAndCopyClipboard - Ultra-conservative clipboard management to avoid CPRS lock errors
+; Clears clipboard once (not repeatedly) before copy to detect success
+; Parameters:
+;   resultVar (ByRef) - Variable to store the clipboard contents
+;   waitTimeout - Maximum seconds to wait for clipboard (default: 3)
+; Returns:
+;   1 on success, 0 on failure
+SafeClearAndCopyClipboard(ByRef resultVar, waitTimeout := 3) {
+    ; Ultra-conservative approach: Single clear, single copy attempt
+    ; Repeated clearing may trigger CPRS protection, so we only clear once
+    
+    try {
+        ; Save old clipboard content (for potential restoration or debugging)
+        ClipSaved := ClipboardAll
+        
+        ; Clear clipboard once so we can detect if copy succeeds
+        Clipboard := ""
+        Sleep, 800  ; Wait for clipboard to clear
+        
+        ; Single copy attempt
+        Send, ^c
+        Sleep, 1200  ; Extended delay to let CPRS process the copy
+        
+        ; Wait for clipboard to receive data
+        ClipWait, %waitTimeout%
+        
+        if (ErrorLevel) {
+            ; Clipboard didn't receive data within timeout
+            ; Restore old clipboard
+            Clipboard := ClipSaved
+            resultVar := ""
+            return 0
+        }
+        
+        ; Success - get the new clipboard content
+        resultVar := Clipboard
+        return 1
+        
+    } catch e {
+        ; Handle any unexpected errors
+        resultVar := ""
+        return 0
+    }
+}
+
+; Get the Available Reports TreeView
+GetAvailableReportsTreeView(cprsHwnd) {
+    WinGet, Controls, ControlList, ahk_id %cprsHwnd%
+    
+    Loop, Parse, Controls, `n
+    {
+        cont := A_LoopField
+        if (InStr(cont, "TORTreeView")) {
+            ControlGetText, contText, %cont%, ahk_id %cprsHwnd%
+            if (contText = "Available Reports") {
+                ControlGet, treeHwnd, Hwnd,, %cont%, ahk_id %cprsHwnd%
+                return treeHwnd
+            }
+        }
+    }
+    return 0
+}
+
+; Navigate through a path in the tree (array of strings)
+NavigateTreePath(tvObj, pathArray) {
+    if (!pathArray || pathArray.MaxIndex() = 0)
+        return 0
+    
+    ; Get root and find first path element
+    rootItem := tvObj.GetRoot()
+    if (!rootItem)
+        return 0
+    
+    ; Find first level item
+    currentItem := rootItem
+    found := false
+    
+    while (currentItem) {
+        itemText := tvObj.GetText(currentItem)
+        if (itemText = pathArray[1]) {
+            found := true
+            break
+        }
+        currentItem := tvObj.GetNext(currentItem)
+    }
+    
+    if (!found)
+        return 0
+    
+    ; Navigate through remaining path elements
+    Loop, % pathArray.MaxIndex() - 1
+    {
+        pathIndex := A_Index + 1
+        targetText := pathArray[pathIndex]
+        
+        ; Expand current node
+        tvObj.Expand(currentItem, true)
+        Sleep, 100
+        
+        ; Find child matching next path element
+        childItem := tvObj.GetChild(currentItem)
+        found := false
+        
+        while (childItem) {
+            childText := tvObj.GetText(childItem)
+            if (childText = targetText) {
+                currentItem := childItem
+                found := true
+                break
+            }
+            childItem := tvObj.GetNext(childItem)
+        }
+        
+        if (!found)
+            return 0
+    }
+    
+    return currentItem
+}
+
+;############################################################################################
+;#################### RemoteTreeView Class for TreeView Control Access ####################
+;############################################################################################
+
+class RemoteTreeView {
+    ; TreeView Messages
+    static TVM_GETNEXTITEM := 0x110A
+    static TVM_GETITEMA := 0x110C
+    static TVM_GETITEMW := 0x113E
+    static TVM_EXPAND := 0x1102
+    static TVM_SELECTITEM := 0x110B
+    
+    ; TreeView Item Flags
+    static TVIF_TEXT := 0x0001
+    static TVIF_HANDLE := 0x0010
+    
+    ; TreeView Item States
+    static TVIS_EXPANDED := 0x0020
+    
+    ; TVM_EXPAND flags
+    static TVE_EXPAND := 0x0002
+    
+    ; TVM_GETNEXTITEM flags
+    static TVGN_CARET := 0x0009
+    static TVGN_CHILD := 0x0004
+    static TVGN_NEXT := 0x0001
+    static TVGN_ROOT := 0x0000
+    
+    ; Memory constants
+    static PAGE_READWRITE := 0x04
+    static MEM_COMMIT := 0x1000
+    static MEM_RELEASE := 0x8000
+    static PROCESS_VM_OPERATION := 0x0008
+    static PROCESS_VM_READ := 0x0010
+    static PROCESS_VM_WRITE := 0x0020
+    static PROCESS_QUERY_INFORMATION := 0x0400
+    
+    __New(TVHwnd) {
+        this.TVHwnd := TVHwnd
+    }
+    
+    SetSelection(pItem, defaultAction := true) {
+        SendMessage, % this.TVM_SELECTITEM, % this.TVGN_CARET, %pItem%,, % "ahk_id " this.TVHwnd
+        return ErrorLevel
+    }
+    
+    GetRoot() {
+        SendMessage, % this.TVM_GETNEXTITEM, % this.TVGN_ROOT, 0,, % "ahk_id " this.TVHwnd
+        return ErrorLevel
+    }
+    
+    GetChild(pItem) {
+        SendMessage, % this.TVM_GETNEXTITEM, % this.TVGN_CHILD, %pItem%,, % "ahk_id " this.TVHwnd
+        return ErrorLevel
+    }
+    
+    GetNext(pItem := 0) {
+        if (!pItem) {
+            SendMessage, % this.TVM_GETNEXTITEM, % this.TVGN_ROOT, 0,, % "ahk_id " this.TVHwnd
+        } else {
+            SendMessage, % this.TVM_GETNEXTITEM, % this.TVGN_NEXT, %pItem%,, % "ahk_id " this.TVHwnd
+        }
+        return ErrorLevel
+    }
+    
+    Expand(pItem, DoExpand := true) {
+        flag := DoExpand ? this.TVE_EXPAND : 0x0001
+        SendMessage, % this.TVM_EXPAND, %flag%, %pItem%,, % "ahk_id " this.TVHwnd
+        return ErrorLevel
+    }
+    
+    GetText(pItem) {
+        TVM_GETITEM := A_IsUnicode ? this.TVM_GETITEMW : this.TVM_GETITEMA
+        
+        WinGet, ProcessId, PID, % "ahk_id " this.TVHwnd
+        hProcess := this.OpenProcess(this.PROCESS_VM_OPERATION | this.PROCESS_VM_READ
+                               | this.PROCESS_VM_WRITE | this.PROCESS_QUERY_INFORMATION, false, ProcessId)
+        
+        ProcessIs32Bit := A_PtrSize = 8 ? False : True
+        if (A_Is64bitOS) {
+            DllCall("Kernel32.dll\IsWow64Process", "Ptr", hProcess, "int*", WOW64)
+            if (WOW64)
+                ProcessIs32Bit := true
+        }
+        
+        Size := ProcessIs32Bit ? 60 : 80
+        
+        _tvi := this.VirtualAllocEx(hProcess, 0, Size, this.MEM_COMMIT, this.PAGE_READWRITE)
+        _txt := this.VirtualAllocEx(hProcess, 0, 256, this.MEM_COMMIT, this.PAGE_READWRITE)
+        
+        VarSetCapacity(tvi, Size, 0)
+        NumPut(this.TVIF_TEXT | this.TVIF_HANDLE, tvi, 0, "UInt")
+        if (ProcessIs32Bit) {
+            NumPut(pItem, tvi, 4, "UInt")
+            NumPut(_txt, tvi, 16, "UInt")
+            NumPut(127, tvi, 20, "UInt")
+        } else {
+            NumPut(pItem, tvi, 8, "UInt64")
+            NumPut(_txt, tvi, 24, "UInt64")
+            NumPut(127, tvi, 32, "UInt")
+        }
+        
+        VarSetCapacity(txt, 256, 0)
+        this.WriteProcessMemory(hProcess, _tvi, &tvi, Size)
+        SendMessage, %TVM_GETITEM%, 0, %_tvi%,, % "ahk_id " this.TVHwnd
+        this.ReadProcessMemory(hProcess, _txt, txt, 256)
+        this.VirtualFreeEx(hProcess, _txt, 0, this.MEM_RELEASE)
+        this.VirtualFreeEx(hProcess, _tvi, 0, this.MEM_RELEASE)
+        this.CloseHandle(hProcess)
+        return StrGet(&txt)
+    }
+    
+    OpenProcess(DesiredAccess, InheritHandle, ProcessId) {
+        return DllCall("OpenProcess", "Int", DesiredAccess, "Int", InheritHandle, "Int", ProcessId, "Ptr")
+    }
+    
+    CloseHandle(hObject) {
+        return DllCall("CloseHandle", "Ptr", hObject, "Int")
+    }
+    
+    VirtualAllocEx(hProcess, Address, Size, AllocationType, ProtectType) {
+        return DllCall("VirtualAllocEx", "Ptr", hProcess, "Ptr", Address, "UInt", Size
+                    , "UInt", AllocationType, "UInt", ProtectType, "Ptr")
+    }
+    
+    VirtualFreeEx(hProcess, Address, Size, FType) {
+        return DllCall("VirtualFreeEx", "Ptr", hProcess, "Ptr", Address, "UInt", Size, "UInt", FType, "Int")
+    }
+    
+    WriteProcessMemory(hProcess, BaseAddress, Buffer, Size, ByRef NumberOfBytesWritten := 0) {
+        return DllCall("WriteProcessMemory", "Ptr", hProcess, "Ptr", BaseAddress, "Ptr", Buffer
+                        , "UInt", Size, "UInt*", NumberOfBytesWritten, "Int")
+    }
+    
+    ReadProcessMemory(hProcess, BaseAddress, ByRef Buffer, Size, ByRef NumberOfBytesRead := 0) {
+        return DllCall("ReadProcessMemory", "Ptr", hProcess, "Ptr", BaseAddress, "Ptr", &Buffer
+                        , "UInt", Size, "UInt*", NumberOfBytesRead, "Int")
+    }
+}
+
+; Base64 encoding function for safe data transmission
+Base64Encode(ByRef InputData) {
+    static b64 := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    
+    ; Convert string to UTF-8 bytes
+    VarSetCapacity(UTF8, StrPut(InputData, "UTF-8"))
+    StrPut(InputData, &UTF8, "UTF-8")
+    dataLen := StrLen(InputData)
+    
+    ; Calculate output size
+    outputLen := Ceil(dataLen * 1.5)
+    VarSetCapacity(output, outputLen * 2)
+    
+    i := 0
+    outPos := 1
+    
+    ; Process input in 3-byte chunks
+    Loop {
+        if (i >= dataLen)
+            break
+            
+        ; Get 3 bytes (or remaining bytes)
+        b1 := NumGet(UTF8, i++, "UChar")
+        b2 := (i < dataLen) ? NumGet(UTF8, i++, "UChar") : 0
+        b3 := (i < dataLen) ? NumGet(UTF8, i++, "UChar") : 0
+        
+        ; Convert to 4 base64 characters
+        n := (b1 << 16) | (b2 << 8) | b3
+        
+        c1 := SubStr(b64, ((n >> 18) & 0x3F) + 1, 1)
+        c2 := SubStr(b64, ((n >> 12) & 0x3F) + 1, 1)
+        c3 := (i - 1 > dataLen) ? "=" : SubStr(b64, ((n >> 6) & 0x3F) + 1, 1)
+        c4 := (i > dataLen) ? "=" : SubStr(b64, (n & 0x3F) + 1, 1)
+        
+        output .= c1 . c2 . c3 . c4
+    }
+    
+    return output
+}
+
+;###                                                                                      ###
+;###              NURSING BOOSTER - Converted from AHK v2 to v1                           ###
+;###              CPRS Reminder Template Toolbar (merged into CPRSBooster)                 ###
+;###                                                                                      ###
+;###  Saves/applies checkbox templates to CPRS reminder dialogues.                        ###
+;###  Fill out an assessment once, save it, one-click replay next time.                   ###
+;###                                                                                      ###
+;###  SAFETY: Clicks checkboxes only. Never clicks OK, Finish, or Submit.                ###
+;###  The nurse always reviews and submits manually.                                      ###
+;###                                                                                      ###
+;############################################################################################
+;############################################################################################
+;############################################################################################
+
+
+;============================================================================================
+; NURSING BOOSTER DROPDOWN HANDLER (on Gui 14 toolbar)
+;============================================================================================
+
+NB_DropdownAction:
+    Gui, 14:Submit, NoHide
+    if (NB_DropdownChoice = 1)  ; "Nursing Booster" header - do nothing
+    {
+        GuiControl, 14:Choose, NB_DropdownChoice, 1
+        return
+    }
+    else if (NB_DropdownChoice >= 2 && NB_DropdownChoice <= 6)  ; Quick Actions 1-5
+    {
+        hkIdx := NB_DropdownChoice - 1
+        if (hkIdx = 1)
+            NB_RunHotkeyAction(NB_HK1_Action, NB_HK1_Label)
+        else if (hkIdx = 2)
+            NB_RunHotkeyAction(NB_HK2_Action, NB_HK2_Label)
+        else if (hkIdx = 3)
+            NB_RunHotkeyAction(NB_HK3_Action, NB_HK3_Label)
+        else if (hkIdx = 4)
+            NB_RunHotkeyAction(NB_HK4_Action, NB_HK4_Label)
+        else if (hkIdx = 5)
+            NB_RunHotkeyAction(NB_HK5_Action, NB_HK5_Label)
+    }
+    else if (NB_DropdownChoice = 7)   ; Save Template
+        gosub NB_BtnSaveCurrentState
+    else if (NB_DropdownChoice = 8)   ; Load Template
+        gosub NB_BtnLoadSavedTemplate
+    else if (NB_DropdownChoice = 9)   ; Delete Template
+        gosub NB_BtnDeleteTemplate
+    else if (NB_DropdownChoice = 10)  ; Toggle Panel
+        gosub NB_TogglePanel
+    else if (NB_DropdownChoice = 11)  ; Settings
+        gosub NB_ToggleSettings
+    ; Reset dropdown back to header
+    GuiControl, 14:Choose, NB_DropdownChoice, 1
+return
+
+NB_RebuildDropdown() {
+    global NB_HK1_Label, NB_HK2_Label, NB_HK3_Label, NB_HK4_Label, NB_HK5_Label
+    newList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
+    GuiControl, 14:, NB_DropdownChoice, |%newList%
+    GuiControl, 14:Choose, NB_DropdownChoice, 1
+}
+
+
+;============================================================================================
+; NURSING BOOSTER TOGGLE PANEL (Gui 67)
+;============================================================================================
+
+NB_TogglePanel:
+    if (NB_BoosterGuiVisible = 1)
+    {
+        Gui, 67:Hide
+        NB_BoosterGuiVisible := 0
+    }
+    else
+    {
+        Gui, 67:Show
+        WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
+        NB_BoosterGuiVisible := 1
+    }
+return
+
+
+;============================================================================================
+; NURSING BOOSTER PANEL BUTTON HANDLERS
+;============================================================================================
+
+NB_PanelSave:
+    gosub NB_BtnSaveCurrentState
+return
+
+NB_PanelLoad:
+    gosub NB_BtnLoadSavedTemplate
+return
+
+NB_PanelDelete:
+    gosub NB_BtnDeleteTemplate
+return
+
+NB_PanelDump:
+    gosub NB_DumpDialogControls
+return
+
+NB_PanelSettings:
+NB_ToggleSettings:
+    if (NB_SettingsVisible) {
+        Gui, 73:Hide
+        NB_SettingsVisible := 0
+    } else {
+        NB_RefreshSettingsTplList()
+        ; Position settings panel below the booster panel
+        settingsX := 0
+        settingsY := 0
+        if (NB_BoosterGuiVisible) {
+            WinGetPos, nbPosX, nbPosY, nbPosW, nbPosH, ahk_id %NB_PanelHwnd%
+            if (nbPosX != "" && nbPosY != "" && nbPosH != "") {
+                settingsX := nbPosX
+                settingsY := nbPosY + nbPosH + 2
+            }
+        }
+        Gui, 73:Show, x%settingsX% y%settingsY%
+        NB_SettingsVisible := 1
+    }
+return
+
+NB_ShowBothBars:
+    ; Force-show top Hyperdrive bar (!+z), bottom function bar (!+h), and NursingBooster panel
+    ; Use SetTimer to avoid GUI thread context issues
+    SetTimer, NB_ShowBarsDeferred, -10
+return
+
+NB_ShowBarsDeferred:
+    ; Top bar (Hyperdrive, Gui 7/8)
+    savedHBO := HBO
+    HBO := 0
+    gosub !+z
+    HBO := savedHBO
+    ; Bottom bar (Function keys, Gui 14)
+    savedFBO := FBO
+    FBO := 0
+    gosub !+h
+    FBO := savedFBO
+return
+
+NB_AdvancedModeChanged:
+    GuiControlGet, NB_AdvancedMode, 73:, NB_AdvancedModeChk
+    gosub NB_ApplyAdvancedMode
+    gosub NB_SaveSettings
+return
+
+NB_ApplyAdvancedMode:
+    ; Show or hide advanced-only controls based on NB_AdvancedMode
+    showCmd := NB_AdvancedMode ? "Show" : "Hide"
+    ; Gui 67 (main panel): speed sliders and autosave
+    GuiControl, 67:%showCmd%, NB_SpeedOverrideChk
+    GuiControl, 67:%showCmd%, NB_MainSpeedSlider
+    GuiControl, 67:%showCmd%, NB_MainSpeedLabel
+    GuiControl, 67:%showCmd%, NB_LeafSpeedLbl
+    GuiControl, 67:%showCmd%, NB_LeafSpeedSlider
+    GuiControl, 67:%showCmd%, NB_LeafSpeedLabel
+    GuiControl, 67:%showCmd%, CF_AutoSaveChk
+    ; Gui 73 (settings): add data delay, dump buttons, debug logging
+    GuiControl, 73:%showCmd%, CF_AdvDelayLbl
+    GuiControl, 73:%showCmd%, CF_AddDataDelaySlider
+    GuiControl, 73:%showCmd%, CF_AddDataDelayLabel
+    GuiControl, 73:%showCmd%, CF_AdvSaveDelayLbl
+    GuiControl, 73:%showCmd%, CF_AutoSaveDelaySlider
+    GuiControl, 73:%showCmd%, CF_AutoSaveDelayLabel
+    GuiControl, 73:%showCmd%, NB_AdvDumpBtn
+    GuiControl, 73:%showCmd%, CF_AdvSpyBtn
+    GuiControl, 73:%showCmd%, NB_DebugLogChk
+    ; Resize panels only if they are currently visible (avoid showing them at startup)
+    if (NB_BoosterGuiVisible) {
+        if (NB_AdvancedMode)
+            Gui, 67:Show, w385 h218 NA
+        else
+            Gui, 67:Show, w385 h172 NA
+    }
+    if (NB_SettingsVisible) {
+        if (NB_AdvancedMode)
+            Gui, 73:Show, w290 h268 NA
+        else
+            Gui, 73:Show, w290 h170 NA
+    }
+return
+
+NB_DragPanel:
+    ; Allow dragging the panel by clicking the title bar text
+    PostMessage, 0xA1, 2, 0,, NursingBoosterPanel
+return
+
+NB_SpeedOverrideChanged:
+    GuiControlGet, NB_SpeedOverride, 67:, NB_SpeedOverrideChk
+    if (NB_SpeedOverride) {
+        GuiControl, 67:Enable, NB_MainSpeedSlider
+        GuiControl, 67:Enable, NB_LeafSpeedSlider
+    } else {
+        GuiControl, 67:Disable, NB_MainSpeedSlider
+        GuiControl, 67:Disable, NB_LeafSpeedSlider
+    }
+return
+
+NB_MainSpeedChanged:
+    GuiControlGet, NB_ApplySpeed, 67:, NB_MainSpeedSlider
+    GuiControl, 67:, NB_MainSpeedLabel, %NB_ApplySpeed% ms
+return
+
+NB_LeafSpeedChanged:
+    GuiControlGet, NB_LeafSpeed, 67:, NB_LeafSpeedSlider
+    GuiControl, 67:, NB_LeafSpeedLabel, %NB_LeafSpeed% ms
+return
+
+NB_SettingsTplChanged:
+    GuiControlGet, selectedTpl, 73:, NB_SettingsTplDDL
+    if (selectedTpl = "")
+        return
+    tplPath := NB_SettingsTplPathMap[selectedTpl]
+    if (tplPath = "")
+        return
+    tplSpeed := NB_ReadTemplateSpeed(tplPath)
+    tplLeaf := NB_ReadTemplateLeafSpeed(tplPath)
+    displayName := RegExReplace(selectedTpl, "\s*\[(NB|CF)\]$", "")
+    GuiControl, 73:, NB_TplSpeedSlider, %tplSpeed%
+    GuiControl, 73:, NB_TplSpeedLabel, %tplSpeed% ms
+    GuiControl, 73:, NB_TplLeafSlider, %tplLeaf%
+    GuiControl, 73:, NB_TplLeafLabel, %tplLeaf% ms
+    GuiControl, 73:, NB_TplSpeedStatus, Speed for: %displayName%
+return
+
+NB_TplSpeedChanged:
+    GuiControlGet, tplSpd, 73:, NB_TplSpeedSlider
+    GuiControl, 73:, NB_TplSpeedLabel, %tplSpd% ms
+return
+
+NB_TplLeafChanged:
+    GuiControlGet, tplLeafSpd, 73:, NB_TplLeafSlider
+    GuiControl, 73:, NB_TplLeafLabel, %tplLeafSpd% ms
+return
+
+NB_SaveTplSpeed:
+    GuiControlGet, selectedTpl, 73:, NB_SettingsTplDDL
+    if (selectedTpl = "") {
+        MsgBox, 48, %NB_AppTitle%, Select a template first.
+        return
+    }
+    GuiControlGet, newSpeed, 73:, NB_TplSpeedSlider
+    GuiControlGet, newLeaf, 73:, NB_TplLeafSlider
+    tplPath := NB_SettingsTplPathMap[selectedTpl]
+    if (tplPath = "") {
+        MsgBox, 48, %NB_AppTitle%, Template path not found.
+        return
+    }
+    displayName := RegExReplace(selectedTpl, "\s*\[(NB|CF)\]$", "")
+    ok1 := NB_WriteTemplateSpeed(tplPath, newSpeed)
+    ok2 := NB_WriteTemplateLeafSpeed(tplPath, newLeaf)
+    if (ok1 && ok2) {
+        GuiControl, 73:, NB_TplSpeedStatus, Saved: %newSpeed%/%newLeaf% ms for %displayName%
+    } else {
+        GuiControl, 73:, NB_TplSpeedStatus, Error saving speed!
+    }
+return
+
+CF_AddDataDelayChanged:
+    GuiControlGet, CF_AddDataDelay, 73:, CF_AddDataDelaySlider
+    GuiControl, 73:, CF_AddDataDelayLabel, %CF_AddDataDelay% ms
+    gosub NB_SaveSettings
+return
+
+CF_AutoSaveDelayChanged:
+    GuiControlGet, CF_AutoSaveDelay, 73:, CF_AutoSaveDelaySlider
+    GuiControl, 73:, CF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
+    gosub NB_SaveSettings
+return
+
+NB_DebugLogChanged:
+    GuiControlGet, chkVal, 73:, NB_DebugLogChk
+    NB_DebugLogging := chkVal
+    gosub NB_SaveSettings
+    gosub, writeit
+return
+
+73GuiClose:
+    Gui, 73:Hide
+    NB_SettingsVisible := 0
+return
+
+
+;============================================================================================
+; CP FLOWSHEETS PANEL BUTTON HANDLERS
+;============================================================================================
+
+CF_PanelSpy:
+    gosub CF_SpyDumpControls
+return
+
+CF_PanelSave:
+    gosub CF_BtnSaveTemplate
+return
+
+CF_PanelLoad:
+    gosub CF_BtnLoadTemplate
+return
+
+CF_PanelDelete:
+    gosub CF_BtnDeleteTemplate
+return
+
+CF_PanelAddData:
+    CF_ClickAddDataButton()
+return
+
+CF_ToggleAutoAdd:
+    Gui, 67:Submit, NoHide
+    global CF_ChainAddData
+    CF_ChainAddData := CF_AutoAddChk
+return
+
+CF_ToggleAutoSave:
+    Gui, 67:Submit, NoHide
+    global CF_AutoSave
+    if (CF_AutoSaveChk = 1) {
+        MsgBox, 308, CP Flowsheets - AutoSave WARNING, WARNING: AutoSave will automatically click the SAVE button in CP Flowsheets after applying a template.`n`nThis saves the entry PERMANENTLY to the patient record.`n`nAre you sure you want to enable AutoSave?
+        IfMsgBox, Yes
+        {
+            CF_AutoSave := 1
+            ToolTip, CPFS AutoSave ENABLED - Save will be clicked automatically
+            SetTimer, NB_ClearToolTip, -3000
+        }
+        else
+        {
+            CF_AutoSave := 0
+            GuiControl, 67:, CF_AutoSaveChk, 0
+        }
+    } else {
+        CF_AutoSave := 0
+        ToolTip, CPFS AutoSave disabled
+        SetTimer, NB_ClearToolTip, -2000
+    }
+return
+
+
+;============================================================================================
+; QUICK ACTION HOTKEY BUTTON HANDLERS
+;============================================================================================
+
+NB_HK1_Run:
+    NB_RunHotkeyAction(NB_HK1_Action, "Quick 1")
+return
+
+NB_HK2_Run:
+    NB_RunHotkeyAction(NB_HK2_Action, "Quick 2")
+return
+
+NB_HK3_Run:
+    NB_RunHotkeyAction(NB_HK3_Action, "Quick 3")
+return
+
+NB_HK4_Run:
+    NB_RunHotkeyAction(NB_HK4_Action, "Quick 4")
+return
+
+NB_HK5_Run:
+    NB_RunHotkeyAction(NB_HK5_Action, "Quick 5")
+return
+
+NB_RunHotkeyAction(action, slotName) {
+    global NB_TemplateDir, CF_TemplateDir, NB_AppTitle
+    if (action = "") {
+        ToolTip, %slotName% not configured - click [...] to set up
+        SetTimer, NB_ClearToolTip, -2000
+        return
+    }
+    ; Parse action type: "nb_template:Name", "cf_template:Name"
+    if (RegExMatch(action, "^nb_template:(.+)$", m)) {
+        NB_ApplyNamedTemplate(m1)
+    }
+    else if (RegExMatch(action, "^cf_template:(.+)$", m)) {
+        templatePath := CF_TemplateDir . "\" . m1 . ".json"
+        if (FileExist(templatePath)) {
+            if (CF_ChainAddData) {
+                CF_ClickAddDataButton()
+                Loop, 20 {
+                    Sleep, 250
+                    if (CF_FindAddDataWindow())
+                        break
+                }
+                Sleep, %CF_AddDataDelay%
+            }
+            CF_ApplyTemplate(templatePath)
+        } else {
+            MsgBox, 48, %NB_AppTitle%, CPFS template "%m1%" not found.`n`nSave a template with that name using CPFS Save first.
+        }
+    }
+    else {
+        ToolTip, Unknown action: %action%
+        SetTimer, NB_ClearToolTip, -2000
+    }
+}
+
+;============================================================================================
+; QUICK ACTION SETUP DIALOG (Gui 71)
+;============================================================================================
+
+NB_HK_Setup:
+    global NB_HK1_Action, NB_HK2_Action, NB_HK3_Action, NB_HK4_Action, NB_HK5_Action
+    global NB_HK1_Label, NB_HK2_Label, NB_HK3_Label, NB_HK4_Label, NB_HK5_Label
+    global NB_TemplateDir, CF_TemplateDir
+
+    ; Build list of available actions
+    actionList := "-- None --|"
+
+    ; NB templates
+    Loop, Files, %NB_TemplateDir%\*.json
+    {
+        fname := StrReplace(A_LoopFileName, ".json", "")
+        actionList .= "NB Template: " . fname . "|"
+    }
+
+    ; CF templates
+    Loop, Files, %CF_TemplateDir%\*.json
+    {
+        fname := StrReplace(A_LoopFileName, ".json", "")
+        actionList .= "CPFS Template: " . fname . "|"
+    }
+
+    Gui, 71:Destroy
+    Gui, 71:+AlwaysOnTop +ToolWindow
+    Gui, 71:Color, F8F8F8
+    Gui, 71:Font, s9 Bold, Segoe UI
+    Gui, 71:Add, Text, x10 y10 w380, Quick Action Button Setup
+    Gui, 71:Font, s8 Norm, Segoe UI
+
+    ; Slot 1
+    Gui, 71:Add, Text, x10 y40 w50, Slot 1:
+    Gui, 71:Add, Edit, x65 y38 w100 h22 vNB_HKSetup_L1, %NB_HK1_Label%
+    Gui, 71:Add, DropDownList, x170 y38 w220 vNB_HKSetup_A1, %actionList%
+    NB_HKSetupSelectAction("NB_HKSetup_A1", NB_HK1_Action)
+
+    ; Slot 2
+    Gui, 71:Add, Text, x10 y68 w50, Slot 2:
+    Gui, 71:Add, Edit, x65 y66 w100 h22 vNB_HKSetup_L2, %NB_HK2_Label%
+    Gui, 71:Add, DropDownList, x170 y66 w220 vNB_HKSetup_A2, %actionList%
+    NB_HKSetupSelectAction("NB_HKSetup_A2", NB_HK2_Action)
+
+    ; Slot 3
+    Gui, 71:Add, Text, x10 y96 w50, Slot 3:
+    Gui, 71:Add, Edit, x65 y94 w100 h22 vNB_HKSetup_L3, %NB_HK3_Label%
+    Gui, 71:Add, DropDownList, x170 y94 w220 vNB_HKSetup_A3, %actionList%
+    NB_HKSetupSelectAction("NB_HKSetup_A3", NB_HK3_Action)
+
+    ; Slot 4
+    Gui, 71:Add, Text, x10 y124 w50, Slot 4:
+    Gui, 71:Add, Edit, x65 y122 w100 h22 vNB_HKSetup_L4, %NB_HK4_Label%
+    Gui, 71:Add, DropDownList, x170 y122 w220 vNB_HKSetup_A4, %actionList%
+    NB_HKSetupSelectAction("NB_HKSetup_A4", NB_HK4_Action)
+
+    ; Slot 5
+    Gui, 71:Add, Text, x10 y152 w50, Slot 5:
+    Gui, 71:Add, Edit, x65 y150 w100 h22 vNB_HKSetup_L5, %NB_HK5_Label%
+    Gui, 71:Add, DropDownList, x170 y150 w220 vNB_HKSetup_A5, %actionList%
+    NB_HKSetupSelectAction("NB_HKSetup_A5", NB_HK5_Action)
+
+    Gui, 71:Add, Button, x110 y185 w90 h28 gNB_HKSetup_Save Default, Save
+    Gui, 71:Add, Button, x210 y185 w90 h28 gNB_HKSetup_Cancel, Cancel
+    Gui, 71:Show, w400 h225, Quick Action Setup
+return
+
+NB_HKSetupSelectAction(ctrlName, currentAction) {
+    ; Convert stored action back to display text for dropdown selection
+    displayText := "-- None --"
+    if (RegExMatch(currentAction, "^nb_template:(.+)$", m))
+        displayText := "NB Template: " . m1
+    else if (RegExMatch(currentAction, "^cf_template:(.+)$", m))
+        displayText := "CPFS Template: " . m1
+    GuiControl, 71:ChooseString, %ctrlName%, %displayText%
+}
+
+NB_HKSetup_Save:
+    Gui, 71:Submit
+    global NB_HK1_Label, NB_HK1_Action, NB_HK2_Label, NB_HK2_Action
+    global NB_HK3_Label, NB_HK3_Action, NB_HK4_Label, NB_HK4_Action
+    global NB_HK5_Label, NB_HK5_Action
+
+    ; Convert display text back to action strings
+    NB_HK1_Label := NB_HKSetup_L1
+    NB_HK1_Action := NB_HKParseActionChoice(NB_HKSetup_A1)
+    NB_HK2_Label := NB_HKSetup_L2
+    NB_HK2_Action := NB_HKParseActionChoice(NB_HKSetup_A2)
+    NB_HK3_Label := NB_HKSetup_L3
+    NB_HK3_Action := NB_HKParseActionChoice(NB_HKSetup_A3)
+    NB_HK4_Label := NB_HKSetup_L4
+    NB_HK4_Action := NB_HKParseActionChoice(NB_HKSetup_A4)
+    NB_HK5_Label := NB_HKSetup_L5
+    NB_HK5_Action := NB_HKParseActionChoice(NB_HKSetup_A5)
+
+    ; Update button labels on panel
+    GuiControl, 67:, NB_HK1_Btn, %NB_HK1_Label%
+    GuiControl, 67:, NB_HK2_Btn, %NB_HK2_Label%
+    GuiControl, 67:, NB_HK3_Btn, %NB_HK3_Label%
+    GuiControl, 67:, NB_HK4_Btn, %NB_HK4_Label%
+    GuiControl, 67:, NB_HK5_Btn, %NB_HK5_Label%
+
+    ; Rebuild dropdown on bottom bar to reflect new quick action labels
+    NB_RebuildDropdown()
+
+    ; Save to file
+    gosub NB_SaveHotkeyConfig
+    Gui, 71:Destroy
+    ToolTip, Quick actions saved
+    SetTimer, NB_ClearToolTip, -2000
+return
+
+NB_HKSetup_Cancel:
+    Gui, 71:Destroy
+return
+
+NB_HKParseActionChoice(displayText) {
+    ; Convert dropdown display text to stored action string
+    if (displayText = "-- None --" || displayText = "")
+        return ""
+    if (RegExMatch(displayText, "^NB Template: (.+)$", m))
+        return "nb_template:" . m1
+    if (RegExMatch(displayText, "^CPFS Template: (.+)$", m))
+        return "cf_template:" . m1
+    return ""
+}
+
+;============================================================================================
+; QUICK ACTION CONFIG SAVE/LOAD
+;============================================================================================
+
+NB_LoadHotkeyConfig:
+    global NB_HotkeyConfigPath
+    global NB_HK1_Label, NB_HK1_Action, NB_HK2_Label, NB_HK2_Action
+    global NB_HK3_Label, NB_HK3_Action, NB_HK4_Label, NB_HK4_Action
+    global NB_HK5_Label, NB_HK5_Action
+
+    if (!FileExist(NB_HotkeyConfigPath))
+        return
+
+    FileRead, hkJson, %NB_HotkeyConfigPath%
+    if (hkJson = "")
+        return
+
+    ; Parse each slot with regex (guard against empty labels — they break dropdown indexing)
+    if (RegExMatch(hkJson, """label1"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
+        NB_HK1_Label := m1
+    if (RegExMatch(hkJson, """action1"":\s*""((?:[^""\\]|\\.)*)""", m))
+        NB_HK1_Action := m1
+    if (RegExMatch(hkJson, """label2"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
+        NB_HK2_Label := m1
+    if (RegExMatch(hkJson, """action2"":\s*""((?:[^""\\]|\\.)*)""", m))
+        NB_HK2_Action := m1
+    if (RegExMatch(hkJson, """label3"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
+        NB_HK3_Label := m1
+    if (RegExMatch(hkJson, """action3"":\s*""((?:[^""\\]|\\.)*)""", m))
+        NB_HK3_Action := m1
+    if (RegExMatch(hkJson, """label4"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
+        NB_HK4_Label := m1
+    if (RegExMatch(hkJson, """action4"":\s*""((?:[^""\\]|\\.)*)""", m))
+        NB_HK4_Action := m1
+    if (RegExMatch(hkJson, """label5"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
+        NB_HK5_Label := m1
+    if (RegExMatch(hkJson, """action5"":\s*""((?:[^""\\]|\\.)*)""", m))
+        NB_HK5_Action := m1
+return
+
+NB_SaveHotkeyConfig:
+    global NB_HotkeyConfigPath
+    global NB_HK1_Label, NB_HK1_Action, NB_HK2_Label, NB_HK2_Action
+    global NB_HK3_Label, NB_HK3_Action, NB_HK4_Label, NB_HK4_Action
+    global NB_HK5_Label, NB_HK5_Action
+
+    hkJson := "{`n"
+    hkJson .= "  ""label1"": " . NB_EscJson(NB_HK1_Label) . ", ""action1"": " . NB_EscJson(NB_HK1_Action) . ",`n"
+    hkJson .= "  ""label2"": " . NB_EscJson(NB_HK2_Label) . ", ""action2"": " . NB_EscJson(NB_HK2_Action) . ",`n"
+    hkJson .= "  ""label3"": " . NB_EscJson(NB_HK3_Label) . ", ""action3"": " . NB_EscJson(NB_HK3_Action) . ",`n"
+    hkJson .= "  ""label4"": " . NB_EscJson(NB_HK4_Label) . ", ""action4"": " . NB_EscJson(NB_HK4_Action) . ",`n"
+    hkJson .= "  ""label5"": " . NB_EscJson(NB_HK5_Label) . ", ""action5"": " . NB_EscJson(NB_HK5_Action) . "`n"
+    hkJson .= "}"
+
+    FileDelete, %NB_HotkeyConfigPath%
+    FileAppend, %hkJson%, %NB_HotkeyConfigPath%
+return
+
+NB_LoadSettings:
+    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay, CF_AutoSaveDelay
+    IniRead, NB_AdvancedMode, %NB_SettingsIniPath%, General, AdvancedMode, 0
+    IniRead, NB_DebugLogging, %NB_SettingsIniPath%, General, DebugLogging, 0
+    IniRead, CF_AddDataDelay, %NB_SettingsIniPath%, CPFS, AddDataDelay, 50
+    IniRead, CF_AutoSaveDelay, %NB_SettingsIniPath%, CPFS, AutoSaveDelay, 500
+return
+
+NB_SaveSettings:
+    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay, CF_AutoSaveDelay
+    IniWrite, %NB_AdvancedMode%, %NB_SettingsIniPath%, General, AdvancedMode
+    IniWrite, %NB_DebugLogging%, %NB_SettingsIniPath%, General, DebugLogging
+    IniWrite, %CF_AddDataDelay%, %NB_SettingsIniPath%, CPFS, AddDataDelay
+    IniWrite, %CF_AutoSaveDelay%, %NB_SettingsIniPath%, CPFS, AutoSaveDelay
+return
+
+
+;============================================================================================
+; NURSING BOOSTER CPRS DETECTION TIMER
+;============================================================================================
+
+NB_CheckCPRS:
+    Critical
+    ; --- CPRS Detection ---
+    cprsStatus := "CPRS: Not detected"
+    IfWinExist, ahk_exe CPRSChart.exe
+    {
+        NB_CPRSDetected := 1
+        dlgCheck := NB_FindActiveDialogWindow()
+        if (dlgCheck) {
+            cprsStatus := "Dialog detected"
+        } else {
+            cprsStatus := "CPRS: Detected"
+        }
+    }
+    else
+    {
+        NB_CPRSDetected := 0
+    }
+    ; --- CP Flowsheets Detection ---
+    cfStatus := "CPFS: Not detected"
+    IfWinExist, ahk_exe CPFlowsheets.exe
+    {
+        CF_Detected := 1
+        cfStatus := "CPFS: Detected"
+        cfLastTime := CF_ReadLastEntryTime()
+        if (cfLastTime != "")
+            cfStatus .= ", last entry " . cfLastTime
+    }
+    else
+    {
+        CF_Detected := 0
+    }
+    GuiControl, 67:, NB_PanelStatus, Ready | %cprsStatus% | %cfStatus%
+return
+
+NB_ClearV6Warning:
+    GuiControl, 67:, NB_PanelStatus, Ready
+return
+
+
+;============================================================================================
+; NURSING BOOSTER - DIALOG WINDOW DETECTION
+;============================================================================================
+
+NB_FindActiveDialogWindow() {
+    ; Try TfrmRemDlg first (reminder dialog)
+    hwnd := WinExist("ahk_class TfrmRemDlg")
+    if (hwnd)
+        return hwnd
+
+    ; Try TfrmTemplateDialog
+    hwnd := WinExist("ahk_class TfrmTemplateDialog")
+    if (hwnd)
+        return hwnd
+
+    ; Search all CPRS windows for one with checkbox controls
+    WinGet, wndList, List, ahk_exe CPRSChart.exe
+    Loop, %wndList%
+    {
+        wnd := wndList%A_Index%
+        WinGetClass, cls, ahk_id %wnd%
+        if (cls = "TCPRSChart" || cls = "TfrmFrame")
+            continue
+        if (NB_HasCheckboxControls(wnd))
+            return wnd
+    }
+
+    ; Fallback: check main frame
+    mainHwnd := WinExist("ahk_class TfrmFrame")
+    if (!mainHwnd)
+        mainHwnd := WinExist("ahk_exe CPRSChart.exe")
+    if (mainHwnd && NB_HasCheckboxControls(mainHwnd))
+        return mainHwnd
+
+    return 0
+}
+
+NB_HasCheckboxControls(windowHwnd) {
+    global NB__hasCheckboxes
+    NB__hasCheckboxes := false
+    enumCB := RegisterCallback("NB__CheckForCheckboxes", "Fast")
+    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumCB, "Ptr", 0)
+    return NB__hasCheckboxes
+}
+
+NB__CheckForCheckboxes(hwnd, lParam) {
+    global NB__hasCheckboxes
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if (buf = "TORCheckBox" || buf = "TCPRSDialogParentCheckBox" || buf = "TCPRSDialogCheckBox") {
+        NB__hasCheckboxes := true
+        return 0
+    }
+    return 1
+}
+
+
+;============================================================================================
+; NURSING BOOSTER - NAMED TEMPLATE BUTTONS
+;============================================================================================
+
+NB_ApplyNamedTemplate(templateName) {
+    global NB_TemplateDir, NB_AppTitle
+    dlgHwnd := NB_FindActiveDialogWindow()
+    if (!dlgHwnd) {
+        ToolTip, Open a template or reminder dialogue in CPRS first
+        SetTimer, NB_ClearToolTip, -2000
+        return
+    }
+    templatePath := NB_TemplateDir . "\" . NB_SanitizeFilename(templateName) . ".json"
+    if (FileExist(templatePath)) {
+        WinActivate, ahk_id %dlgHwnd%
+        Sleep, 200
+        NB_ApplyTemplate(templatePath)
+    } else {
+        MsgBox, 64, %NB_AppTitle%, No '%templateName%' template saved yet.`n`nTo create one:`n1. Open the reminder dialogue in CPRS`n2. Manually check all the boxes the way you want them`n3. Select 'Save Template' from the Nursing Booster dropdown`n4. Name it exactly: %templateName%`n`nNext time you select this option it replays your selections.`nYou always review in CPRS before clicking Finish.
+    }
+}
+
+
+;============================================================================================
+; NURSING BOOSTER - SAVE TEMPLATE (format v7 - flat top-to-bottom)
+;
+; Captures ALL checkboxes in the scroll box as one flat Y-sorted list.
+; Includes section toggles, group items, children, grandchildren — everything.
+; No separate topLevelParents or groups — just one ordered list.
+;============================================================================================
+
+NB_BtnSaveCurrentState:
+    dlgHwnd := NB_FindActiveDialogWindow()
+    if (!dlgHwnd) {
+        MsgBox, 48, %NB_AppTitle%, Open a template or reminder dialogue in CPRS first.
+        return
+    }
+
+    InputBox, templateName, Save Template, Template name:`n`nUse a descriptive name like 'Negative Assessment' or 'Skin WNL'.`nNaming it the same as a toolbar option links it to that option.
+    if (ErrorLevel || templateName = "")
+        return
+
+    ToolTip, Scanning dialog...
+    NB_WaitForStableCheckboxCount(dlgHwnd)
+
+    scrollBox := NB_FindVisibleScrollBox(dlgHwnd)
+    if (!scrollBox) {
+        MsgBox, 48, %NB_AppTitle%, Could not find dialog scroll area.
+        return
+    }
+
+    ; Enumerate ALL checkboxes in the entire scroll box (flat, Y-sorted)
+    allItems := NB_EnumDescendantCheckboxes(scrollBox)
+    if (allItems.Length() = 0) {
+        MsgBox, 48, %NB_AppTitle%, No checkboxes found in dialog.
+        return
+    }
+
+    ; Build JSON — flat list
+    json := "{"
+    json .= "`n  ""name"": " . NB_EscJson(templateName) . ","
+    json .= "`n  ""format"": 7,"
+    json .= "`n  ""matching"": ""flat-sequential"","
+    json .= "`n  ""speed"": " . NB_ApplySpeed . ","
+    json .= "`n  ""leaf_speed"": " . NB_LeafSpeed . ","
+    FormatTime, nowTime,, yyyy-MM-dd HH:mm
+    json .= "`n  ""created"": """ . nowTime . ""","
+    WinGetTitle, dlgTitle, ahk_id %dlgHwnd%
+    json .= "`n  ""source_dialogue"": " . NB_EscJson(dlgTitle) . ","
+    dlgVersion := NB_GetDialogVersion(dlgHwnd)
+    if (dlgVersion != "")
+        json .= "`n  ""source_version"": """ . dlgVersion . ""","
+
+    totalChecked := 0
+    totalControls := allItems.Length()
+    json .= "`n  ""checkboxes"": ["
+    for ci, cb in allItems {
+        if (ci > 1)
+            json .= ","
+        json .= "`n    {""idx"": " . (ci - 1) . ", ""cls"": " . NB_EscJson(cb.className)
+            . ", ""checked"": " . (cb.checked ? "true" : "false")
+            . ", ""depth"": " . cb.depth
+        if (cb.label != "")
+            json .= ", ""label"": " . NB_EscJson(cb.label)
+        json .= "}"
+        if (cb.checked)
+            totalChecked++
+    }
+    json .= "`n  ]"
+    json .= "`n}"
+
+    filePath := NB_TemplateDir . "\" . NB_SanitizeFilename(templateName) . ".json"
+    f := FileOpen(filePath, "w", "UTF-8")
+    f.Write(json)
+    f.Close()
+
+    ; Log using group-based view for readability
+    if (NB_DebugLogging) {
+        allGroupBoxes := NB_EnumScrollBoxGroupBoxes(scrollBox)
+        NB__LogCheckboxStates("SAVE", allGroupBoxes, templateName, dlgTitle, totalChecked, totalControls)
+    }
+
+    ToolTip, Saved "%templateName%": %totalChecked%/%totalControls% checkboxes
+    SetTimer, NB_ClearToolTip, -3000
+return
+
+
+;============================================================================================
+; NURSING BOOSTER - APPLY TEMPLATE (format v7 - flat sequential)
+;
+; Treats the ENTIRE dialog as one flat top-to-bottom list.
+; No separate phases for sections vs groups. Processes item by item:
+; section toggle → its children → their grandchildren → next section.
+; Re-enumerates the whole scroll box after every parent toggle so
+; dynamically created children appear at the correct positions.
+;============================================================================================
+
+NB_ApplyTemplate(templatePath) {
+    global NB_AppTitle, NB_TemplateDir, NB_ApplySpeed, NB_LeafSpeed, NB_SpeedOverride, NB_ApplyCancelled
+    dlgHwnd := NB_FindActiveDialogWindow()
+    if (!dlgHwnd)
+        return
+
+    FileRead, content, %templatePath%
+    if (ErrorLevel) {
+        MsgBox, 48, %NB_AppTitle%, Failed to read template: %templatePath%
+        return
+    }
+
+    ; Accept format v7 or v6 (flat). Warn on v6 but allow it.
+    isV7 := InStr(content, """format"": 7") || InStr(content, """format"":7")
+    isV6 := InStr(content, """format"": 6") || InStr(content, """format"":6")
+    if !(isV7 || isV6) {
+        MsgBox, 262192, %NB_AppTitle%, This template must be re-saved with the updated Nursing Booster (v7).`n`n1. Open the reminder dialog in CPRS and fill it out`n2. Select 'Save Template' to create a new version
+        return
+    }
+    if (isV6 && !isV7) {
+        GuiControl, 67:, NB_PanelStatus, WARNING: Loading v6 template - re-save to upgrade to v7
+        SetTimer, NB_ClearV6Warning, -5000
+    }
+
+    ; Check if template was saved from a different dialogue type
+    dialogueMatched := true
+    if (RegExMatch(content, """source_dialogue"":\s*""((?:[^""\\]|\\.)*)""", sdM)) {
+        WinGetTitle, currentDlgTitle, ahk_id %dlgHwnd%
+        if (sdM1 != "" && currentDlgTitle != "" && sdM1 != currentDlgTitle) {
+            dialogueMatched := false
+            MsgBox, 262452, %NB_AppTitle% - Dialogue Mismatch, This template was saved from:`n%sdM1%`n`nBut you are applying it to:`n%currentDlgTitle%`n`nAre you sure you want to continue?
+            IfMsgBox, No
+                return
+        }
+    }
+
+    ; Check version mismatch (only if same dialogue — different dialogue already warned)
+    if (dialogueMatched) {
+        currentVersion := NB_GetDialogVersion(dlgHwnd)
+        if (RegExMatch(content, """source_version"":\s*""([\d.]+)""", svM)) {
+            if (currentVersion != "" && svM1 != "" && currentVersion != svM1) {
+                MsgBox, 262452, %NB_AppTitle% - Version Mismatch, This template was saved on version %svM1% but this dialogue is now version %currentVersion%.`n`nCheckboxes may have changed. The template may not apply correctly.`n`nAre you sure you want to continue?
+                IfMsgBox, No
+                    return
+            }
+        } else if (currentVersion != "") {
+            MsgBox, 262452, %NB_AppTitle% - Version Unknown, This template has no version info (saved before v8.2).`nThe current dialogue is version %currentVersion%.`n`nRe-save the template to enable version tracking.`nApply anyway?
+            IfMsgBox, No
+                return
+        }
+    }
+
+    ; Parse flat checkbox list from template
+    tplItems := NB_ParseFlatCheckboxes(content)
+    if (tplItems.Length() = 0) {
+        MsgBox, 48, %NB_AppTitle%, Template has no checkboxes.
+        return
+    }
+
+    tplCount := tplItems.Length()
+
+    ; Determine effective speed: override checkbox → main panel speed, else → template speed
+    tplSpeed := 600
+    if (RegExMatch(content, """speed"":\s*(\d+)", spdM))
+        tplSpeed := spdM1 + 0
+    tplLeafSpd := 50
+    if (RegExMatch(content, """leaf_speed"":\s*(\d+)", lspdM))
+        tplLeafSpd := lspdM1 + 0
+    if (NB_SpeedOverride) {
+        effectiveSpeed := NB_ApplySpeed
+        effectiveLeafSpeed := NB_LeafSpeed
+    } else {
+        effectiveSpeed := tplSpeed
+        effectiveLeafSpeed := tplLeafSpd
+    }
+
+    ; Wait for dialog to load
+    ToolTip, Waiting for dialog to load...
+    NB_WaitForStableCheckboxCount(dlgHwnd)
+
+    scrollBox := NB_FindVisibleScrollBox(dlgHwnd)
+    if (!scrollBox) {
+        MsgBox, 48, %NB_AppTitle%, Could not find dialog scroll area.
+        return
+    }
+
+    totalApplied := 0
+    totalNotFound := 0
+
+    ; Enumerate ALL checkboxes in the scroll box (flat, Y-sorted)
+    liveItems := NB_EnumDescendantCheckboxes(scrollBox)
+
+    ToolTip, Applying %tplCount% items... (Right-click to cancel)
+
+    ; Register right-click hotkey to set cancel flag
+    NB_ApplyCancelled := false
+    Hotkey, ~RButton, NB_CancelApplyHotkey, On
+
+    ; Walk the template top-to-bottom, one item at a time.
+    ; Uses synchronous SendMessage BM_SETCHECK + WM_COMMAND instead of
+    ; async PostMessage BM_CLICK to eliminate race conditions.
+    ; Only re-enumerates when the checkbox count actually changes
+    ; (real parent expansion/collapse), not after every toggle.
+    tplPos := 1
+    while (tplPos <= tplCount)
+    {
+        ; Cancel on right-click
+        if (NB_ApplyCancelled) {
+            Hotkey, ~RButton, NB_CancelApplyHotkey, Off
+            ToolTip, Template apply cancelled at item %tplPos%/%tplCount%.
+            SetTimer, NB_ClearToolTip, -3000
+            return
+        }
+
+        liveCount := liveItems.Length()
+        if (tplPos > liveCount) {
+            totalNotFound++
+            tplPos++
+            continue
+        }
+
+        tplCb := tplItems[tplPos]
+        liveCb := liveItems[tplPos]
+
+        nb_tmpHwnd := liveCb.hwnd
+        if (DllCall("IsWindow", "Ptr", nb_tmpHwnd)) {
+            ; Fresh state read right before toggle decision
+            SendMessage, 0x00F0, 0, 0,, ahk_id %nb_tmpHwnd%
+            currentState := ErrorLevel ? true : false
+
+            ; Only check unchecked boxes — never uncheck
+            if (!currentState && tplCb.checked) {
+                desiredState := 1
+
+                ; Synchronous: set check state directly
+                SendMessage, 0x00F1, %desiredState%, 0,, ahk_id %nb_tmpHwnd%  ; BM_SETCHECK
+
+                ; Synchronous: notify parent that checkbox was clicked
+                ; This triggers CPRS's child creation/destruction logic
+                ; and does not return until CPRS finishes processing.
+                nb_ctrlID := DllCall("GetDlgCtrlID", "Ptr", nb_tmpHwnd, "Int")
+                nb_parentHwnd := DllCall("GetParent", "Ptr", nb_tmpHwnd, "Ptr")
+                SendMessage, 0x0111, (nb_ctrlID & 0xFFFF), nb_tmpHwnd,, ahk_id %nb_parentHwnd%  ; WM_COMMAND + BN_CLICKED
+
+                ; Verify the toggle took
+                SendMessage, 0x00F0, 0, 0,, ahk_id %nb_tmpHwnd%
+                if (!(ErrorLevel)) {
+                    ; Retry once
+                    SendMessage, 0x00F1, %desiredState%, 0,, ahk_id %nb_tmpHwnd%
+                    SendMessage, 0x0111, (nb_ctrlID & 0xFFFF), nb_tmpHwnd,, ahk_id %nb_parentHwnd%
+                }
+
+                totalApplied++
+
+                ; Check if structure changed (children created/destroyed)
+                ; Only re-enumerate if count actually changed
+                Sleep, %effectiveLeafSpeed%
+                newItems := NB_EnumDescendantCheckboxes(scrollBox)
+                if (newItems.Length() != liveCount) {
+                    ; Structure changed — use new list
+                    liveItems := newItems
+                } else {
+                    ; Count unchanged — this was a leaf toggle, no re-enum needed
+                    ; But update liveItems to keep Y-sort fresh
+                    liveItems := newItems
+                }
+            }
+        }
+
+        tplPos++
+
+        ; Progress tooltip every 20 items
+        if (Mod(tplPos, 20) = 0)
+            ToolTip, Applying item %tplPos%/%tplCount%...
+
+        ; Dismiss popups periodically
+        if (Mod(totalApplied, 15) = 0)
+            NB_DismissIntermediatePopups()
+    }
+
+    Hotkey, ~RButton, NB_CancelApplyHotkey, Off
+
+    NB_DismissIntermediatePopups()
+
+    ; Log every checkbox state after apply
+    if (NB_DebugLogging) {
+        WinGetTitle, applyDlgTitle, ahk_id %dlgHwnd%
+        allGroupBoxes := NB_EnumScrollBoxGroupBoxes(scrollBox)
+        NB__LogCheckboxStates("APPLY", allGroupBoxes, templatePath, applyDlgTitle, totalApplied, totalNotFound)
+    }
+
+    ToolTip, Done: %totalApplied% toggled - %totalNotFound% not found. Review before Finish.
+    SetTimer, NB_ClearToolTip, -5000
+
+    ; Re-assert AlwaysOnTop on the panel — WinActivate on CPRS dialog strips it
+    if (NB_BoosterGuiVisible = 1)
+        WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
+}
+
+NB_CancelApplyHotkey:
+    NB_ApplyCancelled := true
+return
+
+
+;============================================================================================
+; NURSING BOOSTER - CHECKBOX STATE LOGGING
+;============================================================================================
+
+NB__LogCheckboxStates(action, groupBoxHwnds, templateNameOrPath := "", dialogTitle := "", statA := 0, statB := 0) {
+    global NB_LogDir
+    FormatTime, nowStamp,, yyyyMMddHHmmss
+    FormatTime, nowDisp,, yyyy-MM-dd HH:mm:ss
+    logPath := NB_LogDir . "\" . action . "_" . nowStamp . ".txt"
+    FileDelete, %logPath%
+
+    groupCount := groupBoxHwnds.Length()
+
+    ; --- Header with summary info ---
+    logText := "============================================================`n"
+    logText .= "  NURSING BOOSTER " . action . " LOG`n"
+    logText .= "============================================================`n"
+    logText .= "Timestamp:    " . nowDisp . "`n"
+    logText .= "Action:       " . action . "`n"
+    logText .= "Template:     " . templateNameOrPath . "`n"
+    logText .= "Dialog:       " . dialogTitle . "`n"
+    logText .= "User:         " . A_UserName . "`n"
+    logText .= "Groups found: " . groupCount . "`n"
+    if (action = "SAVE")
+        logText .= "Checked/Total: " . statA . "/" . statB . "`n"
+    else if (action = "APPLY")
+        logText .= "Toggled: " . statA . "  |  Not found: " . statB . "`n"
+    logText .= "============================================================`n`n"
+    FileAppend, %logText%, %logPath%, UTF-8
+
+    ; --- Per-group checkbox detail ---
+    totalCBs := 0
+    totalChecked := 0
+    for gi, gbHwnd in groupBoxHwnds {
+        descendants := NB_EnumDescendantCheckboxes(gbHwnd)
+        descCount := descendants.Length()
+        groupLine := "--- Group " . gi . "/" . groupCount . " (" . descCount . " checkboxes) ---`n"
+        FileAppend, %groupLine%, %logPath%, UTF-8
+        for ci, cb in descendants {
+            state := cb.checked ? "[X]" : "[ ]"
+            cls := cb.className = "TCPRSDialogParentCheckBox" ? "PARENT" : "LEAF  "
+            lbl := cb.label != "" ? cb.label : "(unlabeled)"
+            cbLine := "  " . state . " depth=" . cb.depth . " " . cls . " " . lbl . "`n"
+            FileAppend, %cbLine%, %logPath%, UTF-8
+            totalCBs++
+            if (cb.checked)
+                totalChecked++
+        }
+        FileAppend, `n, %logPath%, UTF-8
+    }
+
+    ; --- Footer summary ---
+    footerText := "============================================================`n"
+    footerText .= "TOTALS: " . totalChecked . " checked out of " . totalCBs . " checkboxes in " . groupCount . " groups`n"
+    footerText .= "============================================================`n"
+    FileAppend, %footerText%, %logPath%, UTF-8
+}
+
+
+;============================================================================================
+; NURSING BOOSTER - GROUP FINGERPRINTING
+;============================================================================================
+
+NB__GroupFingerprint(items) {
+    labels := []
+    depthCounts := {}
+    for k, item in items {
+        lbl := item.HasKey("label") ? item.label : ""
+        if (lbl != "")
+            labels.Push(lbl)
+        d := item.HasKey("depth") ? item.depth : 0
+        if (!depthCounts.HasKey(d))
+            depthCounts[d] := 0
+        depthCounts[d] := depthCounts[d] + 1
+    }
+    ; Sort labels alphabetically (insertion sort)
+    if (labels.Length() > 1) {
+        Loop, % labels.Length() - 1
+        {
+            i := A_Index + 1
+            key := labels[i]
+            j := i - 1
+            while (j >= 1 && labels[j] > key) {
+                labels[j + 1] := labels[j]
+                j--
+            }
+            labels[j + 1] := key
+        }
+    }
+    ; Sort depth keys
+    depthKeys := []
+    for k in depthCounts
+        depthKeys.Push(k)
+    if (depthKeys.Length() > 1) {
+        Loop, % depthKeys.Length() - 1
+        {
+            i := A_Index + 1
+            key := depthKeys[i]
+            j := i - 1
+            while (j >= 1 && depthKeys[j] > key) {
+                depthKeys[j + 1] := depthKeys[j]
+                j--
+            }
+            depthKeys[j + 1] := key
+        }
+    }
+    fp := items.Length() . "|"
+    for k, lbl in labels
+        fp .= lbl . ","
+    fp .= "|"
+    for k, dk in depthKeys
+        fp .= dk . ":" . depthCounts[dk] . ","
+    return fp
+}
+
+
+;============================================================================================
+; NURSING BOOSTER - CHECKBOX ENUMERATION
+;============================================================================================
+
+; Enumerate all TGroupBox direct children of the scrollbox, sorted by screen Y position
+NB_EnumScrollBoxGroupBoxes(scrollBoxHwnd) {
+    raw := []
+    child := DllCall("GetWindow", "Ptr", scrollBoxHwnd, "UInt", 5, "Ptr")  ; GW_CHILD
+    while (child) {
+        VarSetCapacity(buf, 256, 0)
+        DllCall("GetClassName", "Ptr", child, "Str", buf, "Int", 256)
+        if (buf = "TGroupBox") {
+            VarSetCapacity(rect, 16, 0)
+            DllCall("GetWindowRect", "Ptr", child, "Ptr", &rect)
+            y := NumGet(rect, 4, "Int")
+            raw.Push({hwnd: child, y: y})
+        }
+        child := DllCall("GetWindow", "Ptr", child, "UInt", 2, "Ptr")  ; GW_HWNDNEXT
+    }
+    ; Sort by Y position (insertion sort)
+    if (raw.Length() > 1) {
+        Loop, % raw.Length() - 1
+        {
+            i := A_Index + 1
+            key := raw[i]
+            j := i - 1
+            while (j >= 1 && raw[j].y > key.y) {
+                raw[j + 1] := raw[j]
+                j--
+            }
+            raw[j + 1] := key
+        }
+    }
+    ; Return HWNDs in visual order
+    sorted := []
+    for k, item in raw
+        sorted.Push(item.hwnd)
+    return sorted
+}
+
+; Enumerate ALL descendant checkboxes within a container
+NB_EnumDescendantCheckboxes(containerHwnd) {
+    global NB__descCBResults, NB__descContainer
+    NB__descCBResults := []
+    NB__descContainer := containerHwnd
+    enumCB := RegisterCallback("NB__EnumDescCBCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", containerHwnd, "Ptr", enumCB, "Ptr", 0)
+
+    ; Compute nesting depth for each checkbox
+    for k, item in NB__descCBResults {
+        depth := 0
+        p := DllCall("GetParent", "Ptr", item.hwnd, "Ptr")
+        while (p && p != containerHwnd) {
+            VarSetCapacity(pBuf, 256, 0)
+            DllCall("GetClassName", "Ptr", p, "Str", pBuf, "Int", 256)
+            if (pBuf = "TGroupBox")
+                depth++
+            p := DllCall("GetParent", "Ptr", p, "Ptr")
+        }
+        item.depth := depth
+    }
+
+    ; Resolve parent checkbox labels via sibling TDlgFieldPanel + MSAA
+    for k, item in NB__descCBResults {
+        if (item.label = "" && item.className = "TCPRSDialogParentCheckBox") {
+            item.label := NB_ResolveParentCBLabel(item.hwnd)
+        }
+    }
+
+    ; Sort by screen Y position (with X tiebreaker)
+    results := NB__descCBResults
+    if (results.Length() > 1) {
+        Loop, % results.Length() - 1
+        {
+            i := A_Index + 1
+            key := results[i]
+            j := i - 1
+            while (j >= 1 && (results[j].y > key.y || (results[j].y = key.y && results[j].x > key.x))) {
+                results[j + 1] := results[j]
+                j--
+            }
+            results[j + 1] := key
+        }
+    }
+
+    return results
+}
+
+NB__EnumDescCBCallback(hwnd, lParam) {
+    global NB__descCBResults
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if !(buf = "TCPRSDialogParentCheckBox" || buf = "TCPRSDialogCheckBox" || buf = "TORCheckBox")
+        return 1
+
+    SendMessage, 0x00F0, 0, 0,, ahk_id %hwnd%
+    checked := ErrorLevel ? true : false
+
+    ; Get screen position for Y-sorting
+    VarSetCapacity(rect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", &rect)
+    y := NumGet(rect, 4, "Int")
+    x := NumGet(rect, 0, "Int")
+
+    ; Read label via simple DllCalls only (this is a Fast callback - no COM allowed)
+    label := ""
+    tLen := DllCall("GetWindowTextLengthW", "Ptr", hwnd, "Int")
+    if (tLen > 0) {
+        VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+        DllCall("GetWindowTextW", "Ptr", hwnd, "Ptr", &tBuf, "Int", tLen + 1)
+        label := Trim(StrGet(&tBuf, "UTF-16"))
+    }
+
+    NB__descCBResults.Push({hwnd: hwnd, className: buf, checked: checked, label: label, y: y, x: x})
+    return 1
+}
+
+; Lightweight count-only enumeration for stability checks
+NB_FindAllCheckboxes(dlgHwnd) {
+    global NB__findCBResults
+    NB__findCBResults := []
+    enumCB := RegisterCallback("NB__EnumCBCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", dlgHwnd, "Ptr", enumCB, "Ptr", 0)
+    return NB__findCBResults
+}
+
+NB__EnumCBCallback(hwnd, lParam) {
+    global NB__findCBResults
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if !(buf = "TORCheckBox" || buf = "TCPRSDialogParentCheckBox" || buf = "TCPRSDialogCheckBox")
+        return 1
+    NB__findCBResults.Push({hwnd: hwnd, className: buf})
+    return 1
+}
+
+; Wait until checkbox count stops changing
+NB_WaitForStableCheckboxCount(dlgHwnd) {
+    prevCount := 0
+    stableRounds := 0
+    Loop, 20
+    {
+        cbs := NB_FindAllCheckboxes(dlgHwnd)
+        count := cbs.Length()
+        if (count > 0 && count = prevCount) {
+            stableRounds++
+            if (stableRounds >= 3)
+                return count
+        } else {
+            stableRounds := 0
+        }
+        prevCount := count
+        Sleep, 500
+    }
+    return prevCount
+}
+
+
+;============================================================================================
+; NURSING BOOSTER - DISMISS INTERMEDIATE POPUPS
+;============================================================================================
+
+NB_DismissIntermediatePopups() {
+    Sleep, 150
+    Loop, 3
+    {
+        found := false
+        WinGet, wndList, List, ahk_exe CPRSChart.exe
+        Loop, %wndList%
+        {
+            wnd := wndList%A_Index%
+            WinGetClass, cls, ahk_id %wnd%
+            if (cls = "TfrmRemDlg" || cls = "TCPRSChart" || cls = "TfrmFrame" || cls = "TfrmTemplateDialog")
+                continue
+            WinGetPos,,, w, h, ahk_id %wnd%
+            if (w > 500 || h > 400)
+                continue
+            if (NB_HasDangerousButton(wnd))
+                continue
+            okHwnd := NB_FindOKButton(wnd)
+            if (okHwnd) {
+                PostMessage, 0x00F5, 0, 0,, ahk_id %okHwnd%
+                Sleep, 200
+                found := true
+            }
+        }
+        if (!found)
+            break
+    }
+}
+
+NB_HasDangerousButton(windowHwnd) {
+    global NB__hasDangerous
+    NB__hasDangerous := false
+    enumDangerous := RegisterCallback("NB__CheckDangerousCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumDangerous, "Ptr", 0)
+    return NB__hasDangerous
+}
+
+NB__CheckDangerousCallback(hwnd, lParam) {
+    global NB__hasDangerous
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if (InStr(buf, "TEdit") || InStr(buf, "TMemo") || InStr(buf, "TRichEdit")) {
+        NB__hasDangerous := true
+        return 0
+    }
+    if (InStr(buf, "TButton") || InStr(buf, "TBitBtn")) {
+        SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
+        tLen := ErrorLevel
+        if (tLen > 0) {
+            VarSetCapacity(textBuf, (tLen + 1) * 2, 0)
+            SendMessage, 0x000D, tLen + 1, &textBuf,, ahk_id %hwnd%
+            textStr := StrGet(&textBuf)
+            StringUpper, textUpper, textStr
+            if (InStr(textUpper, "FINISH") || InStr(textUpper, "SUBMIT")
+                || InStr(textUpper, "SIGN") || InStr(textUpper, "FILE")
+                || InStr(textUpper, "COMPLETE") || InStr(textUpper, "SAVE")
+                || InStr(textUpper, "DELETE") || InStr(textUpper, "REMOVE")) {
+                NB__hasDangerous := true
+                return 0
+            }
+        }
+    }
+    return 1
+}
+
+NB_FindOKButton(windowHwnd) {
+    global NB__foundOKHwnd
+    NB__foundOKHwnd := 0
+    enumOK := RegisterCallback("NB__FindOKCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumOK, "Ptr", 0)
+    return NB__foundOKHwnd
+}
+
+NB__FindOKCallback(hwnd, lParam) {
+    global NB__foundOKHwnd
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if !(InStr(buf, "TButton") || InStr(buf, "TBitBtn"))
+        return 1
+    SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
+    tLen := ErrorLevel
+    if (tLen > 0) {
+        VarSetCapacity(textBuf, (tLen + 1) * 2, 0)
+        SendMessage, 0x000D, tLen + 1, &textBuf,, ahk_id %hwnd%
+        textStr := StrGet(&textBuf)
+        StringUpper, textUpper, textStr
+        if (textUpper = "OK" || textUpper = "&OK" || textUpper = "CONTINUE"
+            || textUpper = "&CONTINUE" || textUpper = "YES" || textUpper = "&YES") {
+            NB__foundOKHwnd := hwnd
+            return 0
+        }
+    }
+    return 1
+}
+
+
+;============================================================================================
+; NURSING BOOSTER - LOAD / DELETE TEMPLATE
+;============================================================================================
+
+NB_BtnLoadSavedTemplate:
+    dlgHwnd := NB_FindActiveDialogWindow()
+    if (!dlgHwnd) {
+        MsgBox, 48, %NB_AppTitle%, Open a template or reminder dialogue in CPRS first then load a template.
+        return
+    }
+    NB_templates := []
+    Loop, Files, %NB_TemplateDir%\*.json
+    {
+        NB_templates.Push(A_LoopFileFullPath)
+    }
+    if (NB_templates.Length() = 0) {
+        MsgBox, 64, %NB_AppTitle%, No saved templates found.`n`nTo create one:`n1. Open a reminder dialogue in CPRS`n2. Check the boxes the way you want`n3. Select 'Save Template' from the Nursing Booster dropdown
+        return
+    }
+
+    ; Build a list of template names
+    NB_loadList := ""
+    for k, path in NB_templates {
+        RegExMatch(path, ".*\\(.*)\.json$", match)
+        NB_loadList .= (NB_loadList != "" ? "|" : "") . match1
+    }
+
+    Gui, 68:Destroy
+    Gui, 68:+AlwaysOnTop +ToolWindow
+    Gui, 68:Font, s9, Segoe UI
+    Gui, 68:Add, Text,, Select a template to apply:
+    Gui, 68:Add, ListBox, w300 h200 vNB_LoadSelection, %NB_loadList%
+    Gui, 68:Add, Button, y+5 w120 gNB_DoLoadTemplate Default, Apply
+    Gui, 68:Add, Button, x+5 w120 gNB_CancelLoad, Cancel
+    Gui, 68:Show,, Load Nursing Template
+return
+
+NB_DoLoadTemplate:
+    Gui, 68:Submit
+    if (NB_LoadSelection = "") {
+        MsgBox, 48, %NB_AppTitle%, Select a template.
+        return
+    }
+    Gui, 68:Destroy
+    templatePath := NB_TemplateDir . "\" . NB_SanitizeFilename(NB_LoadSelection) . ".json"
+    if (FileExist(templatePath)) {
+        dlgWnd := NB_FindActiveDialogWindow()
+        if (dlgWnd) {
+            WinActivate, ahk_id %dlgWnd%
+            Sleep, 200
+            NB_ApplyTemplate(templatePath)
+        }
+    }
+return
+
+NB_CancelLoad:
+    Gui, 68:Destroy
+return
+
+
+NB_BtnDeleteTemplate:
+    NB_delTemplates := []
+    Loop, Files, %NB_TemplateDir%\*.json
+    {
+        NB_delTemplates.Push(A_LoopFileName)
+    }
+    if (NB_delTemplates.Length() = 0) {
+        MsgBox, 64, %NB_AppTitle%, No saved templates to delete.
+        return
+    }
+    list := ""
+    for i, f in NB_delTemplates
+        list .= i . ": " . StrReplace(f, ".json", "") . "`n"
+    InputBox, deleteIdx, Delete Template, Enter the number of the template to delete:`n`n%list%,, 300, 400
+    if (ErrorLevel || deleteIdx = "")
+        return
+    if deleteIdx is not integer
+    {
+        MsgBox, 48, %NB_AppTitle%, Enter a number.
+        return
+    }
+    if (deleteIdx < 1 || deleteIdx > NB_delTemplates.Length()) {
+        MsgBox, 48, %NB_AppTitle%, Invalid selection.
+        return
+    }
+    delName := StrReplace(NB_delTemplates[deleteIdx], ".json", "")
+    MsgBox, 36, %NB_AppTitle%, Delete template "%delName%"?
+    IfMsgBox, Yes
+    {
+        delPath := NB_TemplateDir . "\" . NB_delTemplates[deleteIdx]
+        FileDelete, %delPath%
+        ToolTip, Template "%delName%" deleted
+        SetTimer, NB_ClearToolTip, -2000
+    }
+return
+
+
+;============================================================================================
+; NURSING BOOSTER - TOP-LEVEL PARENT DISCOVERY
+;============================================================================================
+
+NB_FindVisibleScrollBox(dlgHwnd) {
+    child := DllCall("GetWindow", "Ptr", dlgHwnd, "UInt", 5, "Ptr")
+    while (child) {
+        VarSetCapacity(buf, 256, 0)
+        DllCall("GetClassName", "Ptr", child, "Str", buf, "Int", 256)
+        if (buf = "TScrollBox") {
+            style := DllCall("GetWindowLong", "Ptr", child, "Int", -16, "Int")
+            if (style & 0x10000000)
+                return child
+        }
+        child := DllCall("GetWindow", "Ptr", child, "UInt", 2, "Ptr")
+    }
+    return 0
+}
+
+NB_EnumTopLevelParents(scrollBoxHwnd) {
+    parents := []
+    seenDirectParent := false
+    child := DllCall("GetWindow", "Ptr", scrollBoxHwnd, "UInt", 5, "Ptr")
+    while (child) {
+        VarSetCapacity(buf, 256, 0)
+        DllCall("GetClassName", "Ptr", child, "Str", buf, "Int", 256)
+        if (buf = "TCPRSDialogParentCheckBox") {
+            seenDirectParent := true
+            SendMessage, 0x00F0, 0, 0,, ahk_id %child%
+            checked := ErrorLevel ? true : false
+            parents.Push({hwnd: child, checked: checked})
+        } else if (buf = "TGroupBox" && seenDirectParent) {
+            gbChild := DllCall("GetWindow", "Ptr", child, "UInt", 5, "Ptr")
+            while (gbChild) {
+                VarSetCapacity(gbBuf, 256, 0)
+                DllCall("GetClassName", "Ptr", gbChild, "Str", gbBuf, "Int", 256)
+                if (gbBuf = "TCPRSDialogParentCheckBox") {
+                    SendMessage, 0x00F0, 0, 0,, ahk_id %gbChild%
+                    checked := ErrorLevel ? true : false
+                    parents.Push({hwnd: gbChild, checked: checked})
+                }
+                gbChild := DllCall("GetWindow", "Ptr", gbChild, "UInt", 2, "Ptr")
+            }
+        }
+        child := DllCall("GetWindow", "Ptr", child, "UInt", 2, "Ptr")
+    }
+    return parents
+}
+
+
+;============================================================================================
+; NURSING BOOSTER - TEMPLATE PARSING
+;============================================================================================
+
+NB_ParseFlatCheckboxes(jsonContent) {
+    items := []
+
+    ; Find the "checkboxes" array (top-level, format v7)
+    cPos := InStr(jsonContent, """checkboxes""")
+    if (!cPos)
+        return items
+
+    arrStart := InStr(jsonContent, "[",, cPos)
+    if (!arrStart)
+        return items
+
+    ; Find matching ]
+    depth := 1
+    scanPos := arrStart + 1
+    arrEnd := 0
+    while (scanPos <= StrLen(jsonContent) && depth > 0) {
+        ch := SubStr(jsonContent, scanPos, 1)
+        if (ch = "[")
+            depth++
+        else if (ch = "]")
+            depth--
+        if (depth = 0)
+            arrEnd := scanPos
+        scanPos++
+    }
+    if (!arrEnd)
+        return items
+
+    ; Parse each checkbox object
+    itemPos := arrStart
+    while (itemPos := InStr(jsonContent, "{",, itemPos + 1)) {
+        if (itemPos > arrEnd)
+            break
+        itemEnd := InStr(jsonContent, "}",, itemPos)
+        if (!itemEnd)
+            break
+        itemStr := SubStr(jsonContent, itemPos, itemEnd - itemPos + 1)
+
+        idx := 0
+        if (RegExMatch(itemStr, """idx"":\s*(\d+)", idxM))
+            idx := idxM1 + 0
+
+        cls := ""
+        if (RegExMatch(itemStr, """cls"":\s*""([^""]*)""", clsM))
+            cls := clsM1
+
+        checked := (InStr(itemStr, """checked"": true") || InStr(itemStr, """checked"":true"))
+            ? true : false
+
+        depthVal := 0
+        if (RegExMatch(itemStr, """depth"":\s*(\d+)", depM))
+            depthVal := depM1 + 0
+
+        label := ""
+        if (RegExMatch(itemStr, """label"":\s*""((?:[^""\\]|\\.)*)""", lblM))
+            label := lblM1
+
+        items.Push({idx: idx, cls: cls, checked: checked, label: label, depth: depthVal})
+        itemPos := itemEnd
+    }
+
+    return items
+}
+
+NB_ParseTopLevelParents(jsonContent) {
+    states := []
+    pos := InStr(jsonContent, """topLevelParents""")
+    if (!pos)
+        return states
+    arrStart := InStr(jsonContent, "[",, pos)
+    arrEnd := InStr(jsonContent, "]",, arrStart)
+    if (!arrStart || !arrEnd)
+        return states
+    arrStr := SubStr(jsonContent, arrStart + 1, arrEnd - arrStart - 1)
+    searchPos := 1
+    while (searchPos <= StrLen(arrStr)) {
+        chunk := SubStr(arrStr, searchPos, 6)
+        if (SubStr(chunk, 1, 4) = "true") {
+            states.Push(true)
+            searchPos += 4
+        } else if (SubStr(chunk, 1, 5) = "false") {
+            states.Push(false)
+            searchPos += 5
+        } else {
+            searchPos++
+        }
+    }
+    return states
+}
+
+; ---------------------------------------------------------------------------
+; TEMPLATE SPEED HELPERS (per-template speed settings)
+; ---------------------------------------------------------------------------
+
+NB_RefreshSettingsTplList() {
+    global NB_TemplateDir, CF_TemplateDir, NB_SettingsTplPathMap
+    list := ""
+    NB_SettingsTplPathMap := {}
+
+    ; NB templates
+    Loop, Files, %NB_TemplateDir%\*.json
+    {
+        name := RegExReplace(A_LoopFileName, "\.json$", "")
+        displayName := name . " [NB]"
+        if (list != "")
+            list .= "|"
+        list .= displayName
+        NB_SettingsTplPathMap[displayName] := NB_TemplateDir . "\" . A_LoopFileName
+    }
+
+    ; CPFS templates
+    Loop, Files, %CF_TemplateDir%\*.json
+    {
+        ; Skip spy dump files
+        if (InStr(A_LoopFileName, "cpfs_spy_"))
+            continue
+        name := RegExReplace(A_LoopFileName, "\.json$", "")
+        displayName := name . " [CF]"
+        if (list != "")
+            list .= "|"
+        list .= displayName
+        NB_SettingsTplPathMap[displayName] := CF_TemplateDir . "\" . A_LoopFileName
+    }
+
+    GuiControl, 73:, NB_SettingsTplDDL, |%list%
+}
+
+NB_ReadTemplateSpeed(filePath) {
+    FileRead, content, %filePath%
+    if (ErrorLevel)
+        return 600
+    if (RegExMatch(content, """speed"":\s*(\d+)", spdM))
+        return spdM1 + 0
+    return 600
+}
+
+NB_WriteTemplateSpeed(filePath, speed) {
+    FileRead, content, %filePath%
+    if (ErrorLevel)
+        return false
+    if (RegExMatch(content, """speed"":\s*\d+")) {
+        content := RegExReplace(content, """speed"":\s*\d+", """speed"": " . speed)
+    } else {
+        ; Add speed field after "format" line
+        content := RegExReplace(content, "(""format"":\s*\d+),", "$1,`n  ""speed"": " . speed . ",")
+    }
+    f := FileOpen(filePath, "w", "UTF-8")
+    if (!f)
+        return false
+    f.Write(content)
+    f.Close()
+    return true
+}
+
+NB_ReadTemplateLeafSpeed(filePath) {
+    FileRead, content, %filePath%
+    if (ErrorLevel)
+        return 50
+    if (RegExMatch(content, """leaf_speed"":\s*(\d+)", spdM))
+        return spdM1 + 0
+    return 50
+}
+
+NB_WriteTemplateLeafSpeed(filePath, speed) {
+    FileRead, content, %filePath%
+    if (ErrorLevel)
+        return false
+    if (RegExMatch(content, """leaf_speed"":\s*\d+")) {
+        content := RegExReplace(content, """leaf_speed"":\s*\d+", """leaf_speed"": " . speed)
+    } else {
+        ; Add leaf_speed after "speed" line
+        if (RegExMatch(content, """speed"":\s*\d+")) {
+            content := RegExReplace(content, "(""speed"":\s*\d+),", "$1,`n  ""leaf_speed"": " . speed . ",")
+        } else {
+            content := RegExReplace(content, "(""format"":\s*\d+),", "$1,`n  ""leaf_speed"": " . speed . ",")
+        }
+    }
+    f := FileOpen(filePath, "w", "UTF-8")
+    if (!f)
+        return false
+    f.Write(content)
+    f.Close()
+    return true
+}
+
+; Parse groups array from format-3 JSON
+NB_ParseGroups(jsonContent) {
+    groups := []
+
+    gPos := InStr(jsonContent, """groups""")
+    if (!gPos)
+        return groups
+
+    gArrStart := InStr(jsonContent, "[",, gPos)
+    if (!gArrStart)
+        return groups
+
+    ; Find matching ] using depth counting
+    depth := 1
+    scanPos := gArrStart + 1
+    gArrEnd := 0
+    while (scanPos <= StrLen(jsonContent) && depth > 0) {
+        ch := SubStr(jsonContent, scanPos, 1)
+        if (ch = "[")
+            depth++
+        else if (ch = "]")
+            depth--
+        if (depth = 0)
+            gArrEnd := scanPos
+        scanPos++
+    }
+    if (!gArrEnd)
+        return groups
+
+    ; Find each group object
+    searchPos := gArrStart
+    while (true) {
+        cbPos := InStr(jsonContent, """checkboxes""",, searchPos + 1)
+        if (!cbPos || cbPos > gArrEnd)
+            break
+
+        cbArrStart := InStr(jsonContent, "[",, cbPos)
+        if (!cbArrStart || cbArrStart > gArrEnd)
+            break
+
+        ; Find matching ]
+        cbDepth := 1
+        cbScan := cbArrStart + 1
+        cbArrEnd := 0
+        while (cbScan <= StrLen(jsonContent) && cbDepth > 0) {
+            c := SubStr(jsonContent, cbScan, 1)
+            if (c = "[")
+                cbDepth++
+            else if (c = "]")
+                cbDepth--
+            if (cbDepth = 0)
+                cbArrEnd := cbScan
+            cbScan++
+        }
+        if (!cbArrEnd)
+            break
+
+        ; Parse checkbox items within this group
+        groupItems := []
+        itemPos := cbArrStart
+        while (itemPos := InStr(jsonContent, "{",, itemPos + 1)) {
+            if (itemPos > cbArrEnd)
+                break
+            itemEnd := InStr(jsonContent, "}",, itemPos)
+            if (!itemEnd)
+                break
+            itemStr := SubStr(jsonContent, itemPos, itemEnd - itemPos + 1)
+
+            idx := 0
+            if (RegExMatch(itemStr, """idx"":\s*(\d+)", idxM))
+                idx := idxM1 + 0
+
+            cls := ""
+            if (RegExMatch(itemStr, """cls"":\s*""([^""]*)""", clsM))
+                cls := clsM1
+
+            checked := (InStr(itemStr, """checked"": true") || InStr(itemStr, """checked"":true"))
+                ? true : false
+
+            depthVal := 0
+            if (RegExMatch(itemStr, """depth"":\s*(\d+)", depM))
+                depthVal := depM1 + 0
+
+            label := ""
+            if (RegExMatch(itemStr, """label"":\s*""((?:[^""\\]|\\.)*)""", lblM))
+                label := lblM1
+
+            groupItems.Push({idx: idx, cls: cls, checked: checked, label: label, depth: depthVal})
+            itemPos := itemEnd
+        }
+
+        groups.Push(groupItems)
+        searchPos := cbArrEnd
+    }
+
+    return groups
+}
+
+
+;============================================================================================
+; NURSING BOOSTER - DIALOG DUMP (Debug tool)
+; Triggered from Nursing Booster dropdown or Ctrl+Shift+D
+;============================================================================================
+
+NB_DumpDialogControls:
+    dlgHwnd := NB_FindActiveDialogWindow()
+    if (!dlgHwnd) {
+        MsgBox, 48, %NB_AppTitle%, Open a reminder dialogue in CPRS first.
+        return
+    }
+    FormatTime, nowStamp,, yyyyMMddHHmmss
+    dumpPath := NB_LogDir . "\dialog_dump_" . nowStamp . ".txt"
+    FileDelete, %dumpPath%
+    FormatTime, nowDisp,, yyyy-MM-dd HH:mm:ss
+    WinGetTitle, dlgTitle, ahk_id %dlgHwnd%
+    WinGetClass, dlgClass, ahk_id %dlgHwnd%
+    dumpHeader := "=== CPRS Dialog Control Dump ===`n"
+    dumpHeader .= "Time: " . nowDisp . "`n"
+    dumpHeader .= "Dialog Title: " . dlgTitle . "`n"
+    dumpHeader .= "Dialog Class: " . dlgClass . "`n"
+    dumpHeader .= "Dialog HWND: " . dlgHwnd . "`n`n"
+    FileAppend, %dumpHeader%, %dumpPath%, UTF-8
+
+    global NB__dumpPath := dumpPath
+    global NB__dumpDlgHwnd := dlgHwnd
+    global NB__dumpCount := 0
+    global NB__dumpCBCount := 0
+    global NB__dumpParentCBs := []
+
+    enumDump := RegisterCallback("NB__DumpCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", dlgHwnd, "Ptr", enumDump, "Ptr", 0)
+
+    ; Post-process: resolve parent checkbox labels via sibling TDlgFieldPanel
+    ; NOTE: CPRS renders parent CB labels using non-windowed TLabel (TGraphicControl)
+    ; when no screen reader is active. These have no HWND and are invisible to all
+    ; Windows APIs (Win32, MSAA, UI Automation). Labels may show as "(not accessible)".
+    if (NB__dumpParentCBs.Length() > 0) {
+        parentSection := "`n=== Parent Checkboxes ===`n"
+        parentSection .= "(Parent CB labels use non-windowed TLabel - may not be readable)`n"
+        for i, pcb in NB__dumpParentCBs {
+            label := NB_ResolveParentCBLabel(pcb.hwnd)
+            if (label = "")
+                label := "(not accessible)"
+            chk := pcb.checked ? "YES" : "NO"
+            parentSection .= "  CHECKED=" . chk . " label='" . label . "'`n"
+        }
+        FileAppend, %parentSection%, %dumpPath%, UTF-8
+    }
+
+    dumpFooter := "`n=== Summary ===`nTotal controls: " . NB__dumpCount . "`nCheckboxes: " . NB__dumpCBCount . "`n"
+    FileAppend, %dumpFooter%, %dumpPath%, UTF-8
+
+    MsgBox, 64, %NB_AppTitle%, Dump written to:`n%dumpPath%`n`n%NB__dumpCount% controls and %NB__dumpCBCount% checkboxes.
+return
+
+NB__DumpCallback(hwnd, lParam) {
+    global NB__dumpPath, NB__dumpDlgHwnd, NB__dumpCount, NB__dumpCBCount, NB__dumpParentCBs
+    NB__dumpCount++
+
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    className := buf
+
+    ; Simple text retrieval only (this is a Fast callback - no COM allowed)
+    text := ""
+    tLen := DllCall("GetWindowTextLengthW", "Ptr", hwnd, "Int")
+    if (tLen > 0) {
+        VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+        DllCall("GetWindowTextW", "Ptr", hwnd, "Ptr", &tBuf, "Int", tLen + 1)
+        text := Trim(StrGet(&tBuf, "UTF-16"))
+    }
+
+    depth := 0
+    p := hwnd
+    Loop {
+        p := DllCall("GetParent", "Ptr", p, "Ptr")
+        if (!p || p = NB__dumpDlgHwnd)
+            break
+        depth++
+    }
+
+    parentHwnd := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+    parentClass := "none"
+    if (parentHwnd) {
+        VarSetCapacity(parentBuf, 256, 0)
+        DllCall("GetClassName", "Ptr", parentHwnd, "Str", parentBuf, "Int", 256)
+        parentClass := parentBuf
+    }
+
+    extra := ""
+    if (className = "TORCheckBox" || className = "TCPRSDialogParentCheckBox" || className = "TCPRSDialogCheckBox") {
+        SendMessage, 0x00F0, 0, 0,, ahk_id %hwnd%
+        checked := ErrorLevel
+        extra := " CHECKED=" . (checked ? "YES" : "NO")
+        NB__dumpCBCount++
+        ; Track parent checkboxes for post-processing label lookup
+        if (className = "TCPRSDialogParentCheckBox")
+            NB__dumpParentCBs.Push({hwnd: hwnd, checked: checked})
+    }
+
+    style := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "Int")
+    visible := (style & 0x10000000) ? "Y" : "N"
+
+    indent := ""
+    Loop, %depth%
+        indent .= "  "
+
+    line := indent . className . " hwnd=" . hwnd . " text='" . text . "' vis=" . visible . " parent=" . parentClass . extra . "`n"
+    FileAppend, %line%, %NB__dumpPath%, UTF-8
+    return 1
+}
+
+
+;============================================================================================
+; NURSING BOOSTER - UTILITY FUNCTIONS
+;============================================================================================
+
+NB_ClearToolTip:
+    ToolTip
+return
+
+NB_SanitizeFilename(name) {
+    result := RegExReplace(Trim(name), "[<>:""/\\|?*]", "_")
+    return result
+}
+
+; Extract version string from TRichEdit controls in a CPRS reminder dialog.
+; Scans ControlList for RichEdit controls, reads their text, and looks for
+; "Version X.Y" pattern. Returns the version number (e.g. "2.2") or "" if
+; no version found. Only checks the first matching control.
+NB_GetDialogVersion(dlgHwnd) {
+    WinGet, ctrlList, ControlList, ahk_id %dlgHwnd%
+    Loop, Parse, ctrlList, `n
+    {
+        if (InStr(A_LoopField, "RichEdit")) {
+            ControlGetText, richText, %A_LoopField%, ahk_id %dlgHwnd%
+            if (RegExMatch(richText, "i)Version\s+(\d+(?:\.\d+)*)", vM))
+                return vM1
+        }
+    }
+    return ""
+}
+
+NB_EscJson(str) {
+    str := StrReplace(str, "\", "\\")
+    str := StrReplace(str, """", "\""")
+    str := StrReplace(str, "`n", "\n")
+    str := StrReplace(str, "`r", "\r")
+    str := StrReplace(str, "`t", "\t")
+    return """" . str . """"
+}
+
+; Attempt to resolve parent checkbox label. CPRS sets parent CB Caption to ' '
+; and renders the text via a non-windowed TLabel (TGraphicControl) inside a
+; sibling TDlgFieldPanel. Without a screen reader (JAWS), TLabel has no HWND
+; and is invisible to Win32, MSAA, and UI Automation APIs.
+; This function tries GetWindowText on the sibling panel and its windowed
+; children as a best-effort attempt. Returns "" if unresolvable.
+NB_ResolveParentCBLabel(cbHwnd) {
+    static junkNames := "|system|application|pane|check box|"
+    if !DllCall("IsWindow", "Ptr", cbHwnd, "Int")
+        return ""
+    cbParent := DllCall("GetParent", "Ptr", cbHwnd, "Ptr")
+    if (!cbParent)
+        return ""
+    ; Get checkbox screen Y position
+    VarSetCapacity(cbRect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", cbHwnd, "Ptr", &cbRect)
+    cbY := NumGet(cbRect, 4, "Int")
+    ; Find the nearest sibling TDlgFieldPanel by Y position
+    bestPanel := 0
+    bestDist := 999999
+    child := DllCall("GetWindow", "Ptr", cbParent, "UInt", 5, "Ptr")  ; GW_CHILD
+    while (child) {
+        VarSetCapacity(clsBuf, 256, 0)
+        DllCall("GetClassName", "Ptr", child, "Str", clsBuf, "Int", 256)
+        if (clsBuf = "TDlgFieldPanel") {
+            VarSetCapacity(pRect, 16, 0)
+            DllCall("GetWindowRect", "Ptr", child, "Ptr", &pRect)
+            pY := NumGet(pRect, 4, "Int")
+            dist := Abs(pY - cbY)
+            if (dist < bestDist) {
+                bestPanel := child
+                bestDist := dist
+            }
+        }
+        child := DllCall("GetWindow", "Ptr", child, "UInt", 2, "Ptr")  ; GW_HWNDNEXT
+    }
+    if (!bestPanel || bestDist > 100)
+        return ""
+    ; Try GetWindowText on the panel itself
+    text := ""
+    tLen := DllCall("GetWindowTextLengthW", "Ptr", bestPanel, "Int")
+    if (tLen > 0) {
+        VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+        DllCall("GetWindowTextW", "Ptr", bestPanel, "Ptr", &tBuf, "Int", tLen + 1)
+        text := Trim(StrGet(&tBuf, "UTF-16"))
+    }
+    if (text != "" && !InStr(junkNames, "|" . text . "|"))
+        return text
+    ; Try GetWindowText on windowed children of the panel
+    panelChild := DllCall("GetWindow", "Ptr", bestPanel, "UInt", 5, "Ptr")
+    while (panelChild) {
+        pcLen := DllCall("GetWindowTextLengthW", "Ptr", panelChild, "Int")
+        if (pcLen > 0) {
+            VarSetCapacity(pcBuf, (pcLen + 1) * 2, 0)
+            DllCall("GetWindowTextW", "Ptr", panelChild, "Ptr", &pcBuf, "Int", pcLen + 1)
+            text := Trim(StrGet(&pcBuf, "UTF-16"))
+            if (text != "" && !InStr(junkNames, "|" . text . "|"))
+                return text
+        }
+        panelChild := DllCall("GetWindow", "Ptr", panelChild, "UInt", 2, "Ptr")
+    }
+
+    return ""
+}
+
+
+;============================================================================================
+; NURSING BOOSTER - HOTKEYS (global — not restricted to CPRS window)
+; NOTE: ^+b is registered via Hotkey command in auto-execute (near Gui 67 setup)
+;============================================================================================
+#If  ; Clear context so these hotkeys work regardless of active window
+
+^+d::
+    gosub NB_DumpDialogControls
+return
+
+
+
+;############################################################################################
+;################### END NURSING BOOSTER ####################################################
+;############################################################################################
+;############################################################################################
+
+
+;############################################################################################
+;################### CP FLOWSHEETS BOOSTER ###################################################
+;############################################################################################
+;############################################################################################
+;
+; Automates the "Add Data" screen in CP Flowsheets (CPFlowsheets.exe).
+; Supports checkboxes, radio buttons, and dropdowns (ComboBoxes).
+; Text fields are excluded for now.
+;
+; Uses generic Win32 style-bit detection so it works regardless of whether
+; CP Flowsheets is built with Delphi, .NET WinForms, or MFC.
+;
+; SAFETY: Never clicks Submit/Save/File/Sign buttons.
+; The user always reviews and submits manually.
+;
+; PREFIX: CF_ for all functions, variables, and labels.
+;############################################################################################
+
+
+;============================================================================================
+; CF - WINDOW DETECTION
+;============================================================================================
+
+CF_ReadLastEntryTime() {
+    ; Read the time from the TDateTimePicker control in CP Flowsheets.
+    ; Cache it and only update if new time is EARLIER than current clock
+    ; (a saved entry is always in the past; Add Data sets it to now).
+    static cachedTime := ""
+    cfHwnd := WinExist("ahk_exe CPFlowsheets.exe")
+    if (!cfHwnd)
+        return cachedTime
+    ; Find TDateTimePicker with a time value (HH:MM format)
+    readTime := ""
+    ControlGetText, dtText, TDateTimePicker1, ahk_id %cfHwnd%
+    if (RegExMatch(dtText, "^\d{1,2}:\d{2}"))
+        readTime := dtText
+    if (readTime = "") {
+        ControlGetText, dtText2, TDateTimePicker2, ahk_id %cfHwnd%
+        if (RegExMatch(dtText2, "^\d{1,2}:\d{2}"))
+            readTime := dtText2
+    }
+    if (readTime != "") {
+        ; Only update cache if the read time is NOT the current time
+        ; (Add Data sets picker to current time; last entry is in the past)
+        FormatTime, nowTime,, HH:mm
+        if (readTime != nowTime)
+            cachedTime := readTime
+    }
+    return cachedTime
+}
+
+CF_FindCPFlowsheetsWindow() {
+    ; Find the main CP Flowsheets window
+    SetTitleMatchMode, 2
+    hwnd := WinExist("ahk_exe CPFlowsheets.exe")
+    if (hwnd)
+        return hwnd
+    return 0
+}
+
+CF_ClickAddDataButton() {
+    global CF_AppTitle, CF__foundGridToolbarHwnd, CF__debugToolbarInfo
+    mainHwnd := CF_FindCPFlowsheetsWindow()
+    if (!mainHwnd) {
+        MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.
+        return
+    }
+
+    ; Find the visible TToolBar inside TfraGridFrame (contains sbtnInsert = Add Data)
+    ; Enumerate all child windows manually instead of using a callback
+    CF__foundGridToolbarHwnd := 0
+    CF__debugToolbarInfo := ""
+    enumTB := RegisterCallback("CF__FindGridToolbarCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", mainHwnd, "Ptr", enumTB, "Ptr", 0)
+
+    if (!CF__foundGridToolbarHwnd) {
+        MsgBox, 48, %CF_AppTitle%, Could not find the grid toolbar in CP Flowsheets.`n`nDebug:`n%CF__debugToolbarInfo%
+        return
+    }
+
+    ; Delphi's TToolBar doesn't respond to standard TB_* messages.
+    ; sbtnInsert (Add Data) is always the first button on this toolbar.
+    ; ControlClick at the first button position — coordinates are relative
+    ; to the toolbar control itself, not the screen, so this works regardless
+    ; of window position, screen size, or scroll state.
+    ControlClick, x40 y25, ahk_id %CF__foundGridToolbarHwnd%
+}
+
+CF__FindGridToolbarCallback(hwnd, lParam) {
+    global CF__foundGridToolbarHwnd, CF__debugToolbarInfo
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if (buf != "TToolBar")
+        return 1
+
+    ; Log every TToolBar we find
+    style := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
+    vis := (style & 0x10000000) ? "Y" : "N"
+
+    ; Get parent chain
+    parentChain := ""
+    p := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+    Loop, 6 {
+        if (!p)
+            break
+        VarSetCapacity(pBuf, 256, 0)
+        DllCall("GetClassName", "Ptr", p, "Str", pBuf, "Int", 256)
+        parentChain .= pBuf . " > "
+        if (pBuf = "TfraGridFrame") {
+            CF__foundGridToolbarHwnd := hwnd
+            CF__debugToolbarInfo .= "MATCH: hwnd=" . hwnd . " vis=" . vis . " parents=" . parentChain . "`n"
+            return 0
+        }
+        p := DllCall("GetParent", "Ptr", p, "Ptr")
+    }
+    CF__debugToolbarInfo .= "SKIP: hwnd=" . hwnd . " vis=" . vis . " parents=" . parentChain . "`n"
+    return 1
+}
+
+CF__FindGridPageCtrlCallback(hwnd, lParam) {
+    global CF__foundPageCtrlHwnd
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if (buf != "TPageControl")
+        return 1
+
+    ; Check if this page control is visible and inside TfraGridView
+    ; by checking if its parent is TfraGridView
+    parentHwnd := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+    if (!parentHwnd)
+        return 1
+    VarSetCapacity(pBuf, 256, 0)
+    DllCall("GetClassName", "Ptr", parentHwnd, "Str", pBuf, "Int", 256)
+    if (pBuf = "TfraGridView") {
+        CF__foundPageCtrlHwnd := hwnd
+        return 0
+    }
+    return 1
+}
+
+CF_FindAddDataWindow() {
+    ; Strategy 1: Look for a window with "Add Data" in its title
+    SetTitleMatchMode, 2
+    hwnd := WinExist("Add Data ahk_exe CPFlowsheets.exe")
+    if (hwnd)
+        return hwnd
+
+    ; Strategy 2: Look for any CP Flowsheets window that has form controls
+    ; (checkboxes, radios, or combos)
+    mainHwnd := CF_FindCPFlowsheetsWindow()
+    if (!mainHwnd)
+        return 0
+
+    ; Check the main window itself
+    if (CF_HasFormControls(mainHwnd))
+        return mainHwnd
+
+    ; Check child/owned windows
+    WinGet, wndList, List, ahk_exe CPFlowsheets.exe
+    Loop, %wndList%
+    {
+        wnd := wndList%A_Index%
+        if (CF_HasFormControls(wnd))
+            return wnd
+    }
+    return 0
+}
+
+CF_HasFormControls(windowHwnd) {
+    global CF__hasFormControls
+    CF__hasFormControls := false
+    enumCB := RegisterCallback("CF__CheckForFormControls", "Fast")
+    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumCB, "Ptr", 0)
+    return CF__hasFormControls
+}
+
+CF__CheckForFormControls(hwnd, lParam) {
+    global CF__hasFormControls
+    VarSetCapacity(buf, 512, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    className := buf
+
+    ; Get window style
+    style := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
+    buttonStyle := style & 0x0F
+
+    ; Check for checkbox styles (BS_CHECKBOX=0x02, BS_AUTOCHECKBOX=0x03)
+    if (buttonStyle = 0x02 || buttonStyle = 0x03) {
+        CF__hasFormControls := true
+        return 0
+    }
+    ; Check for radio button styles (BS_RADIOBUTTON=0x04, BS_AUTORADIOBUTTON=0x09)
+    if (buttonStyle = 0x04 || buttonStyle = 0x09) {
+        CF__hasFormControls := true
+        return 0
+    }
+    ; Check for Delphi-specific class names
+    if (InStr(className, "TCheckBox") || InStr(className, "TRadioButton")
+        || InStr(className, "TComboBox") || className = "ComboBox"
+        || InStr(className, "TCheckListBox")) {
+        CF__hasFormControls := true
+        return 0
+    }
+    ; Check for .NET WinForms class names
+    if (InStr(className, "WindowsForms") && (InStr(className, "CheckBox")
+        || InStr(className, "RadioButton") || InStr(className, "ComboBox"))) {
+        CF__hasFormControls := true
+        return 0
+    }
+    return 1
+}
+
+
+;============================================================================================
+; CF - CONTROL TYPE CLASSIFICATION
+;
+; Uses Win32 style bits to classify controls. This works for Delphi, .NET, MFC, etc.
+; BS_CHECKBOX      = 0x02
+; BS_AUTOCHECKBOX  = 0x03
+; BS_RADIOBUTTON   = 0x04
+; BS_AUTORADIOBUTTON = 0x09
+; BS_GROUPBOX      = 0x07
+;============================================================================================
+
+CF_ClassifyControl(hwnd) {
+    ; Returns: "checkbox", "radio", "combo", "groupbox", "label", or ""
+    VarSetCapacity(buf, 512, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    className := buf
+
+    ; ComboBox detection (class name based)
+    if (className = "ComboBox" || InStr(className, "TComboBox")
+        || (InStr(className, "WindowsForms") && InStr(className, "ComboBox"))) {
+        return "combo"
+    }
+
+    ; Delphi TCheckListBox — a listbox with per-item checkboxes
+    if (InStr(className, "TCheckListBox"))
+        return "checklist"
+
+    ; Delphi-specific class name detection
+    if (InStr(className, "TCheckBox"))
+        return "checkbox"
+    if (InStr(className, "TRadioButton"))
+        return "radio"
+
+    ; .NET WinForms class name detection
+    if (InStr(className, "WindowsForms") && InStr(className, "CheckBox"))
+        return "checkbox"
+    if (InStr(className, "WindowsForms") && InStr(className, "RadioButton"))
+        return "radio"
+
+    ; CPRS-specific classes (in case CP Flowsheets shares any)
+    if (className = "TORCheckBox" || className = "TCPRSDialogCheckBox")
+        return "checkbox"
+    if (className = "TCPRSDialogParentCheckBox")
+        return "checkbox"
+
+    ; Generic Win32 Button style classification
+    style := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
+    buttonStyle := style & 0x0F
+
+    if (buttonStyle = 0x02 || buttonStyle = 0x03)  ; BS_CHECKBOX / BS_AUTOCHECKBOX
+        return "checkbox"
+    if (buttonStyle = 0x04 || buttonStyle = 0x09)  ; BS_RADIOBUTTON / BS_AUTORADIOBUTTON
+        return "radio"
+    if (buttonStyle = 0x07)  ; BS_GROUPBOX
+        return "groupbox"
+
+    ; Label detection
+    if (className = "Static" || InStr(className, "TLabel") || InStr(className, "TStaticText"))
+        return "label"
+
+    return ""
+}
+
+
+;============================================================================================
+; CF - SPY / DISCOVERY TOOL
+;
+; Dumps the full control hierarchy of the CP Flowsheets window.
+; Run this once to discover what control classes the app uses.
+;============================================================================================
+
+CF_SpyDumpControls:
+    global CF_TemplateDir, CF_AppTitle
+
+    targetHwnd := CF_FindCPFlowsheetsWindow()
+    if (!targetHwnd) {
+        ; Fallback: try the active window (user might have it focused)
+        targetHwnd := WinExist("A")
+        if (!targetHwnd) {
+            MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected. Open CP Flowsheets first.`n`nAlternatively focus the target window and try again.
+            return
+        }
+    }
+
+    ToolTip, Scanning CP Flowsheets controls...
+
+    WinGetTitle, winTitle, ahk_id %targetHwnd%
+    WinGetClass, winClass, ahk_id %targetHwnd%
+
+    ; Enumerate all child controls
+    global CF__spyFile, CF__spyTargetHwnd, CF__spyCount, CF__spyCBCount, CF__spyRadioCount, CF__spyComboCount
+
+    FormatTime, nowStamp,, yyyyMMdd_HHmmss
+    dumpPath := CF_TemplateDir . "\cpfs_spy_" . nowStamp . ".txt"
+
+    CF__spyFile := FileOpen(dumpPath, "w", "UTF-8")
+    CF__spyFile.Write("=== CP Flowsheets Control Dump ===`n")
+    FormatTime, nowTime,, yyyy-MM-dd HH:mm:ss
+    CF__spyFile.Write("Time: " . nowTime . "`n")
+    CF__spyFile.Write("Window Title: " . winTitle . "`n")
+    CF__spyFile.Write("Window Class: " . winClass . "`n")
+    CF__spyFile.Write("Window HWND: " . targetHwnd . "`n`n")
+
+    CF__spyTargetHwnd := targetHwnd
+    CF__spyCount := 0
+    CF__spyCBCount := 0
+    CF__spyRadioCount := 0
+    CF__spyComboCount := 0
+
+    enumSpy := RegisterCallback("CF__SpyCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", targetHwnd, "Ptr", enumSpy, "Ptr", 0)
+
+    CF__spyFile.Write("`n=== Summary ===`n")
+    CF__spyFile.Write("Total controls: " . CF__spyCount . "`n")
+    CF__spyFile.Write("Checkboxes: " . CF__spyCBCount . "`n")
+    CF__spyFile.Write("Radio buttons: " . CF__spyRadioCount . "`n")
+    CF__spyFile.Write("ComboBoxes: " . CF__spyComboCount . "`n")
+    CF__spyFile.Close()
+
+    ToolTip, Spy dump: %CF__spyCount% controls (%CF__spyCBCount% CB / %CF__spyRadioCount% Radio / %CF__spyComboCount% Combo)`nSaved to: %dumpPath%
+    SetTimer, CF_ClearToolTip, -5000
+
+    MsgBox, 64, %CF_AppTitle%, Control dump complete!`n`n%CF__spyCount% total controls found:`n- %CF__spyCBCount% checkboxes`n- %CF__spyRadioCount% radio buttons`n- %CF__spyComboCount% dropdowns`n`nSaved to:`n%dumpPath%
+return
+
+CF__SpyCallback(hwnd, lParam) {
+    global CF__spyFile, CF__spyTargetHwnd, CF__spyCount, CF__spyCBCount, CF__spyRadioCount, CF__spyComboCount
+    CF__spyCount++
+
+    VarSetCapacity(buf, 512, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    className := buf
+
+    ; Get window text
+    text := ""
+    SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%   ; WM_GETTEXTLENGTH
+    tLen := ErrorLevel
+    if (tLen > 0 && tLen < 1024) {
+        VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+        SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%   ; WM_GETTEXT
+        text := StrGet(&tBuf)
+    }
+
+    ; Get style
+    style := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
+    buttonStyle := style & 0x0F
+
+    ; Depth calculation
+    depth := 0
+    p := hwnd
+    Loop
+    {
+        p := DllCall("GetParent", "Ptr", p, "Ptr")
+        if (!p || p = CF__spyTargetHwnd)
+            break
+        depth++
+    }
+
+    ; Get parent class
+    parentHwnd := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+    VarSetCapacity(pBuf, 512, 0)
+    if (parentHwnd)
+        DllCall("GetClassName", "Ptr", parentHwnd, "Str", pBuf, "Int", 256)
+    parentClass := parentHwnd ? pBuf : "none"
+
+    ; Classify
+    controlType := CF_ClassifyControl(hwnd)
+    extra := ""
+    if (controlType = "checkbox") {
+        SendMessage, 0x00F0, 0, 0,, ahk_id %hwnd%   ; BM_GETCHECK
+        checked := ErrorLevel
+        extra := " [CHECKBOX] CHECKED=" . (checked ? "YES" : "NO")
+        CF__spyCBCount++
+    }
+    else if (controlType = "radio") {
+        SendMessage, 0x00F0, 0, 0,, ahk_id %hwnd%   ; BM_GETCHECK
+        checked := ErrorLevel
+        extra := " [RADIO] SELECTED=" . (checked ? "YES" : "NO")
+        CF__spyRadioCount++
+    }
+    else if (controlType = "combo") {
+        SendMessage, 0x0147, 0, 0,, ahk_id %hwnd%   ; CB_GETCURSEL
+        selIdx := ErrorLevel
+        extra := " [COMBOBOX] SELECTED_IDX=" . selIdx
+        CF__spyComboCount++
+    }
+    else if (controlType = "checklist") {
+        ; Enumerate items in the TCheckListBox
+        SendMessage, 0x018B, 0, 0,, ahk_id %hwnd%   ; LB_GETCOUNT
+        clItemCount := ErrorLevel
+        extra := " [CHECKLISTBOX] ITEMS=" . clItemCount
+        CF__spyCBCount += clItemCount
+    }
+    else if (controlType = "groupbox") {
+        extra := " [GROUPBOX]"
+    }
+
+    ; Visibility
+    visible := (style & 0x10000000) ? "Y" : "N"
+
+    ; Build indent
+    indent := ""
+    Loop, %depth%
+        indent .= "  "
+
+    ; Get rect
+    VarSetCapacity(rect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", &rect)
+    rx := NumGet(rect, 0, "Int")
+    ry := NumGet(rect, 4, "Int")
+    rw := NumGet(rect, 8, "Int") - rx
+    rh := NumGet(rect, 12, "Int") - ry
+
+    CF__spyFile.Write(indent . className . " hwnd=" . hwnd . " text='" . text . "' style=0x" . Format("{:08X}", style) . " vis=" . visible . " pos=" . rx . "," . ry . " size=" . rw . "x" . rh . " parent=" . parentClass . extra . "`n")
+    return 1
+}
+
+
+;============================================================================================
+; CF - ENUMERATE FORM CONTROLS (checkboxes, radios, combos)
+;
+; Returns an array of objects with:
+;   .hwnd, .type ("checkbox"/"radio"/"combo"), .className, .label, .checked/.selected/.value
+;   .y (screen Y for sorting/matching), .x, .parentHwnd, .parentLabel
+;============================================================================================
+
+CF_EnumFormControls(windowHwnd) {
+    global CF__enumResults, CF__enumTargetHwnd, CF__checkListHwndStr
+    CF__enumResults := []
+    CF__enumTargetHwnd := windowHwnd
+
+    ; Pass 1: Enumerate standard controls (checkboxes, radios, combos)
+    enumCB := RegisterCallback("CF__EnumFormCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumCB, "Ptr", 0)
+
+    ; Pass 2: Find TCheckListBox controls (separate pass — no array methods in callbacks)
+    CF__checkListHwndStr := ""
+    enumCL := RegisterCallback("CF__FindCheckListCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumCL, "Ptr", 0)
+
+    ; Expand each TCheckListBox into individual items (safe — outside callbacks)
+    if (CF__checkListHwndStr != "") {
+        Loop, Parse, CF__checkListHwndStr, |
+        {
+            if (A_LoopField != "")
+                CF_EnumCheckListBoxItems(A_LoopField + 0)
+        }
+    }
+
+    ; Sort by Y position (insertion sort for stable ordering)
+    results := CF__enumResults
+    if (results.Length() > 1) {
+        Loop, % results.Length() - 1
+        {
+            i := A_Index + 1
+            key := results[i]
+            j := i - 1
+            while (j >= 1 && (results[j].y > key.y || (results[j].y = key.y && results[j].x > key.x))) {
+                results[j + 1] := results[j]
+                j--
+            }
+            results[j + 1] := key
+        }
+    }
+
+    return results
+}
+
+CF__EnumFormCallback(hwnd, lParam) {
+    global CF__enumResults, CF__enumTargetHwnd
+
+    ; Skip invisible controls (WS_VISIBLE = 0x10000000)
+    cfStyle := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
+    if !(cfStyle & 0x10000000)
+        return 1
+
+    controlType := CF_ClassifyControl(hwnd)
+    if (controlType != "checkbox" && controlType != "radio" && controlType != "combo")
+        return 1
+
+    VarSetCapacity(buf, 512, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    className := buf
+
+    ; Get screen position
+    VarSetCapacity(rect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", &rect)
+    y := NumGet(rect, 4, "Int")
+    x := NumGet(rect, 0, "Int")
+
+    ; Get label text
+    label := ""
+    SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%   ; WM_GETTEXTLENGTH
+    tLen := ErrorLevel
+    if (tLen > 0 && tLen < 1024) {
+        VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+        SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%   ; WM_GETTEXT
+        label := Trim(StrGet(&tBuf))
+    }
+
+    ; If label is empty or just a space, try to find adjacent label control
+    if (label = "" || label = " ") {
+        label := CF_FindAdjacentLabel(hwnd, CF__enumTargetHwnd)
+    }
+
+    ; Get parent for radio button grouping
+    parentHwnd := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+    parentLabel := ""
+    if (parentHwnd) {
+        VarSetCapacity(pBuf, 512, 0)
+        DllCall("GetClassName", "Ptr", parentHwnd, "Str", pBuf, "Int", 256)
+        parentClass := pBuf
+        ; If parent is a groupbox, get its text as group label
+        if (InStr(parentClass, "GroupBox") || InStr(parentClass, "TGroupBox")
+            || (DllCall("GetWindowLong", "Ptr", parentHwnd, "Int", -16, "UInt") & 0x0F) = 0x07) {
+            SendMessage, 0x000E, 0, 0,, ahk_id %parentHwnd%
+            pLen := ErrorLevel
+            if (pLen > 0 && pLen < 256) {
+                VarSetCapacity(plBuf, (pLen + 1) * 2, 0)
+                SendMessage, 0x000D, pLen + 1, &plBuf,, ahk_id %parentHwnd%
+                parentLabel := Trim(StrGet(&plBuf))
+            }
+        }
+    }
+
+    ; Get state
+    checked := false
+    selected := false
+    value := ""
+    valueIdx := -1
+
+    if (controlType = "checkbox") {
+        SendMessage, 0x00F0, 0, 0,, ahk_id %hwnd%   ; BM_GETCHECK
+        checked := ErrorLevel ? true : false
+    }
+    else if (controlType = "radio") {
+        SendMessage, 0x00F0, 0, 0,, ahk_id %hwnd%   ; BM_GETCHECK
+        selected := ErrorLevel ? true : false
+    }
+    else if (controlType = "combo") {
+        SendMessage, 0x0147, 0, 0,, ahk_id %hwnd%   ; CB_GETCURSEL
+        valueIdx := ErrorLevel
+        if (valueIdx != 0xFFFFFFFF && valueIdx >= 0) {
+            ; Get the text of the selected item
+            SendMessage, 0x0149, valueIdx, 0,, ahk_id %hwnd%  ; CB_GETLBTEXTLEN
+            cbLen := ErrorLevel
+            if (cbLen > 0 && cbLen < 1024) {
+                VarSetCapacity(cbBuf, (cbLen + 2) * 2, 0)
+                SendMessage, 0x0148, valueIdx, &cbBuf,, ahk_id %hwnd%  ; CB_GETLBTEXT
+                value := StrGet(&cbBuf)
+            }
+        }
+    }
+
+    entry := {hwnd: hwnd, type: controlType, className: className, label: label
+        , checked: checked, selected: selected, value: value, valueIdx: valueIdx
+        , y: y, x: x, parentHwnd: parentHwnd, parentLabel: parentLabel}
+    CF__enumResults.Push(entry)
+    return 1
+}
+
+
+;============================================================================================
+; CF - FIND CHECKLIST CALLBACK
+;
+; Second-pass callback that only looks for TCheckListBox controls.
+; Uses string concatenation (not array methods) because Fast callbacks
+; cannot safely call .Push() or other object methods.
+;============================================================================================
+
+CF__FindCheckListCallback(hwnd, lParam) {
+    global CF__checkListHwndStr
+
+    ; Skip invisible controls
+    cfStyle := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
+    if !(cfStyle & 0x10000000)
+        return 1
+
+    ; Get class name
+    VarSetCapacity(clBuf, 512, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", clBuf, "Int", 256)
+    clName := clBuf
+
+    ; Only interested in TCheckListBox
+    if (clName = "TCheckListBox") {
+        CF__checkListHwndStr .= hwnd . "|"
+    }
+
+    return 1
+}
+
+
+;============================================================================================
+; CF - FIND ADJACENT LABEL
+;
+; When a checkbox/radio has no text, look for a Static/TLabel sibling
+; positioned immediately to its right on the same Y row.
+;============================================================================================
+
+CF_FindAdjacentLabel(controlHwnd, dialogHwnd) {
+    global CF__adjLabel, CF__adjControlRect, CF__adjControlHwnd
+
+    ; Get the control's rect
+    VarSetCapacity(rect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", controlHwnd, "Ptr", &rect)
+    CF__adjControlRect := {left: NumGet(rect, 0, "Int"), top: NumGet(rect, 4, "Int")
+        , right: NumGet(rect, 8, "Int"), bottom: NumGet(rect, 12, "Int")}
+    CF__adjControlHwnd := controlHwnd
+    CF__adjLabel := ""
+
+    parentHwnd := DllCall("GetParent", "Ptr", controlHwnd, "Ptr")
+    if (!parentHwnd)
+        parentHwnd := dialogHwnd
+
+    enumAdj := RegisterCallback("CF__AdjLabelCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", parentHwnd, "Ptr", enumAdj, "Ptr", 0)
+    return CF__adjLabel
+}
+
+CF__AdjLabelCallback(hwnd, lParam) {
+    global CF__adjLabel, CF__adjControlRect, CF__adjControlHwnd
+
+    if (hwnd = CF__adjControlHwnd)
+        return 1
+
+    VarSetCapacity(buf, 512, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    className := buf
+
+    ; Only look at label-type controls
+    if !(className = "Static" || InStr(className, "TLabel") || InStr(className, "TStaticText")
+        || InStr(className, "TVA508StaticText") || InStr(className, "TCPRSDialogStaticLabel"))
+        return 1
+
+    ; Check position: must be on the same row (within 10px Y) and to the right
+    VarSetCapacity(rect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", &rect)
+    labelTop := NumGet(rect, 4, "Int")
+    labelLeft := NumGet(rect, 0, "Int")
+
+    yDiff := Abs(labelTop - CF__adjControlRect.top)
+    if (yDiff > 10)
+        return 1
+    if (labelLeft < CF__adjControlRect.right)
+        return 1
+
+    ; Get text
+    SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
+    tLen := ErrorLevel
+    if (tLen > 0 && tLen < 256) {
+        VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+        SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%
+        text := Trim(StrGet(&tBuf))
+        if (text != "" && text != " ") {
+            CF__adjLabel := text
+            return 0  ; Stop searching
+        }
+    }
+    return 1
+}
+
+
+;============================================================================================
+; CF - TCHECKLISTBOX SUPPORT
+;
+; Delphi TCheckListBox is a single listbox control that draws per-item checkboxes.
+; Items are NOT child windows — they live inside the listbox.
+; We use LB_ messages to enumerate items and ReadProcessMemory to read check state
+; from Delphi's internal TCheckListBoxDataWrapper (FState at offset +4 from item data pointer).
+;============================================================================================
+
+CF_EnumCheckListBoxItems(listBoxHwnd) {
+    global CF__enumResults
+
+    ; Get item count
+    SendMessage, 0x018B, 0, 0,, ahk_id %listBoxHwnd%   ; LB_GETCOUNT
+    itemCount := ErrorLevel
+    if (itemCount <= 0 || itemCount > 500)
+        return
+
+    ; Get screen position of the listbox itself
+    VarSetCapacity(lbRect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", listBoxHwnd, "Ptr", &lbRect)
+    lbY := NumGet(lbRect, 4, "Int")
+    lbX := NumGet(lbRect, 0, "Int")
+
+    ; Open the process for memory reading (needed for check state)
+    WinGet, pid, PID, ahk_id %listBoxHwnd%
+    hProc := DllCall("OpenProcess", "UInt", 0x0010, "Int", 0, "UInt", pid, "Ptr")  ; PROCESS_VM_READ
+
+    Loop, %itemCount%
+    {
+        idx := A_Index - 1
+
+        ; Get item text via LB_GETTEXT
+        ; First get text length
+        SendMessage, 0x018A, idx, 0,, ahk_id %listBoxHwnd%   ; LB_GETTEXTLEN
+        tLen := ErrorLevel
+        itemText := ""
+        if (tLen > 0 && tLen < 1024) {
+            VarSetCapacity(tBuf, (tLen + 2) * 2, 0)
+            SendMessage, 0x0189, idx, &tBuf,, ahk_id %listBoxHwnd%   ; LB_GETTEXT
+            itemText := StrGet(&tBuf)
+        }
+
+        ; Get item rect for Y position
+        VarSetCapacity(itemRect, 16, 0)
+        NumPut(idx, itemRect, 0, "Int")  ; LB_GETITEMRECT needs index in RECT
+        SendMessage, 0x0198, idx, &itemRect,, ahk_id %listBoxHwnd%   ; LB_GETITEMRECT
+        ; itemRect is in client coords — convert to screen
+        VarSetCapacity(pt, 8, 0)
+        NumPut(NumGet(itemRect, 0, "Int"), pt, 0, "Int")
+        NumPut(NumGet(itemRect, 4, "Int"), pt, 4, "Int")
+        DllCall("ClientToScreen", "Ptr", listBoxHwnd, "Ptr", &pt)
+        itemY := NumGet(pt, 4, "Int")
+
+        ; Read check state from Delphi internals via LB_GETITEMDATA + ReadProcessMemory
+        ; TCheckListBoxDataWrapper layout (32-bit Delphi):
+        ;   Offset 0: VMT pointer (4 bytes)
+        ;   Offset 4: FData (LongInt, 4 bytes)
+        ;   Offset 8: FState (TCheckBoxState: 0=unchecked, 1=checked, 2=grayed)
+        itemChecked := false
+        SendMessage, 0x0199, idx, 0,, ahk_id %listBoxHwnd%   ; LB_GETITEMDATA
+        dataPtr := ErrorLevel
+        if (hProc && dataPtr && dataPtr != 0xFFFFFFFF && dataPtr != -1) {
+            VarSetCapacity(stateVal, 4, 0)
+            bytesRead := 0
+            DllCall("ReadProcessMemory", "Ptr", hProc, "Ptr", dataPtr + 8
+                , "Ptr", &stateVal, "UInt", 4, "Ptr*", bytesRead)
+            if (bytesRead > 0) {
+                state := NumGet(stateVal, 0, "Int")
+                itemChecked := (state = 1) ? true : false  ; cbChecked=1
+            }
+        }
+
+        entry := {hwnd: listBoxHwnd, type: "checklist", className: "TCheckListBox"
+            , label: itemText, checked: itemChecked, selected: false, value: ""
+            , valueIdx: -1, y: itemY, x: lbX, parentHwnd: 0, parentLabel: ""
+            , checklistIdx: idx}
+        CF__enumResults.Push(entry)
+    }
+
+    if (hProc)
+        DllCall("CloseHandle", "Ptr", hProc)
+}
+
+CF_ReadCheckListItemState(listBoxHwnd, itemIdx) {
+    ; Read the check state of a single TCheckListBox item
+    ; Returns true if checked, false otherwise
+    WinGet, pid, PID, ahk_id %listBoxHwnd%
+    hProc := DllCall("OpenProcess", "UInt", 0x0010, "Int", 0, "UInt", pid, "Ptr")
+    if (!hProc)
+        return false
+
+    SendMessage, 0x0199, itemIdx, 0,, ahk_id %listBoxHwnd%   ; LB_GETITEMDATA
+    dataPtr := ErrorLevel
+    result := false
+    if (dataPtr && dataPtr != 0xFFFFFFFF && dataPtr != -1) {
+        ; FState is at offset +8: past VMT pointer (4) and FData (4)
+        VarSetCapacity(stateVal, 4, 0)
+        bytesRead := 0
+        DllCall("ReadProcessMemory", "Ptr", hProc, "Ptr", dataPtr + 8
+            , "Ptr", &stateVal, "UInt", 4, "Ptr*", bytesRead)
+        if (bytesRead > 0) {
+            state := NumGet(stateVal, 0, "Int")
+            result := (state = 1) ? true : false
+        }
+    }
+    DllCall("CloseHandle", "Ptr", hProc)
+    return result
+}
+
+CF_WriteCheckListItemState(listBoxHwnd, itemIdx, newChecked) {
+    ; Write the check state of a single TCheckListBox item via WriteProcessMemory
+    ; Same memory layout as CF_ReadCheckListItemState: FState at dataPtr + 8
+    WinGet, pid, PID, ahk_id %listBoxHwnd%
+    hProc := DllCall("OpenProcess", "UInt", 0x0038, "Int", 0, "UInt", pid, "Ptr")  ; PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION
+    if (!hProc)
+        return false
+
+    SendMessage, 0x0199, itemIdx, 0,, ahk_id %listBoxHwnd%   ; LB_GETITEMDATA
+    dataPtr := ErrorLevel
+    result := false
+    if (dataPtr && dataPtr != 0xFFFFFFFF && dataPtr != -1) {
+        ; FState: 0=unchecked, 1=checked
+        newState := newChecked ? 1 : 0
+        VarSetCapacity(stateVal, 4, 0)
+        NumPut(newState, stateVal, 0, "Int")
+        bytesWritten := 0
+        DllCall("WriteProcessMemory", "Ptr", hProc, "Ptr", dataPtr + 8
+            , "Ptr", &stateVal, "UInt", 4, "Ptr*", bytesWritten)
+        result := (bytesWritten > 0)
+    }
+    DllCall("CloseHandle", "Ptr", hProc)
+    return result
+}
+
+
+;============================================================================================
+; CF - DEBUG LOGGING
+;============================================================================================
+
+CF__LogControlStates(action, controls, templateNameOrPath := "", windowTitle := "", statA := 0, statB := 0) {
+    global CF_LogDir, NB_DebugLogging
+    if (!NB_DebugLogging)
+        return
+
+    FormatTime, nowStamp,, yyyyMMddHHmmss
+    FormatTime, nowDisp,, yyyy-MM-dd HH:mm:ss
+    logPath := CF_LogDir . "\" . action . "_" . nowStamp . ".txt"
+    FileDelete, %logPath%
+
+    controlCount := controls.Length()
+
+    logText := "============================================================`n"
+    logText .= "  CP FLOWSHEETS " . action . " LOG`n"
+    logText .= "============================================================`n"
+    logText .= "Timestamp:    " . nowDisp . "`n"
+    logText .= "Action:       " . action . "`n"
+    logText .= "Template:     " . templateNameOrPath . "`n"
+    logText .= "Window:       " . windowTitle . "`n"
+    logText .= "User:         " . A_UserName . "`n"
+    logText .= "Controls:     " . controlCount . "`n"
+    if (action = "SAVE")
+        logText .= "Total saved:  " . statA . "`n"
+    else if (action = "APPLY")
+        logText .= "Applied: " . statA . "  |  Not matched: " . statB . "`n"
+    logText .= "============================================================`n`n"
+    FileAppend, %logText%, %logPath%, UTF-8
+
+    cbCount := 0
+    radioCount := 0
+    comboCount := 0
+    clCount := 0
+
+    for ci, ctrl in controls {
+        ctrlType := ctrl.type
+        ctrlLabel := ctrl.label != "" ? ctrl.label : "(unlabeled)"
+        ctrlLine := ""
+
+        if (ctrlType = "checkbox") {
+            state := ctrl.checked ? "[X]" : "[ ]"
+            ctrlLine := "  " . state . " CHECKBOX  " . ctrlLabel . "`n"
+            cbCount++
+        }
+        else if (ctrlType = "checklist") {
+            state := ctrl.checked ? "[X]" : "[ ]"
+            clIdx := ctrl.checklistIdx
+            ctrlLine := "  " . state . " CHECKLIST idx=" . clIdx . "  " . ctrlLabel . "`n"
+            clCount++
+        }
+        else if (ctrlType = "radio") {
+            state := ctrl.selected ? "(O)" : "( )"
+            grp := ctrl.parentLabel != "" ? " group=""" . ctrl.parentLabel . """" : ""
+            ctrlLine := "  " . state . " RADIO" . grp . "  " . ctrlLabel . "`n"
+            radioCount++
+        }
+        else if (ctrlType = "combo") {
+            val := ctrl.value != "" ? ctrl.value : "(empty)"
+            ctrlLine := "  [v] COMBO  " . ctrlLabel . " = " . val . "`n"
+            comboCount++
+        }
+
+        FileAppend, %ctrlLine%, %logPath%, UTF-8
+    }
+
+    footerText := "`n============================================================`n"
+    footerText .= "TOTALS: " . cbCount . " checkboxes, " . clCount . " checklist items, " . radioCount . " radios, " . comboCount . " combos`n"
+    footerText .= "============================================================`n"
+    FileAppend, %footerText%, %logPath%, UTF-8
+}
+
+
+;============================================================================================
+; CF - SAVE TEMPLATE
+;============================================================================================
+
+CF_BtnSaveTemplate:
+    global CF_TemplateDir, CF_AppTitle
+
+    targetHwnd := CF_FindAddDataWindow()
+    if (!targetHwnd) {
+        targetHwnd := CF_FindCPFlowsheetsWindow()
+    }
+    if (!targetHwnd) {
+        MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.`nOpen CP Flowsheets and navigate to the Add Data screen first.
+        return
+    }
+
+    InputBox, cfTemplateName, %CF_AppTitle% - Save Template, Template name:`n`nUse a descriptive name like 'ICU Default' or 'Vitals Baseline'.
+    if (ErrorLevel || cfTemplateName = "")
+        return
+
+    ToolTip, Scanning CP Flowsheets controls...
+
+    controls := CF_EnumFormControls(targetHwnd)
+    if (controls.Length() = 0) {
+        MsgBox, 48, %CF_AppTitle%, No checkboxes, radio buttons, or dropdowns found in this window.`n`nTry running CPFS Spy to see what controls are available.
+        return
+    }
+
+    ; Build JSON
+    WinGetTitle, cfWinTitle, ahk_id %targetHwnd%
+    FormatTime, cfNowTime,, yyyy-MM-dd HH:mm
+    json := "{"
+    json .= "`n  ""name"": " . CF_EscJson(cfTemplateName) . ","
+    json .= "`n  ""format"": 1,"
+    json .= "`n  ""speed"": 100,"
+    json .= "`n  ""app"": ""CPFlowsheets"","
+    json .= "`n  ""created"": """ . cfNowTime . ""","
+    json .= "`n  ""window_title"": " . CF_EscJson(cfWinTitle) . ","
+    json .= "`n  ""controls"": ["
+
+    cbCount := 0
+    radioCount := 0
+    comboCount := 0
+
+    for ci, ctrl in controls {
+        if (ci > 1)
+            json .= ","
+
+        json .= "`n    {""type"": """ . ctrl.type . """"
+        json .= ", ""label"": " . CF_EscJson(ctrl.label)
+        json .= ", ""cls"": " . CF_EscJson(ctrl.className)
+        json .= ", ""idx"": " . (ci - 1)
+        json .= ", ""y"": " . ctrl.y
+
+        if (ctrl.type = "checkbox" || ctrl.type = "checklist") {
+            json .= ", ""checked"": " . (ctrl.checked ? "true" : "false")
+            if (ctrl.type = "checklist")
+                json .= ", ""checklistIdx"": " . ctrl.checklistIdx
+            cbCount++
+        }
+        else if (ctrl.type = "radio") {
+            json .= ", ""selected"": " . (ctrl.selected ? "true" : "false")
+            if (ctrl.parentLabel != "")
+                json .= ", ""group_label"": " . CF_EscJson(ctrl.parentLabel)
+            radioCount++
+        }
+        else if (ctrl.type = "combo") {
+            json .= ", ""value"": " . CF_EscJson(ctrl.value)
+            json .= ", ""valueIdx"": " . ctrl.valueIdx
+            comboCount++
+        }
+
+        json .= "}"
+    }
+
+    json .= "`n  ]"
+    json .= "`n}"
+
+    filePath := CF_TemplateDir . "\" . CF_SanitizeFilename(cfTemplateName) . ".json"
+    f := FileOpen(filePath, "w", "UTF-8")
+    f.Write(json)
+    f.Close()
+
+    totalControls := controls.Length()
+
+    if (NB_DebugLogging)
+        CF__LogControlStates("SAVE", controls, cfTemplateName, cfWinTitle, cbCount + radioCount + comboCount, 0)
+
+    ToolTip, Saved "%cfTemplateName%": %totalControls% controls (%cbCount% CB / %radioCount% Radio / %comboCount% Combo)
+    SetTimer, CF_ClearToolTip, -3000
+return
+
+
+;============================================================================================
+; CF - LOAD / APPLY TEMPLATE
+;============================================================================================
+
+CF_BtnLoadTemplate:
+    global CF_TemplateDir, CF_AppTitle
+
+    targetHwnd := CF_FindAddDataWindow()
+    if (!targetHwnd)
+        targetHwnd := CF_FindCPFlowsheetsWindow()
+    if (!targetHwnd) {
+        MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.`nOpen CP Flowsheets first.
+        return
+    }
+
+    ; Build template list
+    cfLoadList := ""
+    cfLoadPaths := []
+    Loop, Files, %CF_TemplateDir%\*.json
+    {
+        SplitPath, A_LoopFileFullPath,,,,nameNoExt
+        cfLoadList .= nameNoExt . "|"
+        cfLoadPaths.Push(A_LoopFileFullPath)
+    }
+
+    if (cfLoadPaths.Length() = 0) {
+        MsgBox, 64, %CF_AppTitle%, No saved CP Flowsheets templates found.`n`nTo create one:`n1. Open the Add Data screen in CP Flowsheets`n2. Set up your checkboxes, radios, and dropdowns`n3. Click 'CPFS Save'
+        return
+    }
+
+    ; Show picker GUI (using Gui 69 to avoid conflicts)
+    Gui, 69:Destroy
+    Gui, 69:+AlwaysOnTop
+    Gui, 69:Font, s9, Segoe UI
+    Gui, 69:Add, Text,, Select a CP Flowsheets template to apply:
+    Gui, 69:Add, ListBox, w300 h200 vCF_LoadSelection, %cfLoadList%
+    Gui, 69:Add, Button, y+5 w120 Default gCF_DoLoadTemplate, Apply
+    Gui, 69:Add, Button, x+5 w120 gCF_CancelLoad, Cancel
+    Gui, 69:Show,, %CF_AppTitle% - Load Template
+return
+
+CF_DoLoadTemplate:
+    Gui, 69:Submit
+    Gui, 69:Destroy
+    if (CF_LoadSelection = "") {
+        MsgBox, 48, %CF_AppTitle%, Select a template first.
+        return
+    }
+    templatePath := CF_TemplateDir . "\" . CF_SanitizeFilename(CF_LoadSelection) . ".json"
+    if (FileExist(templatePath)) {
+        if (CF_ChainAddData) {
+            CF_ClickAddDataButton()
+            ; Wait for the input screen to appear
+            Loop, 20 {
+                Sleep, 250
+                addDataHwnd := CF_FindAddDataWindow()
+                if (addDataHwnd)
+                    break
+            }
+            if (!addDataHwnd) {
+                MsgBox, 48, %CF_AppTitle%, Add Data screen did not open. Try clicking Add Data manually first.
+                return
+            }
+            ; Extra delay for controls to fully load
+            Sleep, %CF_AddDataDelay%
+        }
+        CF_ApplyTemplate(templatePath)
+    }
+return
+
+CF_CancelLoad:
+    Gui, 69:Destroy
+return
+
+CF_ApplyTemplate(templatePath) {
+    global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride, CF_AutoSaveDelay, NB_ApplyCancelled
+
+    targetHwnd := CF_FindAddDataWindow()
+    if (!targetHwnd) {
+        MsgBox, 48, %CF_AppTitle%, Not on the Add Data screen.`nClick Add Data first`, or check Auto-Add on the Booster panel.
+        return
+    }
+
+    FileRead, content, %templatePath%
+    if (ErrorLevel) {
+        MsgBox, 48, %CF_AppTitle%, Failed to read template: %templatePath%
+        return
+    }
+
+    ; Parse controls from JSON
+    templateControls := CF_ParseControls(content)
+    if (templateControls.Length() = 0) {
+        MsgBox, 48, %CF_AppTitle%, Template has no controls.
+        return
+    }
+
+    ; Determine effective speed: override → main panel, else → template speed (default 100ms for CPFS)
+    cfTplSpeed := 100
+    if (RegExMatch(content, """speed"":\s*(\d+)", spdM))
+        cfTplSpeed := spdM1 + 0
+    if (NB_SpeedOverride)
+        cfEffectiveSpeed := NB_ApplySpeed
+    else
+        cfEffectiveSpeed := cfTplSpeed
+
+    ToolTip, Scanning live controls...
+    WinActivate, ahk_id %targetHwnd%
+    Sleep, 300
+
+    ; Wait for controls to stabilize (poll until count stops changing)
+    prevCount := 0
+    stableRounds := 0
+    Loop, 20 {
+        liveControls := CF_EnumFormControls(targetHwnd)
+        curCount := liveControls.Length()
+        if (curCount > 0 && curCount = prevCount) {
+            stableRounds++
+            if (stableRounds >= 2)
+                break
+        } else {
+            stableRounds := 0
+        }
+        prevCount := curCount
+        Sleep, 50
+    }
+
+    if (liveControls.Length() = 0) {
+        MsgBox, 48, %CF_AppTitle%, No controls found in the current window.
+        return
+    }
+
+    ; Match template controls to live controls by label + Y-position
+    ; Use "claimed" tracking so duplicate labels (Yes/No) match by position order
+    totalApplied := 0
+    totalNotFound := 0
+    cfNotFoundList := ""
+    cfClaimed := {}  ; track which live indices are already matched
+    cfAutoSaveCancelled := false
+
+    ; Register right-click hotkey to set cancel flag
+    NB_ApplyCancelled := false
+    Hotkey, ~RButton, NB_CancelApplyHotkey, On
+
+    cfTotalTpl := templateControls.Length()
+    for ti, tplCtrl in templateControls {
+        ; Cancel template apply on right-click
+        if (NB_ApplyCancelled) {
+            Hotkey, ~RButton, NB_CancelApplyHotkey, Off
+            ToolTip, Template apply cancelled at control %ti%/%cfTotalTpl%.
+            SetTimer, CF_ClearToolTip, -3000
+            return
+        }
+        ; Check Esc to cancel auto-save throughout the apply process
+        if (CF_AutoSave && GetKeyState("Escape", "P")) {
+            cfAutoSaveCancelled := true
+            ToolTip, AutoSave cancelled - still applying template
+            SetTimer, CF_ClearToolTip, -2000
+        }
+        ; Extract all template control properties to plain variables (AHK v1 safe)
+        cfTplType := tplCtrl.type
+        cfTplLabel := tplCtrl.label
+        cfTplChecked := tplCtrl.checked
+        cfTplSelected := tplCtrl.selected
+        cfTplValue := tplCtrl.value
+        cfTplValueIdx := tplCtrl.valueIdx
+        cfTplY := tplCtrl.y
+        cfTplGroupLabel := tplCtrl.group_label
+        cfTplCls := tplCtrl.cls
+
+        ; Skip TDateTimePicker — saved as "radio" type but is actually a time/date control
+        if (cfTplCls = "TDateTimePicker")
+            continue
+
+        ToolTip, Applying control %ti%/%cfTotalTpl%: %cfTplLabel%
+
+        ; Find best matching live control (that hasn't been claimed yet)
+        bestLiveIdx := 0
+        bestScore := 0
+        bestYDist := 999999
+
+        for li, liveCtrl in liveControls {
+            ; Skip already-claimed controls
+            if (cfClaimed[li])
+                continue
+
+            ; Extract live control properties to plain variables
+            cfLiveType := liveCtrl.type
+            cfLiveLabel := liveCtrl.label
+            cfLiveY := liveCtrl.y
+            cfLiveParentLabel := liveCtrl.parentLabel
+
+            ; Must be same type (checklist matches checklist)
+            if (cfLiveType != cfTplType)
+                continue
+
+            score := 0
+
+            ; Label match (highest priority)
+            if (cfTplLabel != "" && cfLiveLabel = cfTplLabel) {
+                score := 100
+            }
+            else if (cfTplLabel != "" && cfLiveLabel != "" && InStr(cfLiveLabel, cfTplLabel)) {
+                score := 70
+            }
+            else if (cfTplLabel != "" && cfLiveLabel != "" && InStr(cfTplLabel, cfLiveLabel)) {
+                score := 60
+            }
+
+            ; Y-position proximity bonus (if labels don't match, use position)
+            if (score = 0 && cfTplLabel = "" && cfLiveLabel = "") {
+                yDiff := Abs(cfLiveY - cfTplY)
+                if (yDiff < 20)
+                    score := 50
+                else if (yDiff < 50)
+                    score := 30
+            }
+
+            ; For radios, also check group label
+            if (cfTplType = "radio" && cfTplGroupLabel != "" && cfLiveParentLabel = cfTplGroupLabel) {
+                score += 20
+            }
+
+            ; When scores tie, prefer the one closest in Y position
+            yDist := Abs(cfLiveY - cfTplY)
+            if (score > bestScore || (score = bestScore && score > 0 && yDist < bestYDist)) {
+                bestScore := score
+                bestLiveIdx := li
+                bestYDist := yDist
+            }
+        }
+
+        if (bestLiveIdx = 0 || bestScore < 30) {
+            totalNotFound++
+            cfNotFoundList .= ti . ": " . cfTplType . " """ . cfTplLabel . """ (score=" . bestScore . ")`n"
+            continue
+        }
+
+        ; Claim this live control so it can't be matched again
+        cfClaimed[bestLiveIdx] := true
+
+        cfMatchHwnd := liveControls[bestLiveIdx].hwnd
+
+        ; Scroll the control into view before interacting
+        CF_ScrollIntoView(cfMatchHwnd)
+
+        ; Apply the state change
+        if (cfTplType = "checkbox") {
+            ; Check current state
+            SendMessage, 0x00F0, 0, 0,, ahk_id %cfMatchHwnd%   ; BM_GETCHECK
+            currentChecked := ErrorLevel ? true : false
+            if (currentChecked != cfTplChecked) {
+                PostMessage, 0x00F5, 0, 0,, ahk_id %cfMatchHwnd%   ; BM_CLICK
+                totalApplied++
+                Sleep, %cfEffectiveSpeed%
+            }
+        }
+        else if (cfTplType = "checklist") {
+            ; TCheckListBox item: select then ControlSend Space to toggle
+            cfCLIdx := liveControls[bestLiveIdx].checklistIdx
+            currentCLChecked := CF_ReadCheckListItemState(cfMatchHwnd, cfCLIdx)
+            if (currentCLChecked != cfTplChecked) {
+                SendMessage, 0x0186, cfCLIdx, 0,, ahk_id %cfMatchHwnd%   ; LB_SETCURSEL
+                Sleep, 50
+                ControlSend,, {Space}, ahk_id %cfMatchHwnd%
+                totalApplied++
+                Sleep, %cfEffectiveSpeed%
+            }
+        }
+        else if (cfTplType = "radio") {
+            if (cfTplSelected) {
+                SendMessage, 0x00F0, 0, 0,, ahk_id %cfMatchHwnd%   ; BM_GETCHECK
+                currentSelected := ErrorLevel ? true : false
+                if (!currentSelected) {
+                    PostMessage, 0x00F5, 0, 0,, ahk_id %cfMatchHwnd%   ; BM_CLICK
+                    totalApplied++
+                    Sleep, %cfEffectiveSpeed%
+                }
+            }
+        }
+        else if (cfTplType = "combo") {
+            ; Combo boxes in CPFS are system settings (location, frequency, etc.)
+            ; that should not be changed by template apply. Skip them entirely.
+        }
+    }
+
+    Hotkey, ~RButton, NB_CancelApplyHotkey, Off
+
+    CF_DismissIntermediatePopups()
+
+    if (NB_DebugLogging) {
+        WinGetTitle, cfApplyWinTitle, ahk_id %targetHwnd%
+        cfApplyLiveControls := CF_EnumFormControls(targetHwnd)
+        CF__LogControlStates("APPLY", cfApplyLiveControls, templatePath, cfApplyWinTitle, totalApplied, totalNotFound)
+    }
+
+    if (CF_AutoSave && totalApplied > 0) {
+        ; Check if Esc/right-click was pressed at any point during apply
+        if (cfAutoSaveCancelled || NB_ApplyCancelled || GetKeyState("Escape", "P")) {
+            ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
+            SetTimer, CF_ClearToolTip, -3000
+            return
+        }
+        ; Wait before saving, then click Save (right-click or Esc cancels during delay)
+        ToolTip, %totalApplied% applied - saving in %CF_AutoSaveDelay% ms... (right-click or Esc to cancel)
+        Sleep, %CF_AutoSaveDelay%
+        ; Re-check cancel after delay
+        if (NB_ApplyCancelled || GetKeyState("Escape", "P")) {
+            ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
+            SetTimer, CF_ClearToolTip, -3000
+            return
+        }
+        CF_ClickSaveButton(targetHwnd)
+        ToolTip, %totalApplied% applied and saved
+        SetTimer, CF_ClearToolTip, -3000
+    } else if (CF_AutoSave && totalApplied = 0) {
+        ToolTip, No controls applied - nothing to save
+        SetTimer, CF_ClearToolTip, -3000
+    } else {
+        cfUnmatchedTip := "Done: " . totalApplied . " applied, " . totalNotFound . " not matched"
+        if (cfNotFoundList != "")
+            cfUnmatchedTip .= " [" . RTrim(cfNotFoundList, "`n") . "]"
+        cfUnmatchedTip .= " - review before submitting"
+        ToolTip, %cfUnmatchedTip%
+        SetTimer, CF_ClearToolTip, -8000
+    }
+
+    ; Re-assert AlwaysOnTop on the panel — WinActivate on CPFS dialog strips it
+    if (NB_BoosterGuiVisible = 1)
+        WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
+}
+
+
+;============================================================================================
+; CF - DELETE TEMPLATE
+;============================================================================================
+
+CF_BtnDeleteTemplate:
+    global CF_TemplateDir, CF_AppTitle
+
+    cfDelList := ""
+    cfDelPaths := []
+    Loop, Files, %CF_TemplateDir%\*.json
+    {
+        SplitPath, A_LoopFileFullPath,,,,nameNoExt
+        cfDelList .= A_Index . ": " . nameNoExt . "`n"
+        cfDelPaths.Push(A_LoopFileFullPath)
+    }
+
+    if (cfDelPaths.Length() = 0) {
+        MsgBox, 64, %CF_AppTitle%, No CP Flowsheets templates to delete.
+        return
+    }
+
+    InputBox, cfDelChoice, %CF_AppTitle% - Delete Template, Enter the number of the template to delete:`n`n%cfDelList%,, 350, 300
+    if (ErrorLevel || cfDelChoice = "")
+        return
+
+    cfDelIdx := cfDelChoice + 0
+    if (cfDelIdx < 1 || cfDelIdx > cfDelPaths.Length()) {
+        MsgBox, 48, %CF_AppTitle%, Invalid selection.
+        return
+    }
+
+    SplitPath, % cfDelPaths[cfDelIdx],,,,cfDelName
+    MsgBox, 36, %CF_AppTitle%, Delete template "%cfDelName%"?
+    IfMsgBox, Yes
+    {
+        FileDelete, % cfDelPaths[cfDelIdx]
+        ToolTip, Template "%cfDelName%" deleted
+        SetTimer, CF_ClearToolTip, -2000
+    }
+return
+
+
+;============================================================================================
+; CF - PARSE TEMPLATE JSON
+;============================================================================================
+
+CF_ParseControls(jsonContent) {
+    controls := []
+
+    ; Find the "controls" array
+    cPos := InStr(jsonContent, """controls""")
+    if (!cPos)
+        return controls
+
+    ; Find opening [
+    arrStart := InStr(jsonContent, "[",, cPos)
+    if (!arrStart)
+        return controls
+
+    ; Find matching ] using depth counting
+    depth := 1
+    scanPos := arrStart + 1
+    arrEnd := 0
+    while (scanPos <= StrLen(jsonContent) && depth > 0) {
+        ch := SubStr(jsonContent, scanPos, 1)
+        if (ch = "[")
+            depth++
+        else if (ch = "]")
+            depth--
+        if (depth = 0)
+            arrEnd := scanPos
+        scanPos++
+    }
+    if (!arrEnd)
+        return controls
+
+    ; Find each control object
+    itemPos := arrStart
+    while (true) {
+        itemPos := InStr(jsonContent, "{",, itemPos + 1)
+        if (!itemPos || itemPos > arrEnd)
+            break
+        itemEnd := InStr(jsonContent, "}",, itemPos)
+        if (!itemEnd)
+            break
+        itemStr := SubStr(jsonContent, itemPos, itemEnd - itemPos + 1)
+
+        ; Parse fields
+        ctrlType := ""
+        if (RegExMatch(itemStr, """type"":\s*""([^""]*)""", m))
+            ctrlType := m1
+
+        label := ""
+        if (RegExMatch(itemStr, """label"":\s*""((?:[^""\\]|\\.)*)""", m))
+            label := m1
+
+        checked := InStr(itemStr, """checked"": true") || InStr(itemStr, """checked"":true") ? true : false
+        selected := InStr(itemStr, """selected"": true") || InStr(itemStr, """selected"":true") ? true : false
+
+        value := ""
+        if (RegExMatch(itemStr, """value"":\s*""((?:[^""\\]|\\.)*)""", m))
+            value := m1
+
+        valueIdx := -1
+        if (RegExMatch(itemStr, """valueIdx"":\s*(-?\d+)", m))
+            valueIdx := m1 + 0
+
+        yPos := 0
+        if (RegExMatch(itemStr, """y"":\s*(-?\d+)", m))
+            yPos := m1 + 0
+
+        group_label := ""
+        if (RegExMatch(itemStr, """group_label"":\s*""((?:[^""\\]|\\.)*)""", m))
+            group_label := m1
+
+        checklistIdx := -1
+        if (RegExMatch(itemStr, """checklistIdx"":\s*(-?\d+)", m))
+            checklistIdx := m1 + 0
+
+        ctrlCls := ""
+        if (RegExMatch(itemStr, """cls"":\s*""([^""]*)""", m))
+            ctrlCls := m1
+
+        entry := {type: ctrlType, label: label, checked: checked, selected: selected
+            , value: value, valueIdx: valueIdx, y: yPos, group_label: group_label
+            , checklistIdx: checklistIdx, cls: ctrlCls}
+        controls.Push(entry)
+
+        itemPos := itemEnd
+    }
+
+    return controls
+}
+
+
+;============================================================================================
+; CF - SAFETY: DISMISS INTERMEDIATE POPUPS
+;============================================================================================
+
+CF_DismissIntermediatePopups() {
+    Sleep, 150
+    Loop, 3
+    {
+        found := false
+        WinGet, wndList, List, ahk_exe CPFlowsheets.exe
+        Loop, %wndList%
+        {
+            wnd := wndList%A_Index%
+            WinGetClass, cls, ahk_id %wnd%
+
+            ; Skip the main window
+            WinGetPos,,, w, h, ahk_id %wnd%
+            if (w > 500 || h > 400)
+                continue
+
+            ; Check for dangerous buttons
+            if (CF_HasDangerousButton(wnd))
+                continue
+
+            ; Find and click OK button
+            okHwnd := CF_FindOKButton(wnd)
+            if (okHwnd) {
+                PostMessage, 0x00F5, 0, 0,, ahk_id %okHwnd%  ; BM_CLICK
+                Sleep, 200
+                found := true
+            }
+        }
+        if (!found)
+            break
+    }
+}
+
+CF_HasDangerousButton(windowHwnd) {
+    global CF__hasDangerous
+    CF__hasDangerous := false
+    enumDang := RegisterCallback("CF__CheckDangerousCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumDang, "Ptr", 0)
+    return CF__hasDangerous
+}
+
+CF__CheckDangerousCallback(hwnd, lParam) {
+    global CF__hasDangerous
+    VarSetCapacity(buf, 512, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    className := buf
+
+    ; Text input fields = data entry form, not an OK popup
+    if (InStr(className, "TEdit") || InStr(className, "TMemo") || InStr(className, "TRichEdit")
+        || InStr(className, "Edit") || InStr(className, "RichEdit")) {
+        CF__hasDangerous := true
+        return 0
+    }
+
+    ; Check button text for dangerous labels
+    if (InStr(className, "Button") || InStr(className, "TButton") || InStr(className, "TBitBtn")) {
+        SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
+        tLen := ErrorLevel
+        if (tLen > 0 && tLen < 256) {
+            VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+            SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%
+            StringUpper, textUpper, % StrGet(&tBuf)
+            if (InStr(textUpper, "FINISH") || InStr(textUpper, "SUBMIT")
+                || InStr(textUpper, "SIGN") || InStr(textUpper, "FILE")
+                || InStr(textUpper, "COMPLETE") || InStr(textUpper, "SAVE")
+                || InStr(textUpper, "DELETE") || InStr(textUpper, "REMOVE")) {
+                CF__hasDangerous := true
+                return 0
+            }
+        }
+    }
+    return 1
+}
+
+CF_FindOKButton(windowHwnd) {
+    global CF__foundOKHwnd
+    CF__foundOKHwnd := 0
+    enumOK := RegisterCallback("CF__FindOKCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumOK, "Ptr", 0)
+    return CF__foundOKHwnd
+}
+
+CF__FindOKCallback(hwnd, lParam) {
+    global CF__foundOKHwnd
+    VarSetCapacity(buf, 512, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    className := buf
+
+    if !(InStr(className, "Button") || InStr(className, "TButton") || InStr(className, "TBitBtn"))
+        return 1
+
+    SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
+    tLen := ErrorLevel
+    if (tLen > 0 && tLen < 256) {
+        VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+        SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%
+        StringUpper, textUpper, % StrGet(&tBuf)
+        if (textUpper = "OK" || textUpper = "&OK" || textUpper = "CONTINUE"
+            || textUpper = "&CONTINUE" || textUpper = "YES" || textUpper = "&YES") {
+            CF__foundOKHwnd := hwnd
+            return 0
+        }
+    }
+    return 1
+}
+
+
+;============================================================================================
+; CF - FIND AND CLICK SAVE BUTTON
+;
+; Finds the "Save" TButton in CP Flowsheets and clicks it.
+; Used by AutoSave feature after template apply.
+;============================================================================================
+
+CF_ClickSaveButton(windowHwnd) {
+    global CF_AppTitle, CF__foundSaveHwnd
+    CF__foundSaveHwnd := 0
+    enumSave := RegisterCallback("CF__FindSaveCallback", "Fast")
+    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumSave, "Ptr", 0)
+
+    if (CF__foundSaveHwnd) {
+        PostMessage, 0x00F5, 0, 0,, ahk_id %CF__foundSaveHwnd%   ; BM_CLICK
+        ToolTip, AutoSave: Save clicked
+        SetTimer, CF_ClearToolTip, -2000
+    } else {
+        ToolTip, AutoSave: Save button not found - save manually
+        SetTimer, CF_ClearToolTip, -3000
+    }
+}
+
+CF__FindSaveCallback(hwnd, lParam) {
+    global CF__foundSaveHwnd
+
+    ; Skip invisible
+    cfStyle := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
+    if !(cfStyle & 0x10000000)
+        return 1
+
+    VarSetCapacity(buf, 512, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    className := buf
+
+    if !(InStr(className, "Button") || InStr(className, "TButton"))
+        return 1
+
+    ; Get button text
+    VarSetCapacity(tBuf, 256, 0)
+    DllCall("GetWindowText", "Ptr", hwnd, "Str", tBuf, "Int", 128)
+    btnText := tBuf
+
+    if (btnText = "Save" || btnText = "&Save") {
+        CF__foundSaveHwnd := hwnd
+        return 0
+    }
+    return 1
+}
+
+
+;============================================================================================
+; CF - SCROLL INTO VIEW
+;
+; Scrolls the parent TScrollBox so the target control is visible.
+; Walks up the parent chain to find a TScrollBox, then scrolls it.
+;============================================================================================
+
+CF_ScrollIntoView(controlHwnd) {
+    ; Find the parent TScrollBox
+    scrollBoxHwnd := 0
+    parent := controlHwnd
+    Loop, 10
+    {
+        parent := DllCall("GetParent", "Ptr", parent, "Ptr")
+        if (!parent)
+            break
+        VarSetCapacity(pBuf, 512, 0)
+        DllCall("GetClassName", "Ptr", parent, "Str", pBuf, "Int", 256)
+        pClass := pBuf
+        if (pClass = "TScrollBox") {
+            scrollBoxHwnd := parent
+            break
+        }
+    }
+    if (!scrollBoxHwnd)
+        return
+
+    ; Get scroll box client rect (visible area)
+    VarSetCapacity(sbRect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", scrollBoxHwnd, "Ptr", &sbRect)
+    sbTop := NumGet(sbRect, 4, "Int")
+    sbBottom := NumGet(sbRect, 12, "Int")
+
+    ; Get control screen rect
+    VarSetCapacity(ctrlRect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", controlHwnd, "Ptr", &ctrlRect)
+    ctrlTop := NumGet(ctrlRect, 4, "Int")
+    ctrlBottom := NumGet(ctrlRect, 12, "Int")
+
+    ; If already visible, no scroll needed
+    if (ctrlTop >= sbTop && ctrlBottom <= sbBottom)
+        return
+
+    ; Calculate how much to scroll
+    if (ctrlBottom > sbBottom) {
+        scrollAmount := ctrlBottom - sbBottom + 30
+    } else {
+        scrollAmount := ctrlTop - sbTop - 30
+    }
+
+    ; Get current scroll position
+    VarSetCapacity(si, 28, 0)
+    NumPut(28, si, 0, "UInt")
+    NumPut(0x17, si, 4, "UInt")   ; SIF_ALL
+    DllCall("GetScrollInfo", "Ptr", scrollBoxHwnd, "Int", 1, "Ptr", &si)  ; SB_VERT=1
+    currentPos := NumGet(si, 20, "Int")
+
+    ; Set new position
+    newPos := currentPos + scrollAmount
+    NumPut(newPos, si, 20, "Int")
+    NumPut(0x04, si, 4, "UInt")   ; SIF_POS
+    DllCall("SetScrollInfo", "Ptr", scrollBoxHwnd, "Int", 1, "Ptr", &si, "Int", 1)
+
+    ; Notify the scrollbox to scroll
+    wParam := (newPos << 16) | 4  ; SB_THUMBPOSITION=4
+    PostMessage, 0x0115, wParam, 0,, ahk_id %scrollBoxHwnd%  ; WM_VSCROLL
+    Sleep, 80
+}
+
+
+;============================================================================================
+; CF - UTILITY FUNCTIONS
+;============================================================================================
+
+CF_EscJson(str) {
+    str := StrReplace(str, "\", "\\")
+    str := StrReplace(str, """", "\""")
+    str := StrReplace(str, "`n", "\n")
+    str := StrReplace(str, "`r", "\r")
+    str := StrReplace(str, "`t", "\t")
+    return """" . str . """"
+}
+
+CF_SanitizeFilename(name) {
+    name := Trim(name)
+    name := RegExReplace(name, "[<>:""/\\|?*]", "_")
+    return name
+}
+
+CF_ClearToolTip:
+    ToolTip
+return
+
+
+;============================================================================================
+; CF - HOTKEY: Ctrl+Shift+F - Spy dump CP Flowsheets
+;============================================================================================
+
+^+f::
+    gosub CF_SpyDumpControls
+return
+
+
+;============================================================================================
+; CTRL+SHIFT+I - Control Inspector (Window Spy replacement)
+; Hover mouse over any control and press Ctrl+Shift+I to see its info.
+;============================================================================================
+
+^+i::
+    CoordMode, Mouse, Screen
+    MouseGetPos, mX, mY, winUnderMouse, ctrlHwnd, 2  ; 2 = get HWND
+    if (!ctrlHwnd)
+        ctrlHwnd := winUnderMouse
+
+    ; Control class
+    VarSetCapacity(clsBuf, 256, 0)
+    DllCall("GetClassName", "Ptr", ctrlHwnd, "Str", clsBuf, "Int", 256)
+
+    ; Control text
+    VarSetCapacity(txtBuf, 512, 0)
+    DllCall("GetWindowText", "Ptr", ctrlHwnd, "Str", txtBuf, "Int", 256)
+
+    ; Control rect
+    VarSetCapacity(rc, 16, 0)
+    DllCall("GetWindowRect", "Ptr", ctrlHwnd, "Ptr", &rc)
+    rcX := NumGet(rc, 0, "Int"), rcY := NumGet(rc, 4, "Int")
+    rcW := NumGet(rc, 8, "Int") - rcX, rcH := NumGet(rc, 12, "Int") - rcY
+
+    ; Parent info
+    parentHwnd := DllCall("GetParent", "Ptr", ctrlHwnd, "Ptr")
+    VarSetCapacity(pClsBuf, 256, 0)
+    VarSetCapacity(pTxtBuf, 512, 0)
+    if (parentHwnd) {
+        DllCall("GetClassName", "Ptr", parentHwnd, "Str", pClsBuf, "Int", 256)
+        DllCall("GetWindowText", "Ptr", parentHwnd, "Str", pTxtBuf, "Int", 256)
+    }
+
+    ; Window info
+    VarSetCapacity(wClsBuf, 256, 0)
+    VarSetCapacity(wTxtBuf, 512, 0)
+    DllCall("GetClassName", "Ptr", winUnderMouse, "Str", wClsBuf, "Int", 256)
+    DllCall("GetWindowText", "Ptr", winUnderMouse, "Str", wTxtBuf, "Int", 256)
+
+    ; Style
+    style := DllCall("GetWindowLong", "Ptr", ctrlHwnd, "Int", -16, "UInt")
+    visible := (style & 0x10000000) ? "Y" : "N"
+
+    info := "=== Control Inspector ===`n"
+    info .= "Mouse: " . mX . ", " . mY . "`n"
+    info .= "---`n"
+    info .= "Control HWND: " . ctrlHwnd . " (0x" . Format("{:x}", ctrlHwnd) . ")`n"
+    info .= "Control Class: " . clsBuf . "`n"
+    info .= "Control Text: " . (txtBuf != "" ? txtBuf : "(empty)") . "`n"
+    info .= "Pos: " . rcX . "," . rcY . " Size: " . rcW . "x" . rcH . "`n"
+    info .= "Visible: " . visible . "`n"
+    info .= "---`n"
+    info .= "Parent HWND: " . parentHwnd . "`n"
+    info .= "Parent Class: " . pClsBuf . "`n"
+    info .= "Parent Text: " . (pTxtBuf != "" ? pTxtBuf : "(empty)") . "`n"
+    info .= "---`n"
+    info .= "Window HWND: " . winUnderMouse . "`n"
+    info .= "Window Class: " . wClsBuf . "`n"
+    info .= "Window Title: " . wTxtBuf
+
+    MsgBox, 64, Control Inspector, %info%
+return
+
+
+;############################################################################################
+;################### END CP FLOWSHEETS BOOSTER ###############################################
+;############################################################################################
