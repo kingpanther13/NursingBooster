@@ -13,8 +13,8 @@
 ;      Use `if (NB_Enabled && IsLabel("NB_ModuleInit"))` to make the call safe.
 ;
 ; WHAT THIS MODULE PROVIDES:
-;   - Gui 67 (Nursing Booster floating panel)
-;   - Gui 73 (Settings panel)
+;   - Gui 80 (Nursing Booster floating panel)
+;   - Gui 84 (Settings panel)
 ;   - Ctrl+Shift+B hotkey to toggle the panel
 ;   - Save/Load/Apply/Delete templates for CPRS reminder dialogs
 ;   - CP Flowsheets template support (separate save/load/apply)
@@ -93,11 +93,11 @@ NB_ModuleInit:
     gosub NB_LoadSettings
 
     ; -------------------- BUILD GUIS --------------------
-    ; --- NursingBooster: Build floating panel (Gui 67) ---
+    ; --- NursingBooster: Build floating panel (Gui 80) ---
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev11  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev12  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -150,13 +150,13 @@ NB_ModuleInit:
     Hotkey, ^+b, NB_TogglePanel
     Hotkey, If
 
-    ; --- NursingBooster: Build Settings panel (Gui 73) ---
+    ; --- NursingBooster: Build Settings panel (Gui 84) ---
     Gui, 84:Destroy
     Gui, 84:Color, 1a1a2e
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev11
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev12
     Gui, 84:Font, s7 c00FF88, Segoe UI
     Gui, 84:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
     Gui, 84:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
@@ -303,7 +303,7 @@ NB_RebuildDropdown() {
 
 
 ;============================================================================================
-; NURSING BOOSTER TOGGLE PANEL (Gui 67)
+; NURSING BOOSTER TOGGLE PANEL (Gui 80)
 ;============================================================================================
 
 NB_TogglePanel:
@@ -395,7 +395,7 @@ NB_ShowBarsDeferred:
 return
 
 NB_AdvancedModeChanged:
-    GuiControlGet, NB_AdvancedMode, 73:, NB_AdvancedModeChk
+    GuiControlGet, NB_AdvancedMode, 84:, NB_AdvancedModeChk
     gosub NB_ApplyAdvancedMode
     gosub NB_SaveSettings
 return
@@ -403,7 +403,7 @@ return
 NB_ApplyAdvancedMode:
     ; Show or hide advanced-only controls based on NB_AdvancedMode
     showCmd := NB_AdvancedMode ? "Show" : "Hide"
-    ; Gui 67 (main panel): speed sliders and autosave
+    ; Gui 80 (main panel): speed sliders and autosave
     GuiControl, 80:%showCmd%, NB_SpeedOverrideChk
     GuiControl, 80:%showCmd%, NB_MainSpeedSlider
     GuiControl, 80:%showCmd%, NB_MainSpeedLabel
@@ -411,7 +411,7 @@ NB_ApplyAdvancedMode:
     GuiControl, 80:%showCmd%, NB_LeafSpeedSlider
     GuiControl, 80:%showCmd%, NB_LeafSpeedLabel
     GuiControl, 80:%showCmd%, CF_AutoSaveChk
-    ; Gui 73 (settings): add data delay, dump buttons, debug logging
+    ; Gui 84 (settings): add data delay, dump buttons, debug logging
     GuiControl, 84:%showCmd%, CF_AdvDelayLbl
     GuiControl, 84:%showCmd%, CF_AddDataDelaySlider
     GuiControl, 84:%showCmd%, CF_AddDataDelayLabel
@@ -442,7 +442,7 @@ NB_DragPanel:
 return
 
 NB_SpeedOverrideChanged:
-    GuiControlGet, NB_SpeedOverride, 67:, NB_SpeedOverrideChk
+    GuiControlGet, NB_SpeedOverride, 80:, NB_SpeedOverrideChk
     if (NB_SpeedOverride) {
         GuiControl, 80:Enable, NB_MainSpeedSlider
         GuiControl, 80:Enable, NB_LeafSpeedSlider
@@ -453,17 +453,17 @@ NB_SpeedOverrideChanged:
 return
 
 NB_MainSpeedChanged:
-    GuiControlGet, NB_ApplySpeed, 67:, NB_MainSpeedSlider
+    GuiControlGet, NB_ApplySpeed, 80:, NB_MainSpeedSlider
     GuiControl, 80:, NB_MainSpeedLabel, %NB_ApplySpeed% ms
 return
 
 NB_LeafSpeedChanged:
-    GuiControlGet, NB_LeafSpeed, 67:, NB_LeafSpeedSlider
+    GuiControlGet, NB_LeafSpeed, 80:, NB_LeafSpeedSlider
     GuiControl, 80:, NB_LeafSpeedLabel, %NB_LeafSpeed% ms
 return
 
 NB_SettingsTplChanged:
-    GuiControlGet, selectedTpl, 73:, NB_SettingsTplDDL
+    GuiControlGet, selectedTpl, 84:, NB_SettingsTplDDL
     if (selectedTpl = "")
         return
     tplPath := NB_SettingsTplPathMap[selectedTpl]
@@ -480,23 +480,23 @@ NB_SettingsTplChanged:
 return
 
 NB_TplSpeedChanged:
-    GuiControlGet, tplSpd, 73:, NB_TplSpeedSlider
+    GuiControlGet, tplSpd, 84:, NB_TplSpeedSlider
     GuiControl, 84:, NB_TplSpeedLabel, %tplSpd% ms
 return
 
 NB_TplLeafChanged:
-    GuiControlGet, tplLeafSpd, 73:, NB_TplLeafSlider
+    GuiControlGet, tplLeafSpd, 84:, NB_TplLeafSlider
     GuiControl, 84:, NB_TplLeafLabel, %tplLeafSpd% ms
 return
 
 NB_SaveTplSpeed:
-    GuiControlGet, selectedTpl, 73:, NB_SettingsTplDDL
+    GuiControlGet, selectedTpl, 84:, NB_SettingsTplDDL
     if (selectedTpl = "") {
         MsgBox, 48, %NB_AppTitle%, Select a template first.
         return
     }
-    GuiControlGet, newSpeed, 73:, NB_TplSpeedSlider
-    GuiControlGet, newLeaf, 73:, NB_TplLeafSlider
+    GuiControlGet, newSpeed, 84:, NB_TplSpeedSlider
+    GuiControlGet, newLeaf, 84:, NB_TplLeafSlider
     tplPath := NB_SettingsTplPathMap[selectedTpl]
     if (tplPath = "") {
         MsgBox, 48, %NB_AppTitle%, Template path not found.
@@ -513,19 +513,19 @@ NB_SaveTplSpeed:
 return
 
 CF_AddDataDelayChanged:
-    GuiControlGet, CF_AddDataDelay, 73:, CF_AddDataDelaySlider
+    GuiControlGet, CF_AddDataDelay, 84:, CF_AddDataDelaySlider
     GuiControl, 84:, CF_AddDataDelayLabel, %CF_AddDataDelay% ms
     gosub NB_SaveSettings
 return
 
 CF_AutoSaveDelayChanged:
-    GuiControlGet, CF_AutoSaveDelay, 73:, CF_AutoSaveDelaySlider
+    GuiControlGet, CF_AutoSaveDelay, 84:, CF_AutoSaveDelaySlider
     GuiControl, 84:, CF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
     gosub NB_SaveSettings
 return
 
 NB_DebugLogChanged:
-    GuiControlGet, chkVal, 73:, NB_DebugLogChk
+    GuiControlGet, chkVal, 84:, NB_DebugLogChk
     NB_DebugLogging := chkVal
     gosub NB_SaveSettings
     gosub, writeit
@@ -2347,7 +2347,7 @@ NB_ResolveParentCBLabel(cbHwnd) {
 
 ;============================================================================================
 ; NURSING BOOSTER - HOTKEYS (global — not restricted to CPRS window)
-; NOTE: ^+b is registered via Hotkey command in auto-execute (near Gui 67 setup)
+; NOTE: ^+b is registered via Hotkey command in auto-execute (near Gui 80 setup)
 ;============================================================================================
 #If (NB_Enabled)  ; Only register these hotkeys when NB is enabled
 
