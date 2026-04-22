@@ -97,7 +97,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev13  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev14  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -127,23 +127,8 @@ NB_ModuleInit:
     Gui, 80:Add, Button, x360 y123 w20 h24 gNB_HK_Setup, ...
     Gui, 80:Font, s8 cWhite, Segoe UI
     Gui, 80:Add, Text, x5 y151 w375 h16 Center BackgroundTrans vNB_PanelStatus, Ready | CPRS: Not detected | CPFS: Not detected
-    ; Advanced-only controls: Override Speed + Leaf Speed
-    Gui, 80:Font, s7 c00FF88, Segoe UI
-    nbSpdChkOpt := NB_SpeedOverride ? "Checked" : ""
-    Gui, 80:Add, Checkbox, x5 y170 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans +HwndNB_AdvOverrideHwnd %nbSpdChkOpt%, Override Speed
-    Gui, 80:Add, Slider, x108 y168 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range0-600 TickInterval100 ToolTip +HwndNB_AdvParentSliderHwnd, %NB_ApplySpeed%
-    Gui, 80:Add, Text, x305 y170 w75 h16 BackgroundTrans vNB_MainSpeedLabel +HwndNB_AdvParentLblHwnd, %NB_ApplySpeed% ms
-    Gui, 80:Add, Text, x5 y192 w100 h16 BackgroundTrans vNB_LeafSpeedLbl +HwndNB_AdvLeafLblHwnd, Leaf Speed:
-    Gui, 80:Add, Slider, x108 y190 w192 h22 vNB_LeafSpeedSlider gNB_LeafSpeedChanged Range0-600 TickInterval50 ToolTip +HwndNB_AdvLeafSliderHwnd, %NB_LeafSpeed%
-    Gui, 80:Add, Text, x305 y192 w75 h16 BackgroundTrans vNB_LeafSpeedLabel +HwndNB_AdvLeafValHwnd, %NB_LeafSpeed% ms
     Gui, 80:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd +E0x08000000  ; WS_EX_NOACTIVATE — panel never steals focus from CPRS
-    Gui, 80:Show, x0 y0 w385 h218 Hide, NursingBoosterPanel
-    if (!NB_SpeedOverride) {
-        GuiControl, 80:Disable, NB_MainSpeedSlider
-        GuiControl, 80:Disable, NB_LeafSpeedSlider
-    }
-    ; Apply advanced mode visibility (resize skipped at startup since panels not visible yet)
-    gosub NB_ApplyAdvancedMode
+    Gui, 80:Show, x0 y0 w385 h172 Hide, NursingBoosterPanel
     NB_BoosterGuiVisible := 0
     NB_SettingsVisible := 0
 
@@ -159,25 +144,31 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev13
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev14
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
-    ; Advanced-only: Add Data delay, Dump buttons, Debug Logging
-    Gui, 84:Add, Text, x10 y62 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
-    Gui, 84:Add, Slider, x95 y60 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
-    Gui, 84:Add, Text, x230 y62 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
-    Gui, 84:Add, Text, x10 y86 w80 h16 BackgroundTrans vCF_AdvSaveDelayLbl, AutoSave Delay:
-    Gui, 84:Add, Slider, x95 y84 w130 h22 vCF_AutoSaveDelaySlider gCF_AutoSaveDelayChanged Range50-3000 TickInterval500 ToolTip, %CF_AutoSaveDelay%
-    Gui, 84:Add, Text, x230 y86 w55 h16 BackgroundTrans vCF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
+    ; Advanced-only: Override Speed, Add Data delay, Dump buttons, Debug Logging
+    nbSpdChkOpt := NB_SpeedOverride ? "Checked" : ""
+    Gui, 84:Add, Checkbox, x10 y62 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans %nbSpdChkOpt%, Slow Mode
+    Gui, 84:Add, Slider, x115 y60 w115 h22 vNB_SpeedSlider gNB_SpeedChanged Range0-600 TickInterval100 ToolTip, %NB_ApplySpeed%
+    Gui, 84:Add, Text, x235 y62 w50 h16 BackgroundTrans vNB_SpeedLabel, %NB_ApplySpeed% ms
+    Gui, 84:Add, Text, x10 y86 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
+    Gui, 84:Add, Slider, x95 y84 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
+    Gui, 84:Add, Text, x230 y86 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
+    Gui, 84:Add, Text, x10 y110 w80 h16 BackgroundTrans vCF_AdvSaveDelayLbl, AutoSave Delay:
+    Gui, 84:Add, Slider, x95 y108 w130 h22 vCF_AutoSaveDelaySlider gCF_AutoSaveDelayChanged Range50-3000 TickInterval500 ToolTip, %CF_AutoSaveDelay%
+    Gui, 84:Add, Text, x230 y110 w55 h16 BackgroundTrans vCF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
     Gui, 84:Font, s8 cBlack, Segoe UI
-    Gui, 84:Add, Button, x10 y110 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
-    Gui, 84:Add, Button, x145 y110 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
+    Gui, 84:Add, Button, x10 y134 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
+    Gui, 84:Add, Button, x145 y134 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
-    Gui, 84:Add, Checkbox, x10 y138 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+    Gui, 84:Add, Checkbox, x10 y162 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+    if (!NB_SpeedOverride)
+        GuiControl, 84:Disable, NB_SpeedSlider
     Gui, 84:+AlwaysOnTop +ToolWindow -MinimizeBox
-    Gui, 84:Show, x400 y0 w290 h164 Hide, NB Settings
+    Gui, 84:Show, x400 y0 w290 h188 Hide, NB Settings
 
     ; --- NursingBooster: Start CPRS detection timer ---
     SetTimer, NB_CheckCPRS, 3000
@@ -394,15 +385,12 @@ return
 NB_ApplyAdvancedMode:
     ; Show or hide advanced-only controls based on NB_AdvancedMode
     showCmd := NB_AdvancedMode ? "Show" : "Hide"
-    ; Gui 80 (main panel): speed sliders and autosave
-    GuiControl, 80:%showCmd%, NB_SpeedOverrideChk
-    GuiControl, 80:%showCmd%, NB_MainSpeedSlider
-    GuiControl, 80:%showCmd%, NB_MainSpeedLabel
-    GuiControl, 80:%showCmd%, NB_LeafSpeedLbl
-    GuiControl, 80:%showCmd%, NB_LeafSpeedSlider
-    GuiControl, 80:%showCmd%, NB_LeafSpeedLabel
+    ; Gui 80 (main panel): autosave checkbox (advanced only)
     GuiControl, 80:%showCmd%, CF_AutoSaveChk
-    ; Gui 84 (settings): add data delay, dump buttons, debug logging
+    ; Gui 84 (settings): speed override, delays, dump buttons, debug logging
+    GuiControl, 84:%showCmd%, NB_SpeedOverrideChk
+    GuiControl, 84:%showCmd%, NB_SpeedSlider
+    GuiControl, 84:%showCmd%, NB_SpeedLabel
     GuiControl, 84:%showCmd%, CF_AdvDelayLbl
     GuiControl, 84:%showCmd%, CF_AddDataDelaySlider
     GuiControl, 84:%showCmd%, CF_AddDataDelayLabel
@@ -412,16 +400,10 @@ NB_ApplyAdvancedMode:
     GuiControl, 84:%showCmd%, NB_AdvDumpBtn
     GuiControl, 84:%showCmd%, CF_AdvSpyBtn
     GuiControl, 84:%showCmd%, NB_DebugLogChk
-    ; Resize panels only if they are currently visible (avoid showing them at startup)
-    if (NB_BoosterGuiVisible) {
-        if (NB_AdvancedMode)
-            Gui, 80:Show, w385 h218 NA
-        else
-            Gui, 80:Show, w385 h172 NA
-    }
+    ; Resize settings panel only if visible
     if (NB_SettingsVisible) {
         if (NB_AdvancedMode)
-            Gui, 84:Show, w290 h164 NA
+            Gui, 84:Show, w290 h188 NA
         else
             Gui, 84:Show, w290 h65 NA
     }
@@ -433,26 +415,19 @@ NB_DragPanel:
 return
 
 NB_SpeedOverrideChanged:
-    GuiControlGet, NB_SpeedOverride, 80:, NB_SpeedOverrideChk
-    gosub NB_SaveSettings
+    GuiControlGet, NB_SpeedOverride, 84:, NB_SpeedOverrideChk
     if (NB_SpeedOverride) {
-        GuiControl, 80:Enable, NB_MainSpeedSlider
-        GuiControl, 80:Enable, NB_LeafSpeedSlider
+        GuiControl, 84:Enable, NB_SpeedSlider
     } else {
-        GuiControl, 80:Disable, NB_MainSpeedSlider
-        GuiControl, 80:Disable, NB_LeafSpeedSlider
+        GuiControl, 84:Disable, NB_SpeedSlider
     }
-return
-
-NB_MainSpeedChanged:
-    GuiControlGet, NB_ApplySpeed, 80:, NB_MainSpeedSlider
-    GuiControl, 80:, NB_MainSpeedLabel, %NB_ApplySpeed% ms
     gosub NB_SaveSettings
 return
 
-NB_LeafSpeedChanged:
-    GuiControlGet, NB_LeafSpeed, 80:, NB_LeafSpeedSlider
-    GuiControl, 80:, NB_LeafSpeedLabel, %NB_LeafSpeed% ms
+NB_SpeedChanged:
+    GuiControlGet, NB_ApplySpeed, 84:, NB_SpeedSlider
+    NB_LeafSpeed := NB_ApplySpeed
+    GuiControl, 84:, NB_SpeedLabel, %NB_ApplySpeed% ms
     gosub NB_SaveSettings
 return
 
