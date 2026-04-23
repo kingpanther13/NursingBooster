@@ -97,7 +97,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev15  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev16  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -112,10 +112,12 @@ NB_ModuleInit:
     Gui, 80:Add, Button, x68  y76 w60 h26 gCF_PanelLoad, Load
     Gui, 80:Add, Button, x131 y76 w50 h26 gCF_PanelDelete, Del
     Gui, 80:Add, Button, x184 y76 w70 h26 gCF_PanelAddData, Add Data
+    Gui, 80:Add, Button, x258 y76 w30 h13 gNB_LaunchBCMA, BCMA
+    Gui, 80:Add, Button, x258 y90 w30 h13 gNB_LaunchCPFS, CPFS
     Gui, 80:Font, s7 cRed, Segoe UI
-    Gui, 80:Add, Checkbox, x320 y76 w60 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
+    Gui, 80:Add, Checkbox, x292 y76 w90 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
     ; Advanced-only: AutoSave checkbox
-    Gui, 80:Add, Checkbox, x320 y90 w60 h14 vCF_AutoSaveChk gCF_ToggleAutoSave +HwndCF_AdvAutoSaveHwnd, AutoSave
+    Gui, 80:Add, Checkbox, x292 y90 w90 h14 vCF_AutoSaveChk gCF_ToggleAutoSave +HwndCF_AdvAutoSaveHwnd, AutoSave
     Gui, 80:Font, s7 cFFD700, Segoe UI
     Gui, 80:Add, Text, x5 y106 w370 h16 Center BackgroundTrans, --- Quick Actions ---
     Gui, 80:Font, s7 cBlack, Segoe UI
@@ -144,7 +146,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev15
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev16
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -321,6 +323,34 @@ return
 
 NB_PanelDump:
     gosub NB_DumpDialogControls
+return
+
+NB_LaunchBCMA:
+    ; Tools > Next Tool > BCMA (Alt+T, N, B)
+    IfWinExist, ahk_exe CPRSChart.exe
+    {
+        WinActivate, ahk_exe CPRSChart.exe
+        Sleep, 100
+        Send, !t
+        Sleep, 200
+        Send, n
+        Sleep, 200
+        Send, b
+    }
+return
+
+NB_LaunchCPFS:
+    ; Tools > Next Tool > CP Flowsheets (Alt+T, N, C)
+    IfWinExist, ahk_exe CPRSChart.exe
+    {
+        WinActivate, ahk_exe CPRSChart.exe
+        Sleep, 100
+        Send, !t
+        Sleep, 200
+        Send, n
+        Sleep, 200
+        Send, c
+    }
 return
 
 NB_ReloadBoilerplate:
