@@ -97,7 +97,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev17  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev18  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -148,7 +148,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev17
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev18
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -328,7 +328,8 @@ NB_PanelDump:
 return
 
 NB_LaunchBCMA:
-    ; Tools > Next Tool > BCMA (Alt+T, N, B)
+    /*
+    ; OLD: launched BCMA via CPRS Tools menu (Alt+T, N, B). Kept in case UNC fails.
     IfWinExist, ahk_exe CPRSChart.exe
     {
         WinActivate, ahk_exe CPRSChart.exe
@@ -339,10 +340,67 @@ NB_LaunchBCMA:
         Sleep, 200
         Send, b
     }
+    */
+    ; Launch BCMA directly via VA_Shortcuts UNC path (mirrors CPRS launch in CPRSBooster)
+    SetTitleMatchMode, 2
+    UserPrefix := SubStr(A_UserName, 1, 3)
+    If UserPrefix contains vha,VHA
+    {
+        SiteCode := SubStr(A_UserName, 4, 3)
+        try
+        {
+            Gosub %SiteCode%
+        }
+        Loop, 4
+        {
+            Ifexist \\%Visn%.med.va.gov\apps\VA_Shortcuts\%SiteCode%\BCMA %SiteCode%.lnk
+            {
+                Run, \\%Visn%.med.va.gov\apps\VA_Shortcuts\%SiteCode%\BCMA %SiteCode%.lnk ,,UseErrorLevel,
+            }
+            else
+            {
+                SplashTextOn ,300 ,100, Nursing Booster, Sorry! Booster can't start BCMA at your site...`n Or you are not on the network..
+                sleep 3000
+                SplashTextOff
+                break
+            }
+            if ErrorLevel
+            {
+                if A_Index = 4
+                {
+                    SplashTextOn ,300 ,100, Nursing Booster, Sorry! Booster can't start BCMA ...
+                    sleep 3000
+                    SplashTextOff
+                    break
+                }
+            }
+            else
+            {
+                Process, Wait, BCMA.exe, 20
+                if !ErrorLevel
+                {
+                    ; BCMA didn't appear within 20s — fall through to next loop iteration
+                }
+                else
+                {
+                    Winwait, Windows Security,,20
+                    winactivate, Windows Security
+                    If WinActive("Windows Security")
+                    {
+                        send {tab}
+                        sleep 50
+                        send {enter}
+                    }
+                    break
+                }
+            }
+        }
+    }
 return
 
 NB_LaunchCPFS:
-    ; Tools > Next Tool > CP Flowsheets (Alt+T, N, C)
+    /*
+    ; OLD: launched CP Flowsheets via CPRS Tools menu (Alt+T, N, C). Kept in case UNC fails.
     IfWinExist, ahk_exe CPRSChart.exe
     {
         WinActivate, ahk_exe CPRSChart.exe
@@ -352,6 +410,62 @@ NB_LaunchCPFS:
         Send, n
         Sleep, 200
         Send, c
+    }
+    */
+    ; Launch CP Flowsheets directly via VA_Shortcuts\Clinical UNC path (mirrors CPRS launch)
+    SetTitleMatchMode, 2
+    UserPrefix := SubStr(A_UserName, 1, 3)
+    If UserPrefix contains vha,VHA
+    {
+        SiteCode := SubStr(A_UserName, 4, 3)
+        try
+        {
+            Gosub %SiteCode%
+        }
+        Loop, 4
+        {
+            Ifexist \\%Visn%.med.va.gov\apps\VA_Shortcuts\%SiteCode%\Clinical\CPFlowsheets %SiteCode%.lnk
+            {
+                Run, \\%Visn%.med.va.gov\apps\VA_Shortcuts\%SiteCode%\Clinical\CPFlowsheets %SiteCode%.lnk ,,UseErrorLevel,
+            }
+            else
+            {
+                SplashTextOn ,300 ,100, Nursing Booster, Sorry! Booster can't start CP Flowsheets at your site...`n Or you are not on the network..
+                sleep 3000
+                SplashTextOff
+                break
+            }
+            if ErrorLevel
+            {
+                if A_Index = 4
+                {
+                    SplashTextOn ,300 ,100, Nursing Booster, Sorry! Booster can't start CP Flowsheets ...
+                    sleep 3000
+                    SplashTextOff
+                    break
+                }
+            }
+            else
+            {
+                Process, Wait, CPFlowsheets.exe, 20
+                if !ErrorLevel
+                {
+                    ; CPFlowsheets didn't appear within 20s — fall through to next loop iteration
+                }
+                else
+                {
+                    Winwait, Windows Security,,20
+                    winactivate, Windows Security
+                    If WinActive("Windows Security")
+                    {
+                        send {tab}
+                        sleep 50
+                        send {enter}
+                    }
+                    break
+                }
+            }
+        }
     }
 return
 
