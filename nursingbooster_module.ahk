@@ -13,8 +13,8 @@
 ;      Use `if (NB_Enabled && IsLabel("NB_ModuleInit"))` to make the call safe.
 ;
 ; WHAT THIS MODULE PROVIDES:
-;   - Gui 67 (Nursing Booster floating panel)
-;   - Gui 73 (Settings panel)
+;   - Gui 80 (Nursing Booster floating panel)
+;   - Gui 84 (Settings panel)
 ;   - Ctrl+Shift+B hotkey to toggle the panel
 ;   - Save/Load/Apply/Delete templates for CPRS reminder dialogs
 ;   - CP Flowsheets template support (separate save/load/apply)
@@ -93,17 +93,18 @@ NB_ModuleInit:
     gosub NB_LoadSettings
 
     ; -------------------- BUILD GUIS --------------------
-    ; --- NursingBooster: Build floating panel (Gui 67) ---
+    ; --- NursingBooster: Build floating panel (Gui 80) ---
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev6  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev18  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
     Gui, 80:Add, Button, x151 y28 w70 h26 gNB_PanelDelete, Del Tpl
-    Gui, 80:Add, Button, x224 y28 w63 h26 gNB_PanelSettings, Settings
-    Gui, 80:Add, Button, x290 y28 w90 h26 gNB_ShowBothBars, Show All Bars
+    Gui, 80:Add, Button, x224 y28 w55 h26 gNB_PanelSettings, Settings
+    Gui, 80:Add, Button, x282 y28 w50 h26 gNB_ReloadBoilerplate, Reload BP
+    Gui, 80:Add, Button, x335 y28 w47 h26 gNB_ShowBothBars, Bars
     Gui, 80:Font, s7 c00BFFF, Segoe UI
     Gui, 80:Add, Text, x5 y58 w370 h16 Center BackgroundTrans, --- CP Flowsheets ---
     Gui, 80:Font, s8 cBlack, Segoe UI
@@ -111,10 +112,14 @@ NB_ModuleInit:
     Gui, 80:Add, Button, x68  y76 w60 h26 gCF_PanelLoad, Load
     Gui, 80:Add, Button, x131 y76 w50 h26 gCF_PanelDelete, Del
     Gui, 80:Add, Button, x184 y76 w70 h26 gCF_PanelAddData, Add Data
+    Gui, 80:Font, s6 cBlack, Segoe UI
+    Gui, 80:Add, Button, x258 y76 w30 h13 gNB_LaunchBCMA, BCMA
+    Gui, 80:Add, Button, x258 y90 w30 h13 gNB_LaunchCPFS, CPFS
+    Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Font, s7 cRed, Segoe UI
-    Gui, 80:Add, Checkbox, x320 y76 w60 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
+    Gui, 80:Add, Checkbox, x292 y76 w90 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
     ; Advanced-only: AutoSave checkbox
-    Gui, 80:Add, Checkbox, x320 y90 w60 h14 vCF_AutoSaveChk gCF_ToggleAutoSave +HwndCF_AdvAutoSaveHwnd, AutoSave
+    Gui, 80:Add, Checkbox, x292 y90 w90 h14 vCF_AutoSaveChk gCF_ToggleAutoSave +HwndCF_AdvAutoSaveHwnd, AutoSave
     Gui, 80:Font, s7 cFFD700, Segoe UI
     Gui, 80:Add, Text, x5 y106 w370 h16 Center BackgroundTrans, --- Quick Actions ---
     Gui, 80:Font, s7 cBlack, Segoe UI
@@ -126,63 +131,48 @@ NB_ModuleInit:
     Gui, 80:Add, Button, x360 y123 w20 h24 gNB_HK_Setup, ...
     Gui, 80:Font, s8 cWhite, Segoe UI
     Gui, 80:Add, Text, x5 y151 w375 h16 Center BackgroundTrans vNB_PanelStatus, Ready | CPRS: Not detected | CPFS: Not detected
-    ; Advanced-only controls: Override Speed + Leaf Speed
-    Gui, 80:Font, s7 c00FF88, Segoe UI
-    Gui, 80:Add, Checkbox, x5 y170 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans +HwndNB_AdvOverrideHwnd, Override Speed
-    Gui, 80:Add, Slider, x108 y168 w192 h22 vNB_MainSpeedSlider gNB_MainSpeedChanged Range0-600 TickInterval100 ToolTip +HwndNB_AdvParentSliderHwnd, %NB_ApplySpeed%
-    Gui, 80:Add, Text, x305 y170 w75 h16 BackgroundTrans vNB_MainSpeedLabel +HwndNB_AdvParentLblHwnd, %NB_ApplySpeed% ms
-    Gui, 80:Add, Text, x5 y192 w100 h16 BackgroundTrans vNB_LeafSpeedLbl +HwndNB_AdvLeafLblHwnd, Leaf Speed:
-    Gui, 80:Add, Slider, x108 y190 w192 h22 vNB_LeafSpeedSlider gNB_LeafSpeedChanged Range0-600 TickInterval50 ToolTip +HwndNB_AdvLeafSliderHwnd, %NB_LeafSpeed%
-    Gui, 80:Add, Text, x305 y192 w75 h16 BackgroundTrans vNB_LeafSpeedLabel +HwndNB_AdvLeafValHwnd, %NB_LeafSpeed% ms
     Gui, 80:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd +E0x08000000  ; WS_EX_NOACTIVATE — panel never steals focus from CPRS
-    Gui, 80:Show, x0 y0 w385 h218 Hide, NursingBoosterPanel
-    GuiControl, 80:Disable, NB_MainSpeedSlider
-    GuiControl, 80:Disable, NB_LeafSpeedSlider
-    ; Apply advanced mode visibility (resize skipped at startup since panels not visible yet)
-    gosub NB_ApplyAdvancedMode
+    Gui, 80:Show, x0 y0 w385 h172 Hide, NursingBoosterPanel
     NB_BoosterGuiVisible := 0
     NB_SettingsVisible := 0
 
     ; Register Ctrl+Shift+B globally via Hotkey command — immune to #If context issues
+    ; Register Ctrl+Shift+B globally (no #If context restriction)
+    Hotkey, If
     Hotkey, ^+b, NB_TogglePanel
+    Hotkey, If
 
-    ; --- NursingBooster: Build Settings panel (Gui 73) ---
+    ; --- NursingBooster: Build Settings panel (Gui 84) ---
     Gui, 84:Destroy
     Gui, 84:Color, 1a1a2e
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev6
-    Gui, 84:Font, s7 c00FF88, Segoe UI
-    Gui, 84:Add, Text, x10 y40 w65 h16 BackgroundTrans, Template:
-    Gui, 84:Add, DropDownList, x80 y37 w195 vNB_SettingsTplDDL gNB_SettingsTplChanged
-    Gui, 84:Add, Text, x10 y68 w65 h16 BackgroundTrans, Parent Spd:
-    Gui, 84:Add, Slider, x80 y66 w130 h22 vNB_TplSpeedSlider gNB_TplSpeedChanged Range0-600 TickInterval100 ToolTip, 600
-    Gui, 84:Add, Text, x215 y68 w55 h16 BackgroundTrans vNB_TplSpeedLabel, 600 ms
-    Gui, 84:Add, Text, x10 y92 w65 h16 BackgroundTrans, Leaf Spd:
-    Gui, 84:Add, Slider, x80 y90 w130 h22 vNB_TplLeafSlider gNB_TplLeafChanged Range0-600 TickInterval50 ToolTip, 50
-    Gui, 84:Add, Text, x215 y92 w55 h16 BackgroundTrans vNB_TplLeafLabel, 50 ms
-    Gui, 84:Add, Button, x10 y118 w80 h24 gNB_SaveTplSpeed, Save Speed
-    Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x95 y122 w185 h14 BackgroundTrans vNB_TplSpeedStatus, Select a template to edit speed
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev18
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
-    Gui, 84:Add, Checkbox, x10 y144 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
-    ; Advanced-only: Add Data delay, Dump buttons, Debug Logging
-    Gui, 84:Add, Text, x10 y166 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
-    Gui, 84:Add, Slider, x95 y164 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
-    Gui, 84:Add, Text, x230 y166 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
-    Gui, 84:Add, Text, x10 y190 w80 h16 BackgroundTrans vCF_AdvSaveDelayLbl, AutoSave Delay:
-    Gui, 84:Add, Slider, x95 y188 w130 h22 vCF_AutoSaveDelaySlider gCF_AutoSaveDelayChanged Range50-3000 TickInterval500 ToolTip, %CF_AutoSaveDelay%
-    Gui, 84:Add, Text, x230 y190 w55 h16 BackgroundTrans vCF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
+    Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
+    ; Advanced-only: Override Speed, Add Data delay, Dump buttons, Debug Logging
+    nbSpdChkOpt := NB_SpeedOverride ? "Checked" : ""
+    Gui, 84:Add, Checkbox, x10 y62 w100 h18 vNB_SpeedOverrideChk gNB_SpeedOverrideChanged BackgroundTrans %nbSpdChkOpt%, Override Speed
+    Gui, 84:Add, Slider, x115 y60 w115 h22 vNB_SpeedSlider gNB_SpeedChanged Range0-600 TickInterval100 ToolTip, %NB_ApplySpeed%
+    Gui, 84:Add, Text, x235 y62 w50 h16 BackgroundTrans vNB_SpeedLabel, %NB_ApplySpeed% ms
+    Gui, 84:Add, Text, x10 y86 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
+    Gui, 84:Add, Slider, x95 y84 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
+    Gui, 84:Add, Text, x230 y86 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
+    Gui, 84:Add, Text, x10 y110 w80 h16 BackgroundTrans vCF_AdvSaveDelayLbl, AutoSave Delay:
+    Gui, 84:Add, Slider, x95 y108 w130 h22 vCF_AutoSaveDelaySlider gCF_AutoSaveDelayChanged Range50-3000 TickInterval500 ToolTip, %CF_AutoSaveDelay%
+    Gui, 84:Add, Text, x230 y110 w55 h16 BackgroundTrans vCF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
     Gui, 84:Font, s8 cBlack, Segoe UI
-    Gui, 84:Add, Button, x10 y214 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
-    Gui, 84:Add, Button, x145 y214 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
+    Gui, 84:Add, Button, x10 y134 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
+    Gui, 84:Add, Button, x145 y134 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
-    Gui, 84:Add, Checkbox, x10 y242 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+    Gui, 84:Add, Checkbox, x10 y162 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+    if (!NB_SpeedOverride)
+        GuiControl, 84:Disable, NB_SpeedSlider
     Gui, 84:+AlwaysOnTop +ToolWindow -MinimizeBox
-    Gui, 84:Show, x400 y0 w290 h268 Hide, NB Settings
+    Gui, 84:Show, x400 y0 w290 h188 Hide, NB Settings
 
     ; --- NursingBooster: Start CPRS detection timer ---
     SetTimer, NB_CheckCPRS, 3000
@@ -299,7 +289,7 @@ NB_RebuildDropdown() {
 
 
 ;============================================================================================
-; NURSING BOOSTER TOGGLE PANEL (Gui 67)
+; NURSING BOOSTER TOGGLE PANEL (Gui 80)
 ;============================================================================================
 
 NB_TogglePanel:
@@ -310,7 +300,7 @@ NB_TogglePanel:
     }
     else
     {
-        Gui, 80:Show, NA
+        Gui, 80:Show
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
     }
@@ -335,6 +325,160 @@ return
 
 NB_PanelDump:
     gosub NB_DumpDialogControls
+return
+
+NB_LaunchBCMA:
+    /*
+    ; OLD: launched BCMA via CPRS Tools menu (Alt+T, N, B). Kept in case UNC fails.
+    IfWinExist, ahk_exe CPRSChart.exe
+    {
+        WinActivate, ahk_exe CPRSChart.exe
+        Sleep, 100
+        Send, !t
+        Sleep, 200
+        Send, n
+        Sleep, 200
+        Send, b
+    }
+    */
+    ; Launch BCMA directly via VA_Shortcuts UNC path (mirrors CPRS launch in CPRSBooster)
+    SetTitleMatchMode, 2
+    UserPrefix := SubStr(A_UserName, 1, 3)
+    If UserPrefix contains vha,VHA
+    {
+        SiteCode := SubStr(A_UserName, 4, 3)
+        try
+        {
+            Gosub %SiteCode%
+        }
+        Loop, 4
+        {
+            Ifexist \\%Visn%.med.va.gov\apps\VA_Shortcuts\%SiteCode%\BCMA %SiteCode%.lnk
+            {
+                Run, \\%Visn%.med.va.gov\apps\VA_Shortcuts\%SiteCode%\BCMA %SiteCode%.lnk ,,UseErrorLevel,
+            }
+            else
+            {
+                SplashTextOn ,300 ,100, Nursing Booster, Sorry! Booster can't start BCMA at your site...`n Or you are not on the network..
+                sleep 3000
+                SplashTextOff
+                break
+            }
+            if ErrorLevel
+            {
+                if A_Index = 4
+                {
+                    SplashTextOn ,300 ,100, Nursing Booster, Sorry! Booster can't start BCMA ...
+                    sleep 3000
+                    SplashTextOff
+                    break
+                }
+            }
+            else
+            {
+                Process, Wait, BCMA.exe, 20
+                if !ErrorLevel
+                {
+                    ; BCMA didn't appear within 20s — fall through to next loop iteration
+                }
+                else
+                {
+                    Winwait, Windows Security,,20
+                    winactivate, Windows Security
+                    If WinActive("Windows Security")
+                    {
+                        send {tab}
+                        sleep 50
+                        send {enter}
+                    }
+                    break
+                }
+            }
+        }
+    }
+return
+
+NB_LaunchCPFS:
+    /*
+    ; OLD: launched CP Flowsheets via CPRS Tools menu (Alt+T, N, C). Kept in case UNC fails.
+    IfWinExist, ahk_exe CPRSChart.exe
+    {
+        WinActivate, ahk_exe CPRSChart.exe
+        Sleep, 100
+        Send, !t
+        Sleep, 200
+        Send, n
+        Sleep, 200
+        Send, c
+    }
+    */
+    ; Launch CP Flowsheets directly via VA_Shortcuts\Clinical UNC path (mirrors CPRS launch)
+    SetTitleMatchMode, 2
+    UserPrefix := SubStr(A_UserName, 1, 3)
+    If UserPrefix contains vha,VHA
+    {
+        SiteCode := SubStr(A_UserName, 4, 3)
+        try
+        {
+            Gosub %SiteCode%
+        }
+        Loop, 4
+        {
+            Ifexist \\%Visn%.med.va.gov\apps\VA_Shortcuts\%SiteCode%\Clinical\CPFlowsheets %SiteCode%.lnk
+            {
+                Run, \\%Visn%.med.va.gov\apps\VA_Shortcuts\%SiteCode%\Clinical\CPFlowsheets %SiteCode%.lnk ,,UseErrorLevel,
+            }
+            else
+            {
+                SplashTextOn ,300 ,100, Nursing Booster, Sorry! Booster can't start CP Flowsheets at your site...`n Or you are not on the network..
+                sleep 3000
+                SplashTextOff
+                break
+            }
+            if ErrorLevel
+            {
+                if A_Index = 4
+                {
+                    SplashTextOn ,300 ,100, Nursing Booster, Sorry! Booster can't start CP Flowsheets ...
+                    sleep 3000
+                    SplashTextOff
+                    break
+                }
+            }
+            else
+            {
+                Process, Wait, CPFlowsheets.exe, 20
+                if !ErrorLevel
+                {
+                    ; CPFlowsheets didn't appear within 20s — fall through to next loop iteration
+                }
+                else
+                {
+                    Winwait, Windows Security,,20
+                    winactivate, Windows Security
+                    If WinActive("Windows Security")
+                    {
+                        send {tab}
+                        sleep 50
+                        send {enter}
+                    }
+                    break
+                }
+            }
+        }
+    }
+return
+
+NB_ReloadBoilerplate:
+    ; Trigger CPRS Action menu > Reload Boilerplate Text (Alt+A then B)
+    IfWinExist, ahk_exe CPRSChart.exe
+    {
+        WinActivate, ahk_exe CPRSChart.exe
+        Sleep, 100
+        Send, !a
+        Sleep, 200
+        Send, b
+    }
 return
 
 NB_PanelSettings:
@@ -379,7 +523,7 @@ NB_ShowBarsDeferred:
 return
 
 NB_AdvancedModeChanged:
-    GuiControlGet, NB_AdvancedMode, 73:, NB_AdvancedModeChk
+    GuiControlGet, NB_AdvancedMode, 84:, NB_AdvancedModeChk
     gosub NB_ApplyAdvancedMode
     gosub NB_SaveSettings
 return
@@ -387,15 +531,12 @@ return
 NB_ApplyAdvancedMode:
     ; Show or hide advanced-only controls based on NB_AdvancedMode
     showCmd := NB_AdvancedMode ? "Show" : "Hide"
-    ; Gui 67 (main panel): speed sliders and autosave
-    GuiControl, 80:%showCmd%, NB_SpeedOverrideChk
-    GuiControl, 80:%showCmd%, NB_MainSpeedSlider
-    GuiControl, 80:%showCmd%, NB_MainSpeedLabel
-    GuiControl, 80:%showCmd%, NB_LeafSpeedLbl
-    GuiControl, 80:%showCmd%, NB_LeafSpeedSlider
-    GuiControl, 80:%showCmd%, NB_LeafSpeedLabel
+    ; Gui 80 (main panel): autosave checkbox (advanced only)
     GuiControl, 80:%showCmd%, CF_AutoSaveChk
-    ; Gui 73 (settings): add data delay, dump buttons, debug logging
+    ; Gui 84 (settings): speed override, delays, dump buttons, debug logging
+    GuiControl, 84:%showCmd%, NB_SpeedOverrideChk
+    GuiControl, 84:%showCmd%, NB_SpeedSlider
+    GuiControl, 84:%showCmd%, NB_SpeedLabel
     GuiControl, 84:%showCmd%, CF_AdvDelayLbl
     GuiControl, 84:%showCmd%, CF_AddDataDelaySlider
     GuiControl, 84:%showCmd%, CF_AddDataDelayLabel
@@ -405,18 +546,12 @@ NB_ApplyAdvancedMode:
     GuiControl, 84:%showCmd%, NB_AdvDumpBtn
     GuiControl, 84:%showCmd%, CF_AdvSpyBtn
     GuiControl, 84:%showCmd%, NB_DebugLogChk
-    ; Resize panels only if they are currently visible (avoid showing them at startup)
-    if (NB_BoosterGuiVisible) {
-        if (NB_AdvancedMode)
-            Gui, 80:Show, w385 h218 NA
-        else
-            Gui, 80:Show, w385 h172 NA
-    }
+    ; Resize settings panel only if visible
     if (NB_SettingsVisible) {
         if (NB_AdvancedMode)
-            Gui, 84:Show, w290 h268 NA
+            Gui, 84:Show, w290 h188 NA
         else
-            Gui, 84:Show, w290 h170 NA
+            Gui, 84:Show, w290 h65 NA
     }
 return
 
@@ -426,28 +561,24 @@ NB_DragPanel:
 return
 
 NB_SpeedOverrideChanged:
-    GuiControlGet, NB_SpeedOverride, 67:, NB_SpeedOverrideChk
+    GuiControlGet, NB_SpeedOverride, 84:, NB_SpeedOverrideChk
     if (NB_SpeedOverride) {
-        GuiControl, 80:Enable, NB_MainSpeedSlider
-        GuiControl, 80:Enable, NB_LeafSpeedSlider
+        GuiControl, 84:Enable, NB_SpeedSlider
     } else {
-        GuiControl, 80:Disable, NB_MainSpeedSlider
-        GuiControl, 80:Disable, NB_LeafSpeedSlider
+        GuiControl, 84:Disable, NB_SpeedSlider
     }
+    gosub NB_SaveSettings
 return
 
-NB_MainSpeedChanged:
-    GuiControlGet, NB_ApplySpeed, 67:, NB_MainSpeedSlider
-    GuiControl, 80:, NB_MainSpeedLabel, %NB_ApplySpeed% ms
-return
-
-NB_LeafSpeedChanged:
-    GuiControlGet, NB_LeafSpeed, 67:, NB_LeafSpeedSlider
-    GuiControl, 80:, NB_LeafSpeedLabel, %NB_LeafSpeed% ms
+NB_SpeedChanged:
+    GuiControlGet, NB_ApplySpeed, 84:, NB_SpeedSlider
+    NB_LeafSpeed := NB_ApplySpeed
+    GuiControl, 84:, NB_SpeedLabel, %NB_ApplySpeed% ms
+    gosub NB_SaveSettings
 return
 
 NB_SettingsTplChanged:
-    GuiControlGet, selectedTpl, 73:, NB_SettingsTplDDL
+    GuiControlGet, selectedTpl, 84:, NB_SettingsTplDDL
     if (selectedTpl = "")
         return
     tplPath := NB_SettingsTplPathMap[selectedTpl]
@@ -464,23 +595,23 @@ NB_SettingsTplChanged:
 return
 
 NB_TplSpeedChanged:
-    GuiControlGet, tplSpd, 73:, NB_TplSpeedSlider
+    GuiControlGet, tplSpd, 84:, NB_TplSpeedSlider
     GuiControl, 84:, NB_TplSpeedLabel, %tplSpd% ms
 return
 
 NB_TplLeafChanged:
-    GuiControlGet, tplLeafSpd, 73:, NB_TplLeafSlider
+    GuiControlGet, tplLeafSpd, 84:, NB_TplLeafSlider
     GuiControl, 84:, NB_TplLeafLabel, %tplLeafSpd% ms
 return
 
 NB_SaveTplSpeed:
-    GuiControlGet, selectedTpl, 73:, NB_SettingsTplDDL
+    GuiControlGet, selectedTpl, 84:, NB_SettingsTplDDL
     if (selectedTpl = "") {
         MsgBox, 48, %NB_AppTitle%, Select a template first.
         return
     }
-    GuiControlGet, newSpeed, 73:, NB_TplSpeedSlider
-    GuiControlGet, newLeaf, 73:, NB_TplLeafSlider
+    GuiControlGet, newSpeed, 84:, NB_TplSpeedSlider
+    GuiControlGet, newLeaf, 84:, NB_TplLeafSlider
     tplPath := NB_SettingsTplPathMap[selectedTpl]
     if (tplPath = "") {
         MsgBox, 48, %NB_AppTitle%, Template path not found.
@@ -497,19 +628,19 @@ NB_SaveTplSpeed:
 return
 
 CF_AddDataDelayChanged:
-    GuiControlGet, CF_AddDataDelay, 73:, CF_AddDataDelaySlider
+    GuiControlGet, CF_AddDataDelay, 84:, CF_AddDataDelaySlider
     GuiControl, 84:, CF_AddDataDelayLabel, %CF_AddDataDelay% ms
     gosub NB_SaveSettings
 return
 
 CF_AutoSaveDelayChanged:
-    GuiControlGet, CF_AutoSaveDelay, 73:, CF_AutoSaveDelaySlider
+    GuiControlGet, CF_AutoSaveDelay, 84:, CF_AutoSaveDelaySlider
     GuiControl, 84:, CF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
     gosub NB_SaveSettings
 return
 
 NB_DebugLogChanged:
-    GuiControlGet, chkVal, 73:, NB_DebugLogChk
+    GuiControlGet, chkVal, 84:, NB_DebugLogChk
     NB_DebugLogging := chkVal
     gosub NB_SaveSettings
     gosub, writeit
@@ -821,16 +952,24 @@ return
 
 NB_LoadSettings:
     global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay, CF_AutoSaveDelay
+    global NB_SpeedOverride, NB_ApplySpeed, NB_LeafSpeed
     IniRead, NB_AdvancedMode, %NB_SettingsIniPath%, General, AdvancedMode, 0
     IniRead, NB_DebugLogging, %NB_SettingsIniPath%, General, DebugLogging, 0
+    IniRead, NB_SpeedOverride, %NB_SettingsIniPath%, General, SpeedOverride, 0
+    IniRead, NB_ApplySpeed, %NB_SettingsIniPath%, General, ApplySpeed, 0
+    IniRead, NB_LeafSpeed, %NB_SettingsIniPath%, General, LeafSpeed, 0
     IniRead, CF_AddDataDelay, %NB_SettingsIniPath%, CPFS, AddDataDelay, 50
     IniRead, CF_AutoSaveDelay, %NB_SettingsIniPath%, CPFS, AutoSaveDelay, 500
 return
 
 NB_SaveSettings:
     global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay, CF_AutoSaveDelay
+    global NB_SpeedOverride, NB_ApplySpeed, NB_LeafSpeed
     IniWrite, %NB_AdvancedMode%, %NB_SettingsIniPath%, General, AdvancedMode
     IniWrite, %NB_DebugLogging%, %NB_SettingsIniPath%, General, DebugLogging
+    IniWrite, %NB_SpeedOverride%, %NB_SettingsIniPath%, General, SpeedOverride
+    IniWrite, %NB_ApplySpeed%, %NB_SettingsIniPath%, General, ApplySpeed
+    IniWrite, %NB_LeafSpeed%, %NB_SettingsIniPath%, General, LeafSpeed
     IniWrite, %CF_AddDataDelay%, %NB_SettingsIniPath%, CPFS, AddDataDelay
     IniWrite, %CF_AutoSaveDelay%, %NB_SettingsIniPath%, CPFS, AutoSaveDelay
 return
@@ -874,28 +1013,43 @@ NB_CheckCPRS:
     }
     GuiControl, 80:, NB_PanelStatus, Ready | %cprsStatus% | %cfStatus%
 
-    ; --- Hide panel during signing ---
-    ; Detect CPRS sign windows and hide panel while they're open.
-    ; These are CPRS sub-windows, not separate popups.
+    ; --- Hide panel during F-keys or sign dialogs ---
+    ; F-key detection via GetKeyState polling (doesn't override host hotkeys)
+    nbFKeyPressed := false
+    Loop, 12 {
+        if (GetKeyState("F" . A_Index, "P")) {
+            nbFKeyPressed := true
+            break
+        }
+    }
+    ; Sign window detection (for users who click sign instead of F-key)
     nbSignVisible := false
     SetTitleMatchMode, 2
-    if (WinExist("Sign Note ahk_exe CPRSChart.exe") || WinExist("Sign Summary ahk_exe CPRSChart.exe") || WinExist("Cosign Note ahk_exe CPRSChart.exe") || WinExist("Sign Orders ahk_exe CPRSChart.exe") || WinExist("Review / Sign Changes ahk_exe CPRSChart.exe") || WinExist("Electronic Signature ahk_exe CPRSChart.exe")) {
+    if (WinExist("Sign Note ahk_exe CPRSChart.exe") || WinExist("Sign Summary ahk_exe CPRSChart.exe") || WinExist("Cosign Note ahk_exe CPRSChart.exe") || WinExist("Sign Orders ahk_exe CPRSChart.exe") || WinExist("Review / Sign Changes ahk_exe CPRSChart.exe") || WinExist("Electronic Signature ahk_exe CPRSChart.exe"))
         nbSignVisible := true
-    }
-    if (nbSignVisible && NB_BoosterGuiVisible = 1) {
+
+    if ((nbFKeyPressed || nbSignVisible) && NB_BoosterGuiVisible = 1 && NB_SignWasVisible != 1) {
         Gui, 80:Hide
         NB_BoosterGuiVisible := 0
         NB_SignWasVisible := 1
-    } else if (!nbSignVisible && NB_SignWasVisible = 1) {
-        Gui, 80:Show, NA
-        WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
-        NB_BoosterGuiVisible := 1
-        NB_SignWasVisible := 0
+        SetTimer, NB_RestorePanelAfterFKey, -6000
+    } else if (!nbSignVisible && !nbFKeyPressed && NB_SignWasVisible = 1) {
+        ; Sign window closed and no F-key held — restore early if timer hasn't fired yet
     }
+
 return
 
 NB_ClearV6Warning:
     GuiControl, 80:, NB_PanelStatus, Ready
+return
+
+NB_RestorePanelAfterFKey:
+    if (NB_SignWasVisible = 1) {
+        Gui, 80:Show
+        WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
+        NB_BoosterGuiVisible := 1
+        NB_SignWasVisible := 0
+    }
 return
 
 
@@ -1134,19 +1288,14 @@ NB_ApplyTemplate(templatePath) {
 
     tplCount := tplItems.Length()
 
-    ; Determine effective speed: override checkbox → main panel speed, else → template speed
-    tplSpeed := 600
-    if (RegExMatch(content, """speed"":\s*(\d+)", spdM))
-        tplSpeed := spdM1 + 0
-    tplLeafSpd := 50
-    if (RegExMatch(content, """leaf_speed"":\s*(\d+)", lspdM))
-        tplLeafSpd := lspdM1 + 0
+    ; Speed: default 0/0 (sync SendMessage handles timing).
+    ; Override lets users slow it down if needed.
     if (NB_SpeedOverride) {
         effectiveSpeed := NB_ApplySpeed
         effectiveLeafSpeed := NB_LeafSpeed
     } else {
-        effectiveSpeed := tplSpeed
-        effectiveLeafSpeed := tplLeafSpd
+        effectiveSpeed := 0
+        effectiveLeafSpeed := 0
     }
 
     ; Wait for dialog to load
@@ -2316,13 +2465,14 @@ NB_ResolveParentCBLabel(cbHwnd) {
 
 ;============================================================================================
 ; NURSING BOOSTER - HOTKEYS (global — not restricted to CPRS window)
-; NOTE: ^+b is registered via Hotkey command in auto-execute (near Gui 67 setup)
+; NOTE: ^+b is registered via Hotkey command in auto-execute (near Gui 80 setup)
 ;============================================================================================
 #If (NB_Enabled)  ; Only register these hotkeys when NB is enabled
 
 ^+d::
     gosub NB_DumpDialogControls
 return
+
 
 
 
