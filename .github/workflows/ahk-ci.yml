@@ -79,8 +79,9 @@ jobs:
           # file that declares AutoHotkey v2 (those are handled by the v2 job).
           $scripts = Get-ChildItem -Path . -Recurse -Include *.ahk, *.ahk.txt | Where-Object {
             if ($_.FullName -match "\\archive\\|\\test\\|\\dumps\\|\\tools\\") { return $false }
-            $head = (Get-Content $_.FullName -TotalCount 5 -ErrorAction SilentlyContinue) -join "`n"
-            if ($head -match "#Requires\s+AutoHotkey\s+v2") { return $false }
+            # Skip v2 scripts (handled by the v2 job). Scan the whole file: the
+            # #Requires directive is not always in the first few lines.
+            if (Select-String -Path $_.FullName -Pattern '#Requires\s+AutoHotkey\s+v2' -Quiet) { return $false }
             return $true
           }
 
