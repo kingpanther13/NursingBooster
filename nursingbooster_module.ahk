@@ -97,7 +97,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev18  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev19  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -148,7 +148,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev18
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev19
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -176,6 +176,9 @@ NB_ModuleInit:
 
     ; --- NursingBooster: Start CPRS detection timer ---
     SetTimer, NB_CheckCPRS, 3000
+
+    ; --- Start fast F-key / sign-dialog hide poll (panel must hide instantly) ---
+    SetTimer, NB_CheckFKeyHide, 100
 
     ; --- Start Gui 14 dropdown injection timer ---
     SetTimer, NB_CheckGui14Dropdown, 2000
@@ -1013,8 +1016,25 @@ NB_CheckCPRS:
     }
     GuiControl, 80:, NB_PanelStatus, Ready | %cprsStatus% | %cfStatus%
 
-    ; --- Hide panel during F-keys or sign dialogs ---
-    ; F-key detection via GetKeyState polling (doesn't override host hotkeys)
+    ; --- F-key / sign-dialog hiding is handled by the fast NB_CheckFKeyHide timer ---
+    ; (moved out of this 3 s timer in dev19 so the panel hides within ~100 ms)
+return
+
+NB_ClearV6Warning:
+    GuiControl, 80:, NB_PanelStatus, Ready
+return
+
+NB_CheckFKeyHide:
+    ; Fast poll (~100 ms) — hide the booster panel the instant an F-key is pressed
+    ; or a CPRS sign dialog appears. This logic used to live in the 3 s NB_CheckCPRS
+    ; timer (dev8), which made F1 (Sign) take up to 3 s to hide the panel and missed
+    ; quick taps entirely. Polling at 100 ms hides it effectively instantly.
+    ;
+    ; Passive GetKeyState polling is used on purpose — NOT F1::..F12:: hotkeys.
+    ; This module is #Included into CPRSBooster, which owns F1::..F12:: itself, so
+    ; defining them here would override CPRS's own handlers (the dev8 regression
+    ; where F1 opened Windows Help instead of Sign). GetKeyState only *reads* key
+    ; state, so CPRS's F-key handlers still fire normally.
     nbFKeyPressed := false
     Loop, 12 {
         if (GetKeyState("F" . A_Index, "P")) {
@@ -1022,7 +1042,7 @@ NB_CheckCPRS:
             break
         }
     }
-    ; Sign window detection (for users who click sign instead of F-key)
+    ; Sign window detection (for users who click Sign instead of pressing an F-key)
     nbSignVisible := false
     SetTitleMatchMode, 2
     if (WinExist("Sign Note ahk_exe CPRSChart.exe") || WinExist("Sign Summary ahk_exe CPRSChart.exe") || WinExist("Cosign Note ahk_exe CPRSChart.exe") || WinExist("Sign Orders ahk_exe CPRSChart.exe") || WinExist("Review / Sign Changes ahk_exe CPRSChart.exe") || WinExist("Electronic Signature ahk_exe CPRSChart.exe"))
@@ -1033,15 +1053,9 @@ NB_CheckCPRS:
         NB_BoosterGuiVisible := 0
         NB_SignWasVisible := 1
         SetTimer, NB_RestorePanelAfterFKey, -6000
-    } else if (!nbSignVisible && !nbFKeyPressed && NB_SignWasVisible = 1) {
-        ; Sign window closed and no F-key held — restore early if timer hasn't fired yet
     }
-
 return
 
-NB_ClearV6Warning:
-    GuiControl, 80:, NB_PanelStatus, Ready
-return
 
 NB_RestorePanelAfterFKey:
     if (NB_SignWasVisible = 1) {
@@ -1318,6 +1332,7 @@ NB_ApplyTemplate(templatePath) {
 
     ; Pause timers during apply to prevent interference
     SetTimer, NB_CheckCPRS, Off
+    SetTimer, NB_CheckFKeyHide, Off
     SetTimer, NB_CheckGui14Dropdown, Off
 
     ; Register right-click hotkey to set cancel flag
@@ -1422,6 +1437,7 @@ NB_ApplyTemplate(templatePath) {
 
     ; Resume timers
     SetTimer, NB_CheckCPRS, 3000
+    SetTimer, NB_CheckFKeyHide, 100
     SetTimer, NB_CheckGui14Dropdown, 2000
 
     ; Re-assert AlwaysOnTop on the panel — WinActivate on CPRS dialog strips it
