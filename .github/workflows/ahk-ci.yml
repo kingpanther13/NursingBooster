@@ -64,7 +64,7 @@ jobs:
             Write-Host "::warning::AHK v2 exe not found in zip"
           }
 
-      # Syntax check v1 scripts (.ahk.txt files)
+      # Syntax check v1 scripts (*.ahk and legacy *.ahk.txt; v2 files are skipped)
       - name: Syntax check AHK v1 scripts
         shell: pwsh
         run: |
@@ -74,22 +74,38 @@ jobs:
             exit 1
           }
           $failed = @()
-          $scripts = Get-ChildItem -Path . -Filter "*.ahk.txt" -Recurse | Where-Object { $_.FullName -notmatch "\\archive\\" -and $_.FullName -notmatch "\\test\\" -and $_.FullName -notmatch "\\dumps\\" }
+          # Lint v1 scripts: both *.ahk and legacy *.ahk.txt (the .txt suffix is
+          # left over from an older flow). Skip third-party/library trees and any
+          # file that declares AutoHotkey v2 (those are handled by the v2 job).
+          $scripts = Get-ChildItem -Path . -Recurse -Include *.ahk, *.ahk.txt | Where-Object {
+            if ($_.FullName -match "\\archive\\|\\test\\|\\dumps\\|\\tools\\") { return $false }
+            $head = (Get-Content $_.FullName -TotalCount 5 -ErrorAction SilentlyContinue) -join "`n"
+            if ($head -match "#Requires\s+AutoHotkey\s+v2") { return $false }
+            return $true
+          }
 
           if ($scripts.Count -eq 0) {
-            Write-Host "No .ahk.txt files found, skipping v1 syntax check"
+            Write-Host "No v1 .ahk/.ahk.txt files found, skipping v1 syntax check"
             exit 0
           }
 
           foreach ($script in $scripts) {
             Write-Host "Checking: $($script.FullName)"
 
-            # Copy to .ahk so AHK can parse it
-            $tempAhk = "$($script.FullName -replace '\.txt$', '')"
-            Copy-Item $script.FullName $tempAhk
+            # AHK only parses files with a .ahk extension. Copy .ahk.txt to a temp
+            # .ahk next to it; use real .ahk files directly so an original is never
+            # deleted.
+            if ($script.Extension -eq ".txt") {
+              $target = $script.FullName -replace '\.txt$', ''
+              Copy-Item $script.FullName $target -Force
+              $isTemp = $true
+            } else {
+              $target = $script.FullName
+              $isTemp = $false
+            }
 
             $proc = Start-Process -FilePath $ahk1 `
-              -ArgumentList "/ErrorStdOut", "/iLib", "NUL", $tempAhk `
+              -ArgumentList "/ErrorStdOut", "/iLib", "NUL", $target `
               -Wait -PassThru -NoNewWindow `
               -RedirectStandardError "$env:TEMP\ahk_stderr.txt" `
               -RedirectStandardOutput "$env:TEMP\ahk_stdout.txt"
@@ -103,7 +119,7 @@ jobs:
               $stdout = Get-Content "$env:TEMP\ahk_stdout.txt" -Raw
             }
 
-            Remove-Item $tempAhk -ErrorAction SilentlyContinue
+            if ($isTemp) { Remove-Item $target -ErrorAction SilentlyContinue }
 
             if ($proc.ExitCode -ne 0 -or $stderr -match "Error") {
               $errMsg = if ($stderr) { $stderr } else { $stdout }
