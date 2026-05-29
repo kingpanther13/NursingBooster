@@ -97,7 +97,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev19  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev20  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -148,7 +148,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev19
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev20
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -178,7 +178,7 @@ NB_ModuleInit:
     SetTimer, NB_CheckCPRS, 3000
 
     ; --- Start fast F-key / sign-dialog hide poll (panel must hide instantly) ---
-    SetTimer, NB_CheckFKeyHide, 100
+    SetTimer, NB_CheckFKeyHide, 30
 
     ; --- Start Gui 14 dropdown injection timer ---
     SetTimer, NB_CheckGui14Dropdown, 2000
@@ -306,6 +306,7 @@ NB_TogglePanel:
         Gui, 80:Show
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
+        NB_SignWasVisible := 0  ; clear auto-hide state so the next F-key hide isn't blocked
     }
 return
 
@@ -1025,10 +1026,13 @@ NB_ClearV6Warning:
 return
 
 NB_CheckFKeyHide:
-    ; Fast poll (~100 ms) — hide the booster panel the instant an F-key is pressed
+    ; Fast poll (~30 ms) — hide the booster panel the instant an F-key is pressed
     ; or a CPRS sign dialog appears. This logic used to live in the 3 s NB_CheckCPRS
     ; timer (dev8), which made F1 (Sign) take up to 3 s to hide the panel and missed
-    ; quick taps entirely. Polling at 100 ms hides it effectively instantly.
+    ; quick taps entirely. dev19 moved it to a 100 ms poll; dev20 dropped that to
+    ; ~30 ms because a 100 ms sample still missed fast F1 taps (~1 in 5), leaving the
+    ; panel covering CPRS's Sign flow. A 30 ms window is shorter than any real
+    ; keypress, so a genuine F1 press is now caught every time.
     ;
     ; Passive GetKeyState polling is used on purpose — NOT F1::..F12:: hotkeys.
     ; This module is #Included into CPRSBooster, which owns F1::..F12:: itself, so
@@ -1437,7 +1441,7 @@ NB_ApplyTemplate(templatePath) {
 
     ; Resume timers
     SetTimer, NB_CheckCPRS, 3000
-    SetTimer, NB_CheckFKeyHide, 100
+    SetTimer, NB_CheckFKeyHide, 30
     SetTimer, NB_CheckGui14Dropdown, 2000
 
     ; Re-assert AlwaysOnTop on the panel — WinActivate on CPRS dialog strips it
