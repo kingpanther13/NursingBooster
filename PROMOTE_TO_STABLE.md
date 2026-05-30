@@ -1,26 +1,45 @@
 # How to Promote Dev Module to Stable
 
-When the dev module is tested and ready for all users:
+When the dev module is tested and ready for all users.
 
-## Quick Version (one command)
+## ⚠️ Versioning rule (READ FIRST)
 
-```bash
-git checkout stable && git checkout master -- nursingbooster_module.ahk && git commit -m "Promote dev module to stable" && git push origin stable && git checkout master
-```
+The two channels use **different** version labels:
 
-## Step by Step
+| Channel | Branch   | Label style | Example |
+|---------|----------|-------------|---------|
+| Dev/Beta| `master` | `devXX`     | `dev20` |
+| Stable  | `stable` | `X.Y`       | `1.0`   |
 
-1. Switch to stable branch: `git checkout stable`
-2. Copy module from master: `git checkout master -- nursingbooster_module.ahk`
-3. Commit: `git commit -m "Promote devX to stable"`
-4. Push: `git push origin stable`
-5. Switch back: `git checkout master`
+The version label lives in **two** spots in `nursingbooster_module.ahk`:
+- panel title — the `vNB_PanelTitle` line (`... Nursing Booster <ver>  |  Ctrl+Shift+B to toggle`)
+- settings line — the `vNB_VersionLine` line (`... vNB_VersionLine, <ver>`)
+
+**Do NOT copy `master` to `stable` verbatim** — that stamps the `devXX` label onto
+stable. (This happened repeatedly: `v10.0` → `dev6` → `dev18`.) Promote the **code**,
+but set the label to the next **stable X.Y**.
+
+## Procedure
+
+1. Switch to stable: `git checkout stable`
+2. Bring the code over from master: `git checkout master -- nursingbooster_module.ahk`
+3. **Re-label** both version strings to the next stable `X.Y` (e.g. `1.0` → `1.1`):
+   edit the `vNB_PanelTitle` and `vNB_VersionLine` lines.
+4. **Verify** — stable must differ from master ONLY in those two label lines:
+   ```bash
+   git diff master -- nursingbooster_module.ahk | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)'
+   # expect exactly 4 lines: 2 removed (devXX), 2 added (X.Y)
+   ```
+5. Commit: `git commit -m "Promote to stable X.Y"`
+6. Push: `git push origin stable`
+7. Switch back: `git checkout master`
 
 ## What This Does
 
-- The `stable` branch's `nursingbooster_module.ahk` gets replaced with the current `master` version
-- Users on the "Stable" channel will get the update on their next startup (30-second background check)
-- Users on "Beta/Dev" channel are unaffected (they already have the master version)
+- The `stable` branch's `nursingbooster_module.ahk` gets the current `master` code,
+  re-labelled with stable's own `X.Y` version.
+- Users on the "Stable" channel get the update on their next startup (~30-second
+  background check). "Beta/Dev" users already have the master version.
 
 ## When to Promote
 
