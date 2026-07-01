@@ -22,8 +22,8 @@
 ;
 ; OPTIONAL HOST INTEGRATION HOOKS (enhance behavior, not required):
 ;   - Add `winactive("NursingBoosterPanel")` to host's hotkey suppression checks
-;   - Add NB dropdown to host's Gui 14 (function bar) — call gosub NB_AddDropdownToGui14
-;   - Wrap host's sign hotkey with `Gosub NB_SignWrapper`
+;   - The NB drop-up menu (Gui 85) attaches itself next to the host's Gui 14
+;     (function bar) automatically via the NB_CheckGui14Dropdown timer
 ;
 ; ============================================================================================
 
@@ -62,6 +62,10 @@ NB_ModuleInit:
     NB_HK5_Action := ""
     NB_SettingsVisible := 0
     NB_PanelHwnd := 0
+    NB_MiniBarBuilt := false
+    NB_MiniDDLHwnd := 0
+    NB_MiniBarLastX := ""
+    NB_MiniBarLastY := ""
     CF_AppTitle := "CP Flowsheets Booster"
     CF_Detected := 0
     CF_SpyResults := []
@@ -97,7 +101,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev20  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev21  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -148,7 +152,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev20
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev21
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -181,7 +185,7 @@ NB_ModuleInit:
     SetTimer, NB_CheckFKeyHide, 30
 
     ; --- Start Gui 14 dropdown injection timer ---
-    SetTimer, NB_CheckGui14Dropdown, 2000
+    SetTimer, NB_CheckGui14Dropdown, 500
 
 return
 
@@ -190,36 +194,51 @@ return
 ; Periodically checks if the function bar (fxnbar) exists and adds
 ; the NB dropdown if it's missing. Handles the host rebuilding Gui 14
 ; via internal gosub calls that bypass any hotkey wrapper.
-; NB_Gui14LastHwnd tracks the last seen fxnbar HWND to detect rebuilds.
-
-NB_Gui14LastHwnd := 0
-NB_MiniBarBuilt := false
+; NB_MiniBarBuilt / NB_MiniDDLHwnd / NB_MiniBarLastX/Y are initialized
+; in NB_ModuleInit (statements between labels in an #Include'd module
+; never execute — only the host's auto-execute section runs).
 
 NB_CheckGui14Dropdown:
-    ; Check if fxnbar window exists — position our mini toolbar above it
+    ; If the drop-up list is currently open, leave the mini bar completely
+    ; alone: a WinMove or Destroy on the owner window closes the open list
+    ; out from under the user (the reported "menu closes by itself" bug).
+    if (NB_MiniBarBuilt && NB_MiniDDLHwnd) {
+        SendMessage, 0x0157, 0, 0,, ahk_id %NB_MiniDDLHwnd%  ; CB_GETDROPPEDSTATE
+        if (ErrorLevel = 1)
+            return
+    }
+    ; Check if fxnbar window exists — position our mini toolbar next to it
     IfWinExist, fxnbar
     {
         nbFxnHwnd := WinExist("fxnbar")
         WinGetPos, nbFxnX, nbFxnY, nbFxnW,, ahk_id %nbFxnHwnd%
         if (!NB_MiniBarBuilt) {
-            ; Build our own mini toolbar (Gui 85) — sits above the function bar
+            ; Build our own mini toolbar (Gui 85) — sits to the right of the function bar
             Gui, 85:Destroy
             Gui, 85:Color, F0F0F0
             Gui, 85:Font, s8 cBlack, Verdana
             NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
-            Gui, 85:Add, DropdownList, gNB_DropdownAction y0 w140 -Tabstop altsubmit vNB_DropdownChoice, %NB_MenuList%
+            Gui, 85:Add, DropdownList, gNB_DropdownAction y0 w140 -Tabstop altsubmit vNB_DropdownChoice HwndNB_MiniDDLHwnd, %NB_MenuList%
             Gui, 85:+AlwaysOnTop -Caption +ToolWindow +Owner +E0x08000000  ; WS_EX_NOACTIVATE
             nbMiniX := nbFxnX + nbFxnW + 2
             nbMiniY := nbFxnY
             Gui, 85:Show, x%nbMiniX% y%nbMiniY% h21 NA, NB_MiniBar
             NB_MiniBarBuilt := true
+            NB_MiniBarLastX := nbMiniX
+            NB_MiniBarLastY := nbMiniY
         } else {
             ; Keep mini bar positioned to the right of fxnbar
             IfWinExist, NB_MiniBar
             {
                 nbMiniX := nbFxnX + nbFxnW + 2
                 nbMiniY := nbFxnY
-                WinMove, NB_MiniBar,, %nbMiniX%, %nbMiniY%
+                ; Only move when the bar actually moved — an unconditional
+                ; WinMove every tick disturbs the control for no reason.
+                if (nbMiniX != NB_MiniBarLastX || nbMiniY != NB_MiniBarLastY) {
+                    WinMove, NB_MiniBar,, %nbMiniX%, %nbMiniY%
+                    NB_MiniBarLastX := nbMiniX
+                    NB_MiniBarLastY := nbMiniY
+                }
             }
             else
             {
@@ -234,6 +253,7 @@ NB_CheckGui14Dropdown:
         if (NB_MiniBarBuilt) {
             Gui, 85:Destroy
             NB_MiniBarBuilt := false
+            NB_MiniDDLHwnd := 0
         }
     }
 return
@@ -303,7 +323,11 @@ NB_TogglePanel:
     }
     else
     {
-        Gui, 80:Show
+        ; NA: never activate the panel. WS_EX_NOACTIVATE only blocks *mouse*
+        ; activation — a plain Gui Show still activates programmatically, which
+        ; pulls focus off CPRS and makes the host's toolbar watchdog tear down
+        ; the bottom function bar (it only whitelists its own bars).
+        Gui, 80:Show, NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
         NB_SignWasVisible := 0  ; clear auto-hide state so the next F-key hide isn't blocked
@@ -502,7 +526,10 @@ NB_ToggleSettings:
                 settingsY := nbPosY + nbPosH + 2
             }
         }
-        Gui, 84:Show, x%settingsX% y%settingsY%
+        ; NA: keep CPRS active so the host's toolbar watchdog doesn't hide the
+        ; bottom bar while settings are open. Checkboxes/sliders work by mouse
+        ; without activation.
+        Gui, 84:Show, x%settingsX% y%settingsY% NA
         NB_SettingsVisible := 1
     }
 return
@@ -769,7 +796,7 @@ NB_RunHotkeyAction(action, slotName) {
 }
 
 ;============================================================================================
-; QUICK ACTION SETUP DIALOG (Gui 71)
+; QUICK ACTION SETUP DIALOG (Gui 83)
 ;============================================================================================
 
 NB_HK_Setup:
@@ -852,16 +879,19 @@ NB_HKSetup_Save:
     global NB_HK3_Label, NB_HK3_Action, NB_HK4_Label, NB_HK4_Action
     global NB_HK5_Label, NB_HK5_Action
 
-    ; Convert display text back to action strings
-    NB_HK1_Label := NB_HKSetup_L1
+    ; Convert display text back to action strings.
+    ; Labels feed a |-delimited DropDownList — strip | (breaks item indexing)
+    ; and default empty labels (an empty item creates a stray || which the DDL
+    ; treats as a default-selection marker).
+    NB_HK1_Label := NB_CleanHKLabel(NB_HKSetup_L1, "Quick 1")
     NB_HK1_Action := NB_HKParseActionChoice(NB_HKSetup_A1)
-    NB_HK2_Label := NB_HKSetup_L2
+    NB_HK2_Label := NB_CleanHKLabel(NB_HKSetup_L2, "Quick 2")
     NB_HK2_Action := NB_HKParseActionChoice(NB_HKSetup_A2)
-    NB_HK3_Label := NB_HKSetup_L3
+    NB_HK3_Label := NB_CleanHKLabel(NB_HKSetup_L3, "Quick 3")
     NB_HK3_Action := NB_HKParseActionChoice(NB_HKSetup_A3)
-    NB_HK4_Label := NB_HKSetup_L4
+    NB_HK4_Label := NB_CleanHKLabel(NB_HKSetup_L4, "Quick 4")
     NB_HK4_Action := NB_HKParseActionChoice(NB_HKSetup_A4)
-    NB_HK5_Label := NB_HKSetup_L5
+    NB_HK5_Label := NB_CleanHKLabel(NB_HKSetup_L5, "Quick 5")
     NB_HK5_Action := NB_HKParseActionChoice(NB_HKSetup_A5)
 
     ; Update button labels on panel
@@ -884,6 +914,11 @@ return
 NB_HKSetup_Cancel:
     Gui, 83:Destroy
 return
+
+NB_CleanHKLabel(label, fallback) {
+    label := Trim(StrReplace(label, "|", ""))
+    return label != "" ? label : fallback
+}
 
 NB_HKParseActionChoice(displayText) {
     ; Convert dropdown display text to stored action string
@@ -913,27 +948,28 @@ NB_LoadHotkeyConfig:
     if (hkJson = "")
         return
 
-    ; Parse each slot with regex (guard against empty labels — they break dropdown indexing)
+    ; Parse each slot with regex (guard against empty labels — they break dropdown indexing).
+    ; Values were escaped with NB_EscJson on save, so unescape on the way in.
     if (RegExMatch(hkJson, """label1"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK1_Label := m1
+        NB_HK1_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action1"":\s*""((?:[^""\\]|\\.)*)""", m))
-        NB_HK1_Action := m1
+        NB_HK1_Action := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """label2"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK2_Label := m1
+        NB_HK2_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action2"":\s*""((?:[^""\\]|\\.)*)""", m))
-        NB_HK2_Action := m1
+        NB_HK2_Action := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """label3"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK3_Label := m1
+        NB_HK3_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action3"":\s*""((?:[^""\\]|\\.)*)""", m))
-        NB_HK3_Action := m1
+        NB_HK3_Action := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """label4"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK4_Label := m1
+        NB_HK4_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action4"":\s*""((?:[^""\\]|\\.)*)""", m))
-        NB_HK4_Action := m1
+        NB_HK4_Action := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """label5"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK5_Label := m1
+        NB_HK5_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action5"":\s*""((?:[^""\\]|\\.)*)""", m))
-        NB_HK5_Action := m1
+        NB_HK5_Action := NB_UnescJson(m1)
 return
 
 NB_SaveHotkeyConfig:
@@ -1063,7 +1099,9 @@ return
 
 NB_RestorePanelAfterFKey:
     if (NB_SignWasVisible = 1) {
-        Gui, 80:Show
+        ; NA: restore without activating — stealing focus here would yank the
+        ; user out of whatever they moved on to after signing.
+        Gui, 80:Show, NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
         NB_SignWasVisible := 0
@@ -1272,10 +1310,11 @@ NB_ApplyTemplate(templatePath) {
     ; Check if template was saved from a different dialogue type
     dialogueMatched := true
     if (RegExMatch(content, """source_dialogue"":\s*""((?:[^""\\]|\\.)*)""", sdM)) {
+        savedDlgTitle := NB_UnescJson(sdM1)
         WinGetTitle, currentDlgTitle, ahk_id %dlgHwnd%
-        if (sdM1 != "" && currentDlgTitle != "" && sdM1 != currentDlgTitle) {
+        if (savedDlgTitle != "" && currentDlgTitle != "" && savedDlgTitle != currentDlgTitle) {
             dialogueMatched := false
-            MsgBox, 262452, %NB_AppTitle% - Dialogue Mismatch, This template was saved from:`n%sdM1%`n`nBut you are applying it to:`n%currentDlgTitle%`n`nAre you sure you want to continue?
+            MsgBox, 262452, %NB_AppTitle% - Dialogue Mismatch, This template was saved from:`n%savedDlgTitle%`n`nBut you are applying it to:`n%currentDlgTitle%`n`nAre you sure you want to continue?
             IfMsgBox, No
                 return
         }
@@ -1351,9 +1390,16 @@ NB_ApplyTemplate(templatePath) {
     tplPos := 1
     while (tplPos <= tplCount)
     {
-        ; Cancel on right-click
+        ; Cancel on right-click. Must undo everything the apply set up above:
+        ; the paused timers stayed off on this path before, killing the F-key
+        ; auto-hide, status updates, and mini-bar tracking until reload.
         if (NB_ApplyCancelled) {
             Hotkey, ~RButton, NB_CancelApplyHotkey, Off
+            SetTimer, NB_CheckCPRS, 3000
+            SetTimer, NB_CheckFKeyHide, 30
+            SetTimer, NB_CheckGui14Dropdown, 500
+            if (NB_BoosterGuiVisible = 1)
+                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
             ToolTip, Template apply cancelled at item %tplPos%/%tplCount%.
             SetTimer, NB_ClearToolTip, -3000
             return
@@ -1442,7 +1488,7 @@ NB_ApplyTemplate(templatePath) {
     ; Resume timers
     SetTimer, NB_CheckCPRS, 3000
     SetTimer, NB_CheckFKeyHide, 30
-    SetTimer, NB_CheckGui14Dropdown, 2000
+    SetTimer, NB_CheckGui14Dropdown, 500
 
     ; Re-assert AlwaysOnTop on the panel — WinActivate on CPRS dialog strips it
     if (NB_BoosterGuiVisible = 1)
@@ -2035,7 +2081,7 @@ NB_ParseFlatCheckboxes(jsonContent) {
 
         label := ""
         if (RegExMatch(itemStr, """label"":\s*""((?:[^""\\]|\\.)*)""", lblM))
-            label := lblM1
+            label := NB_UnescJson(lblM1)
 
         items.Push({idx: idx, cls: cls, checked: checked, label: label, depth: depthVal})
         itemPos := itemEnd
@@ -2415,6 +2461,19 @@ NB_EscJson(str) {
     str := StrReplace(str, "`r", "\r")
     str := StrReplace(str, "`t", "\t")
     return """" . str . """"
+}
+
+; Reverse of NB_EscJson for values read back out of our JSON files.
+; \\ is stashed as a placeholder first so \\n round-trips as \ + n,
+; not as a newline.
+NB_UnescJson(str) {
+    str := StrReplace(str, "\\", Chr(1))
+    str := StrReplace(str, "\""", """")
+    str := StrReplace(str, "\n", "`n")
+    str := StrReplace(str, "\r", "`r")
+    str := StrReplace(str, "\t", "`t")
+    str := StrReplace(str, Chr(1), "\")
+    return str
 }
 
 ; Attempt to resolve parent checkbox label. CPRS sets parent CB Caption to ' '
@@ -3514,7 +3573,7 @@ CF_BtnLoadTemplate:
         return
     }
 
-    ; Show picker GUI (using Gui 69 to avoid conflicts)
+    ; Show picker GUI (Gui 82)
     Gui, 82:Destroy
     Gui, 82:+AlwaysOnTop
     Gui, 82:Font, s9, Segoe UI
@@ -3910,14 +3969,14 @@ CF_ParseControls(jsonContent) {
 
         label := ""
         if (RegExMatch(itemStr, """label"":\s*""((?:[^""\\]|\\.)*)""", m))
-            label := m1
+            label := NB_UnescJson(m1)
 
         checked := InStr(itemStr, """checked"": true") || InStr(itemStr, """checked"":true") ? true : false
         selected := InStr(itemStr, """selected"": true") || InStr(itemStr, """selected"":true") ? true : false
 
         value := ""
         if (RegExMatch(itemStr, """value"":\s*""((?:[^""\\]|\\.)*)""", m))
-            value := m1
+            value := NB_UnescJson(m1)
 
         valueIdx := -1
         if (RegExMatch(itemStr, """valueIdx"":\s*(-?\d+)", m))
@@ -3929,7 +3988,7 @@ CF_ParseControls(jsonContent) {
 
         group_label := ""
         if (RegExMatch(itemStr, """group_label"":\s*""((?:[^""\\]|\\.)*)""", m))
-            group_label := m1
+            group_label := NB_UnescJson(m1)
 
         checklistIdx := -1
         if (RegExMatch(itemStr, """checklistIdx"":\s*(-?\d+)", m))
@@ -4283,13 +4342,5 @@ return
 
 ;############################################################################################
 ;################### END CP FLOWSHEETS BOOSTER ###############################################
-
-    if (NB_SignWasVisible = 1)
-    {
-        Gui, 80:Show, NA
-        WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
-        NB_BoosterGuiVisible := 1
-    }
-return
 
 #If  ; Restore default hotkey context

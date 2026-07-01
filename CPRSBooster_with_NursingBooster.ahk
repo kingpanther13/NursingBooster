@@ -1005,6 +1005,17 @@ NB_FetchModuleIfNeeded:
 
     ; Compare with channel cache. If different, update channel cache.
     FileRead, newContent, %nbTempPath%
+
+    ; Sanity check: never install something that isn't the module (captive
+    ; portal / error page). A corrupt file here gets #Include'd and would
+    ; break the whole host script on the next reload.
+    if (!InStr(newContent, "NB_ModuleInit")) {
+        FileDelete, %nbTempPath%
+        if (FileExist(nbChannelCache))
+            FileCopy, %nbChannelCache%, %nbActivePath%, 1
+        return
+    }
+
     cachedContent := ""
     if (FileExist(nbChannelCache))
         FileRead, cachedContent, %nbChannelCache%
@@ -8283,8 +8294,14 @@ if (nbNeedsReload) {
         }
         if (IsLabel("NB_CheckCPRS"))
             SetTimer, NB_CheckCPRS, Off
-        if (IsLabel("NB_CheckGui14Dropdown"))
+        if (IsLabel("NB_CheckFKeyHide"))
+            SetTimer, NB_CheckFKeyHide, Off
+        if (IsLabel("NB_CheckGui14Dropdown")) {
             SetTimer, NB_CheckGui14Dropdown, Off
+            ; Remove the NB drop-up from the function bar too
+            Gui, 85:Destroy
+            NB_MiniBarBuilt := false
+        }
         if (IsLabel("NB_ClearToolTip")) {
             ToolTip, NursingBooster disabled
             SetTimer, NB_ClearToolTip, -2000

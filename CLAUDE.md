@@ -6,7 +6,7 @@ Two release channels, **different label styles**:
 
 | Channel  | Branch   | Label style | Current |
 |----------|----------|-------------|---------|
-| Dev/Beta | `master` | `devXX`     | `dev20` |
+| Dev/Beta | `master` | `devXX`     | `dev21` |
 | Stable   | `stable` | `X.Y`       | `1.0`   |
 
 The label appears in **two** lines of `nursingbooster_module.ahk`: the `vNB_PanelTitle`
