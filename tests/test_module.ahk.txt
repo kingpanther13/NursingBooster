@@ -236,7 +236,9 @@ class SpeedFileTests
     WriteReadRoundTrip()
     {
         p := A_Temp . "\nb_speedtest_" . A_TickCount . ".json"
-        FileDelete, %p%
+        ; guard: a failing FileDelete inside Yunit's try/catch throws in AHK v1
+        if FileExist(p)
+            FileDelete, %p%
         base := StrReplace("{`n  'name': 'spd',`n  'format': 7,`n  'checkboxes': []`n}", "'", """")
         FileAppend, %base%, %p%, UTF-8
         Yunit.Assert(NB_WriteTemplateSpeed(p, 250), "write speed (insert)")

@@ -2111,7 +2111,12 @@ NB_RefreshSettingsTplList() {
     GuiControl, 84:, NB_SettingsTplDDL, |%list%
 }
 
+; NOTE (all four speed helpers): check FileExist before FileRead. A failing
+; FileRead inside a `try` block throws in AHK v1 instead of setting
+; ErrorLevel, so the guard keeps these functions safe under any caller.
 NB_ReadTemplateSpeed(filePath) {
+    if (!FileExist(filePath))
+        return 600
     FileRead, content, %filePath%
     if (ErrorLevel)
         return 600
@@ -2121,6 +2126,8 @@ NB_ReadTemplateSpeed(filePath) {
 }
 
 NB_WriteTemplateSpeed(filePath, speed) {
+    if (!FileExist(filePath))
+        return false
     FileRead, content, %filePath%
     if (ErrorLevel)
         return false
@@ -2139,6 +2146,8 @@ NB_WriteTemplateSpeed(filePath, speed) {
 }
 
 NB_ReadTemplateLeafSpeed(filePath) {
+    if (!FileExist(filePath))
+        return 50
     FileRead, content, %filePath%
     if (ErrorLevel)
         return 50
@@ -2148,6 +2157,8 @@ NB_ReadTemplateLeafSpeed(filePath) {
 }
 
 NB_WriteTemplateLeafSpeed(filePath, speed) {
+    if (!FileExist(filePath))
+        return false
     FileRead, content, %filePath%
     if (ErrorLevel)
         return false

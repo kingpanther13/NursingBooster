@@ -49,15 +49,34 @@ SmokeAssert(WinExist("NursingBoosterPanel") != 0, "panel visible after toggle")
 SmokeAssert(NB_BoosterGuiVisible = 1, "NB_BoosterGuiVisible set")
 SmokeAssert(WinActive("NBSmokeFocusHolder") != 0, "toggle did NOT steal activation (Show NA)")
 
-; --- 4. F-key auto-hide (30ms poll; no keyboard hook here, so the
-;        GetKeyState physical read sees injected input per AHK docs) ---
-Send, {F1 down}
-Sleep, 300
-Send, {F1 up}
-SmokeAssert(NB_BoosterGuiVisible = 0, "panel hidden within 300ms of F1")
+; --- 4. Sign-dialog auto-hide. (F-key injection CANNOT be tested here: the
+;        module's #If-scoped hotkeys install the keyboard hook, and the hook
+;        excludes injected input (LLKHF_INJECTED) from the physical state, so
+;        a Send'd F1 never reads as physically down. The same 30ms poll also
+;        hides on a CPRS Sign window - drive that path with a stub Sign Note
+;        window from a CPRSChart.exe-named process.) ---
+signStub := A_Temp . "\CPRSChart.exe"
+SmokeAssert(FileExist(signStub) != "", "CPRSChart.exe stub runner present")
+Run, "%signStub%" /ErrorStdOut "%A_ScriptDir%\smoke_sign_stub.ahk"
+WinWait, Sign Note ahk_exe CPRSChart.exe,, 5
+SmokeAssert(!ErrorLevel, "stub Sign Note window appeared")
+hidden := false
+start := A_TickCount
+while (A_TickCount - start < 1500)
+{
+    if (NB_BoosterGuiVisible = 0)
+    {
+        hidden := true
+        break
+    }
+    Sleep, 50
+}
+SmokeAssert(hidden, "panel hidden while Sign window open (took " . (A_TickCount - start) . "ms)")
 SmokeAssert(NB_SignWasVisible = 1, "restore state armed")
 
-; --- 5. Auto-restore ~6s later, still without stealing activation ---
+; --- 5. Close the sign window; auto-restore ~6s later, no activation steal ---
+WinClose, Sign Note ahk_exe CPRSChart.exe
+Process, WaitClose, CPRSChart.exe, 5
 WinActivate, NBSmokeFocusHolder
 Sleep, 6600
 SmokeAssert(NB_BoosterGuiVisible = 1, "panel auto-restored after ~6s")
