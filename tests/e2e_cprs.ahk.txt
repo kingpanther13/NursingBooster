@@ -1,17 +1,26 @@
 ; ===========================================================================
 ; e2e_cprs.ahk - end-to-end test of the reminder-dialog engine against the
-; fake CPRS dialog (e2e_cprs_stub.ahk running as CPRSChart.exe).
+; high-fidelity fake CPRS dialog (e2e_cprs_stub.ahk running as CPRSChart.exe).
 ;
-; Exercises the real module code paths end to end:
-;   NB_FindActiveDialogWindow (ahk_class TfrmRemDlg)
-;   NB_FindVisibleScrollBox / NB_EnumDescendantCheckboxes (Y-sort, TGroupBox
-;     depth computation, parent-label resolution via sibling TDlgFieldPanel)
-;   NB_ApplyTemplate (format v7 flat-sequential walk, BM_SETCHECK+WM_COMMAND,
-;     re-enumeration when a parent toggle creates children DEFERRED, the
-;     never-uncheck contract)
+; The stub generates the dialog AND the template fixture (MockNeg.json) the
+; way a real user save would - one item per checkbox of the fully-expanded
+; dialog in Y-order - plus expect.ini with the exact counts. This driver
+; runs the real module against it and asserts, like the real VAAES flow:
+;   - detection by class, visible-scrollbox pick (a hidden empty TScrollBox
+;     sibling exists, like CPRS's sb1/sb2 double buffer)
+;   - parent checkboxes are UNREADABLE (empty labels - real CPRS renders
+;     text on non-windowed TLabels); only leaf checkboxes carry text
+;   - source_dialogue and source_version checks pass silently (title match;
+;     "Version 3.2" greppable from the TRichEdit like the real note text)
+;   - the flat-sequential walk toggles EXACTLY the template-checked items,
+;     riding through deferred child creation (HideChildren parents), with
+;     Toggled == checked-count and Not-found == 0
+;   - post-apply, position-by-position: live state/class/depth equals the
+;     template (apply reproduces the save), including the depth histogram
+;     with its skipped level (no depth-3 checkboxes - display-only empty
+;     Box elements create groupbox levels without checkboxes)
 ;
 ; Output: PASS/FAIL lines on stdout; exit code = failures.
-; Run with: AutoHotkeyU64.exe /ErrorStdOut e2e_cprs.ahk  (after starting the stub)
 ; ===========================================================================
 #NoEnv
 #SingleInstance force
@@ -29,99 +38,152 @@ FileCreateDir, %NB_TemplateDir%
 FileCreateDir, %NB_LogDir%
 NB_AppTitle := "Nursing Booster"
 NB_ApplySpeed := 0
-NB_LeafSpeed := 400          ; give the stub's child-builder time, like real CPRS's deferred rebuild
-NB_SpeedOverride := 1        ; use the speeds above instead of the 0/0 default
-NB_DebugLogging := 1         ; module writes an APPLY log; dumped below for CI diagnostics
+NB_LeafSpeed := 400          ; > the stub's 30ms deferred-rebuild watcher, like real CPRS's posted rebuild
+NB_SpeedOverride := 1
+NB_DebugLogging := 1
 NB_BoosterGuiVisible := 0
 NB_PanelHwnd := 0
 NB_ApplyCancelled := false
 
-; --- Wait for the fake dialog ---
+MockDir := A_Temp . "\nb_e2e_mock"
+
+; --- Wait for the stub dialog AND its generated fixture ---
 WinWait, ahk_class TfrmRemDlg,, 20
 if (ErrorLevel) {
     FileAppend, % "FAIL: fake TfrmRemDlg never appeared`n", **
     ExitApp, 1
 }
+ready := 0
+Loop, 40
+{
+    IniRead, ready, %MockDir%\expect.ini, expect, ready, 0
+    if (ready = 1)
+        break
+    Sleep, 250
+}
+if (ready != 1) {
+    FileAppend, % "FAIL: stub never wrote expect.ini`n", **
+    ExitApp, 1
+}
+IniRead, expTotal, %MockDir%\expect.ini, expect, total, -1
+IniRead, expCollapsed, %MockDir%\expect.ini, expect, collapsed, -1
+IniRead, expToggled, %MockDir%\expect.ini, expect, toggled, -1
+IniRead, expNotFound, %MockDir%\expect.ini, expect, notfound, -1
 
 dlgHwnd := NB_FindActiveDialogWindow()
 E2eAssert(dlgHwnd != 0, "NB_FindActiveDialogWindow finds the dialog by class")
-WinGetClass, dlgCls, ahk_id %dlgHwnd%
-E2eAssert(dlgCls = "TfrmRemDlg", "dialog class is TfrmRemDlg (got " . dlgCls . ")")
+WinGetTitle, dlgTitle, ahk_id %dlgHwnd%
 
 scrollBox := NB_FindVisibleScrollBox(dlgHwnd)
-E2eAssert(scrollBox != 0, "visible TScrollBox found")
+E2eAssert(scrollBox != 0, "visible TScrollBox found despite hidden sb1 sibling")
+WinGet, sbStyle, Style, ahk_id %scrollBox%
+E2eAssert(sbStyle & 0x10000000, "picked scrollbox is the VISIBLE one")
 
-; --- Enumeration before any toggle: 4 checkboxes in Y order ---
+; --- Version text is readable the way the module reads it (WM_GETTEXT) ---
+ver := NB_GetDialogVersion(dlgHwnd)
+E2eAssert(ver = "3.2", "dialog version 3.2 greppable from TRichEdit (got '" . ver . "')")
+
+; --- Pre-apply enumeration: collapsed count, unreadable parents ---
 items := NB_EnumDescendantCheckboxes(scrollBox)
-E2eAssert(items.Length() = 4, "4 checkboxes before expansion (got " . items.Length() . ")")
-E2eAssert(items[1].className = "TCPRSDialogParentCheckBox", "item 1 is the parent checkbox")
-E2eAssert(items[1].label = "Tobacco Screening"
-    , "parent label resolved from sibling TDlgFieldPanel (got '" . items[1].label . "')")
-E2eAssert(items[2].label = "BP recorded" && items[2].depth = 1
-    , "groupbox child 1 in Y order at depth 1 (got '" . items[2].label . "' depth " . items[2].depth . ")")
-E2eAssert(items[3].label = "Pain assessed" && items[3].depth = 1
-    , "groupbox child 2 in Y order at depth 1")
-E2eAssert(items[4].className = "TCPRSDialogParentCheckBox" && items[4].depth = 0
-    , "second parent last, depth 0")
+E2eAssert(items.Length() = expCollapsed
+    , "collapsed dialog has " . expCollapsed . " checkboxes (got " . items.Length() . ")")
+unlabeledParents := 0
+labeledLeaves := 0
+checkedPre := 0
+for i, cb in items {
+    if (cb.className = "TCPRSDialogParentCheckBox" && cb.label = "")
+        unlabeledParents++
+    if (cb.className = "TCPRSDialogCheckBox" && cb.label != "")
+        labeledLeaves++
+    checkedPre += cb.checked ? 1 : 0
+}
+E2eAssert(checkedPre = 0, "nothing checked before apply (got " . checkedPre . ")")
+E2eAssert(unlabeledParents > 0 && labeledLeaves > 0
+    , "parents unreadable / leaves readable (" . unlabeledParents . " parents, " . labeledLeaves . " leaves)")
+for i, cb in items {
+    if (cb.className = "TCPRSDialogParentCheckBox" && cb.label != "") {
+        E2eAssert(false, "parent checkbox unexpectedly has readable label '" . cb.label . "'")
+        break
+    }
+}
 
-; --- Never-uncheck setup: pre-check parent 2; the template says false ---
-hPar2 := items[4].hwnd
-SendMessage, 0xF1, 1, 0,, ahk_id %hPar2%   ; BM_SETCHECK checked
-
-; --- Template fixture (format v7 flat, saved-from-expanded-dialog order):
-;     parent1 T, BP recorded T, Pain assessed F, parent2 F,
-;     Current smoker T, Counseling given T (the last two only exist after
-;     parent1 is checked - tests deferred re-enumeration) ---
-q := """"
-tpl := "{`n  " . q . "name" . q . ": " . q . "e2e" . q . ",`n  " . q . "format" . q . ": 7,`n"
-tpl .= "  " . q . "matching" . q . ": " . q . "flat-sequential" . q . ",`n"
-tpl .= "  " . q . "checkboxes" . q . ": [`n"
-tpl .= "    {" . q . "idx" . q . ": 0, " . q . "cls" . q . ": " . q . "TCPRSDialogParentCheckBox" . q . ", " . q . "checked" . q . ": true, " . q . "depth" . q . ": 0, " . q . "label" . q . ": " . q . "Tobacco Screening" . q . "},`n"
-tpl .= "    {" . q . "idx" . q . ": 1, " . q . "cls" . q . ": " . q . "TCPRSDialogCheckBox" . q . ", " . q . "checked" . q . ": true, " . q . "depth" . q . ": 1, " . q . "label" . q . ": " . q . "BP recorded" . q . "},`n"
-tpl .= "    {" . q . "idx" . q . ": 2, " . q . "cls" . q . ": " . q . "TORCheckBox" . q . ", " . q . "checked" . q . ": false, " . q . "depth" . q . ": 1, " . q . "label" . q . ": " . q . "Pain assessed" . q . "},`n"
-tpl .= "    {" . q . "idx" . q . ": 3, " . q . "cls" . q . ": " . q . "TCPRSDialogParentCheckBox" . q . ", " . q . "checked" . q . ": false, " . q . "depth" . q . ": 0, " . q . "label" . q . ": " . q . "Education" . q . "},`n"
-tpl .= "    {" . q . "idx" . q . ": 4, " . q . "cls" . q . ": " . q . "TCPRSDialogCheckBox" . q . ", " . q . "checked" . q . ": true, " . q . "depth" . q . ": 0, " . q . "label" . q . ": " . q . "Current smoker" . q . "},`n"
-tpl .= "    {" . q . "idx" . q . ": 5, " . q . "cls" . q . ": " . q . "TCPRSDialogCheckBox" . q . ", " . q . "checked" . q . ": true, " . q . "depth" . q . ": 0, " . q . "label" . q . ": " . q . "Counseling given" . q . "}`n"
-tpl .= "  ]`n}"
-tplPath := NB_TemplateDir . "\e2e.json"
-FileDelete, %tplPath%
-FileAppend, %tpl%, %tplPath%, UTF-8
-
-; --- Apply through the real engine ---
+; --- Apply the stub-saved template through the real engine ---
+tplPath := MockDir . "\MockNeg.json"
 NB_ApplyTemplate(tplPath)
-Sleep, 500
+Sleep, 600
 
-; --- Diagnostics: dump the module's own APPLY log (Toggled/Not-found
-;     counts and per-group states) so CI failures are explainable ---
-applyLog := ""
-Loop, Files, %NB_LogDir%\APPLY_*.txt
-    applyLog := A_LoopFileFullPath
-if (applyLog != "") {
-    FileRead, applyLogText, %applyLog%
-    FileAppend, % "--- module APPLY log ---`n" . applyLogText . "`n--- end APPLY log ---`n", *
-} else {
-    FileAppend, % "--- no APPLY log written (early return before logging?) ---`n", *
-}
+; --- Walk trace diagnostics + exact toggle accounting ---
 dbgPath := NB_LogDir . "\apply_debug.txt"
+walkTrace := ""
 if FileExist(dbgPath) {
-    FileRead, dbgText, %dbgPath%
-    FileAppend, % "--- apply walk trace ---`n" . dbgText . "--- end walk trace ---`n", *
+    FileRead, walkTrace, %dbgPath%
+    FileAppend, % "--- apply walk trace ---`n" . walkTrace . "--- end walk trace ---`n", *
 }
+toggled := -1
+notfound := -1
+Loop, Files, %NB_LogDir%\APPLY_*.txt
+{
+    FileRead, applyLogText, %A_LoopFileFullPath%
+    if (RegExMatch(applyLogText, "Toggled: (\d+)\s+\|\s+Not found: (\d+)", tm)) {
+        toggled := tm1
+        notfound := tm2
+    }
+}
+E2eAssert(toggled = expToggled
+    , "Toggled == template checked count (" . expToggled . "), got " . toggled)
+E2eAssert(notfound = expNotFound
+    , "Not-found == " . expNotFound . " (deferred children materialized in time), got " . notfound)
 
-; --- Final state: dynamics created and checked, never-uncheck honored ---
+; --- Post-apply: position-by-position the live dialog equals the save ---
+tplFile := ""
+FileRead, tplFile, %tplPath%
+tplItems := NB_ParseFlatCheckboxes(tplFile)
 after := NB_EnumDescendantCheckboxes(scrollBox)
+E2eAssert(after.Length() = expTotal
+    , "expanded dialog has " . expTotal . " checkboxes (got " . after.Length() . ")")
+E2eAssert(tplItems.Length() = expTotal
+    , "template has " . expTotal . " items (got " . tplItems.Length() . ")")
+
+mismatches := 0
+n := after.Length() < tplItems.Length() ? after.Length() : tplItems.Length()
+Loop, %n%
+{
+    i := A_Index
+    live := after[i]
+    tpl := tplItems[i]
+    ok := (live.className = tpl.cls) && ((live.checked ? 1 : 0) = (tpl.checked ? 1 : 0))
+        && (live.depth = tpl.depth)
+    if (!ok) {
+        mismatches++
+        if (mismatches <= 5)
+            FileAppend, % "MISMATCH pos " . i . ": live cls=" . live.className
+                . " chk=" . (live.checked ? 1 : 0) . " depth=" . live.depth
+                . " | tpl cls=" . tpl.cls . " chk=" . (tpl.checked ? 1 : 0)
+                . " depth=" . tpl.depth . " lbl='" . tpl.label . "'`n", *
+    }
+}
+E2eAssert(mismatches = 0
+    , "apply reproduces the save position-by-position (" . mismatches . " mismatches)")
+
+; --- Depth histogram: matches expectations, and depth 3 is ABSENT while
+;     depth 4 is populated (the display-only empty Box skip mechanism) ---
+hist := {}
 for i, cb in after
-    FileAppend, % "STATE: y=" . cb.y . " depth=" . cb.depth . " cls=" . cb.className . " checked=" . (cb.checked ? 1 : 0) . " label='" . cb.label . "'`n", *
-E2eAssert(after.Length() = 6, "6 checkboxes after apply (deferred children found; got " . after.Length() . ")")
-state := {}
-for i, cb in after
-    state[cb.label] := cb.checked
-E2eAssert(state["Tobacco Screening"], "parent 1 checked")
-E2eAssert(state["BP recorded"], "groupbox child checked")
-E2eAssert(!state["Pain assessed"], "template-false child left unchecked")
-E2eAssert(state["Education"], "pre-checked parent NOT unchecked (never-uncheck contract)")
-E2eAssert(state["Current smoker"], "deferred child 1 checked via re-enumeration")
-E2eAssert(state["Counseling given"], "deferred child 2 checked via re-enumeration")
+    hist[cb.depth] := (hist[cb.depth] ? hist[cb.depth] : 0) + 1
+histOk := true
+Loop, 6
+{
+    d := A_Index - 1
+    IniRead, expD, %MockDir%\expect.ini, depth, d%d%, 0
+    got := hist[d] ? hist[d] : 0
+    if (got != expD) {
+        histOk := false
+        FileAppend, % "DEPTH MISMATCH d" . d . ": expected " . expD . " got " . got . "`n", *
+    }
+}
+E2eAssert(histOk, "checkbox depth histogram matches the real-dialog profile")
+E2eAssert((hist[3] ? hist[3] : 0) = 0 && (hist[4] ? hist[4] : 0) > 0
+    , "depth 3 skipped while depth 4 populated (empty display-only Box level)")
 
 ; --- Cleanup + summary ---
 WinClose, ahk_id %dlgHwnd%
