@@ -962,8 +962,14 @@ if (NB_Enabled) {
     nbModulePath := onedrivelocal . "\nursingbooster_module.ahk"
     if (!FileExist(nbModulePath)) {
         gosub NB_FetchModuleIfNeeded
-        Reload
-        Sleep 1000
+        ; Only reload if the fetch actually produced the module — an
+        ; unconditional Reload here loops forever when the download fails
+        ; (offline / blocked GitHub) since the file is still missing after
+        ; every restart. The 30 s background check below retries instead.
+        if (FileExist(nbModulePath)) {
+            Reload
+            Sleep 1000
+        }
     }
 }
 
@@ -8296,6 +8302,9 @@ if (nbNeedsReload) {
             SetTimer, NB_CheckCPRS, Off
         if (IsLabel("NB_CheckFKeyHide"))
             SetTimer, NB_CheckFKeyHide, Off
+        ; Unhook the global panel toggle registered by NB_ModuleInit
+        if (IsLabel("NB_TogglePanel"))
+            Hotkey, ^+b, Off, UseErrorLevel
         if (IsLabel("NB_CheckGui14Dropdown")) {
             SetTimer, NB_CheckGui14Dropdown, Off
             ; Remove the NB drop-up from the function bar too

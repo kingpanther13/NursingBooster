@@ -199,6 +199,9 @@ return
 ; never execute — only the host's auto-execute section runs).
 
 NB_CheckGui14Dropdown:
+    ; Don't inherit the host's title match mode (its auto-execute leaves RegEx
+    ; as the thread default) — match "fxnbar"/"NB_MiniBar" as plain substrings.
+    SetTitleMatchMode, 2
     ; If the drop-up list is currently open, leave the mini bar completely
     ; alone: a WinMove or Destroy on the owner window closes the open list
     ; out from under the user (the reported "menu closes by itself" bug).
@@ -323,6 +326,11 @@ NB_TogglePanel:
     }
     else
     {
+        ; Hiding above stays allowed after disable (the host's disable path
+        ; gosubs here to hide the panel), but never SHOW while disabled —
+        ; ^+b stays registered until the host unhooks it.
+        if (!NB_Enabled)
+            return
         ; NA: never activate the panel. WS_EX_NOACTIVATE only blocks *mouse*
         ; activation — a plain Gui Show still activates programmatically, which
         ; pulls focus off CPRS and makes the host's toolbar watchdog tear down
@@ -762,7 +770,7 @@ NB_HK5_Run:
 return
 
 NB_RunHotkeyAction(action, slotName) {
-    global NB_TemplateDir, CF_TemplateDir, NB_AppTitle
+    global NB_TemplateDir, CF_TemplateDir, NB_AppTitle, CF_ChainAddData, CF_AddDataDelay
     if (action = "") {
         ToolTip, %slotName% not configured - click [...] to set up
         SetTimer, NB_ClearToolTip, -2000
@@ -1020,7 +1028,9 @@ return
 ;============================================================================================
 
 NB_CheckCPRS:
-    Critical
+    ; No Critical here: it made this 3 s status scan uninterruptible, starving
+    ; the 30 ms NB_CheckFKeyHide poll for the whole body — exactly the delayed
+    ; F-key hide dev19/dev20 were fixing. Everything below is idempotent reads.
     ; --- CPRS Detection ---
     cprsStatus := "CPRS: Not detected"
     IfWinExist, ahk_exe CPRSChart.exe
@@ -1284,7 +1294,11 @@ return
 ;============================================================================================
 
 NB_ApplyTemplate(templatePath) {
+    ; NB_BoosterGuiVisible/NB_PanelHwnd have no top-level declaration, so without
+    ; them here the function reads blank locals and the AlwaysOnTop re-assert
+    ; below never fired (panel lost topmost after every apply).
     global NB_AppTitle, NB_TemplateDir, NB_ApplySpeed, NB_LeafSpeed, NB_SpeedOverride, NB_ApplyCancelled
+    global NB_BoosterGuiVisible, NB_PanelHwnd, NB_DebugLogging
     dlgHwnd := NB_FindActiveDialogWindow()
     if (!dlgHwnd)
         return
@@ -3618,7 +3632,10 @@ CF_CancelLoad:
 return
 
 CF_ApplyTemplate(templatePath) {
+    ; Same as NB_ApplyTemplate: NB_BoosterGuiVisible/NB_PanelHwnd must be declared
+    ; or the final AlwaysOnTop re-assert reads blank locals and never fires.
     global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride, CF_AutoSaveDelay, NB_ApplyCancelled
+    global NB_BoosterGuiVisible, NB_PanelHwnd, CF_AutoSave, NB_DebugLogging, CF_ChainAddData, CF_AddDataDelay
 
     targetHwnd := CF_FindAddDataWindow()
     if (!targetHwnd) {
