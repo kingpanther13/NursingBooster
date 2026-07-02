@@ -29,9 +29,9 @@ FileCreateDir, %NB_TemplateDir%
 FileCreateDir, %NB_LogDir%
 NB_AppTitle := "Nursing Booster"
 NB_ApplySpeed := 0
-NB_LeafSpeed := 150          ; give the stub's 50ms child-builder time, like real CPRS's deferred rebuild
+NB_LeafSpeed := 400          ; give the stub's child-builder time, like real CPRS's deferred rebuild
 NB_SpeedOverride := 1        ; use the speeds above instead of the 0/0 default
-NB_DebugLogging := 0
+NB_DebugLogging := 1         ; module writes an APPLY log; dumped below for CI diagnostics
 NB_BoosterGuiVisible := 0
 NB_PanelHwnd := 0
 NB_ApplyCancelled := false
@@ -91,8 +91,22 @@ FileAppend, %tpl%, %tplPath%, UTF-8
 NB_ApplyTemplate(tplPath)
 Sleep, 500
 
+; --- Diagnostics: dump the module's own APPLY log (Toggled/Not-found
+;     counts and per-group states) so CI failures are explainable ---
+applyLog := ""
+Loop, Files, %NB_LogDir%\APPLY_*.txt
+    applyLog := A_LoopFileFullPath
+if (applyLog != "") {
+    FileRead, applyLogText, %applyLog%
+    FileAppend, % "--- module APPLY log ---`n" . applyLogText . "`n--- end APPLY log ---`n", *
+} else {
+    FileAppend, % "--- no APPLY log written (early return before logging?) ---`n", *
+}
+
 ; --- Final state: dynamics created and checked, never-uncheck honored ---
 after := NB_EnumDescendantCheckboxes(scrollBox)
+for i, cb in after
+    FileAppend, % "STATE: y=" . cb.y . " depth=" . cb.depth . " cls=" . cb.className . " checked=" . (cb.checked ? 1 : 0) . " label='" . cb.label . "'`n", *
 E2eAssert(after.Length() = 6, "6 checkboxes after apply (deferred children found; got " . after.Length() . ")")
 state := {}
 for i, cb in after

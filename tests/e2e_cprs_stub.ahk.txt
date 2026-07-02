@@ -68,9 +68,11 @@ global hPar2 := MakeWin(0, "TCPRSDialogParentCheckBox", " "
 MakeWin(0, "TDlgFieldPanel", "Education"
     , WS_CHILD | WS_VISIBLE, 44, 150, 300, 20, hBox, 0)
 
-; --- deferred child creation: watch parent1, build children when checked ---
+; --- deferred child creation: watch parent1, build children when checked.
+; Poll fast (15ms) so children exist well within the module's leaf-speed
+; re-enumeration window even on a loaded CI runner. ---
 global gDynBuilt := false
-SetTimer, WatchParent1, 50
+SetTimer, WatchParent1, 15
 
 ; --- failsafe: never outlive the CI step ---
 SetTimer, StubSelfDestruct, -180000
