@@ -287,24 +287,38 @@ E2eAssert(cond, msg)
 E2eWaitForScrollBox(ByRef dlgHwnd, wantCount)
 {
     sb := 0
-    Loop, 150   ; ~15s ceiling, well past the module's own 10s stability wait
+    startT := A_TickCount
+    ; Wall-clock ceiling (NB_WaitForStableCheckboxCount itself can burn up to
+    ; ~10s per call, so an iteration count would be an unbounded wait); healthy
+    ; runners resolve on the first pass. 90s is far past the ~25s worst case
+    ; observed and still well under the job timeout, so a genuine failure to
+    ; resolve bails and fails loudly rather than hanging.
+    while (A_TickCount - startT < 90000)
     {
-        ; Re-resolve the dialog every iteration exactly like NB_ApplyTemplate
-        ; does - a handle captured once, early, can point at a window that
-        ; never carries the visible scrollbox while the real dialog resolves
-        ; to a different HWND (the apply path re-resolves and always works).
+        ; Re-resolve the dialog every iteration like NB_ApplyTemplate does,
+        ; then run the module's OWN readiness gate. Cross-process GetClassName
+        ; for the stub's freshly created superclassed windows returns empty
+        ; for a while on a loaded runner (proven: dlgHwnd and its 3 children
+        ; are all present with correct WS_VISIBLE, but GetClassName yields ""),
+        ; so NB_FindVisibleScrollBox can't match "TScrollBox" yet. The apply
+        ; path never trips on this because NB_WaitForStableCheckboxCount hammers
+        ; the deep enumeration until the class names resolve; do the same here.
         dlgHwnd := NB_FindActiveDialogWindow()
         if (dlgHwnd)
         {
-            sb := NB_FindVisibleScrollBox(dlgHwnd)
-            if (sb)
+            stableCount := NB_WaitForStableCheckboxCount(dlgHwnd)
+            if (stableCount = wantCount)
             {
-                cur := NB_EnumDescendantCheckboxes(sb)
-                if (cur.Length() = wantCount)
-                    return sb
+                sb := NB_FindVisibleScrollBox(dlgHwnd)
+                if (sb)
+                {
+                    cur := NB_EnumDescendantCheckboxes(sb)
+                    if (cur.Length() = wantCount)
+                        return sb
+                }
             }
         }
-        Sleep, 100
+        Sleep, 200
     }
     E2eDiag("scrollbox-timeout", dlgHwnd)
     return sb
