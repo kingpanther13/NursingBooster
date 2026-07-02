@@ -126,6 +126,17 @@ Gui, 3:Destroy
 gone := SmokeWaitGone("NB_MiniBar", 2500)
 SmokeAssert(gone, "mini bar removed when fxnbar dies")
 
+; --- 11. Disable guard: ^+b stays registered until the host unhooks it,
+;         so NB_TogglePanel itself must refuse to SHOW while disabled ---
+gosub NB_TogglePanel   ; hide (hiding is allowed even when disabled)
+Sleep, 200
+SmokeAssert(NB_BoosterGuiVisible = 0, "panel hidden before disable-guard test")
+NB_Enabled := 0
+Send, ^+b
+Sleep, 400
+SmokeAssert(NB_BoosterGuiVisible = 0, "^+b does NOT re-show the panel while disabled")
+NB_Enabled := 1
+
 ; --- Summary ---
 if (SmokeFails > 0)
 {

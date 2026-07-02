@@ -215,6 +215,9 @@ NB_CheckGui14Dropdown:
     {
         nbFxnHwnd := WinExist("fxnbar")
         WinGetPos, nbFxnX, nbFxnY, nbFxnW,, ahk_id %nbFxnHwnd%
+        ; dock position: right edge of the bar (single source for both branches)
+        nbMiniX := nbFxnX + nbFxnW + 2
+        nbMiniY := nbFxnY
         if (!NB_MiniBarBuilt) {
             ; Build our own mini toolbar (Gui 85) — sits to the right of the function bar
             Gui, 85:Destroy
@@ -223,8 +226,6 @@ NB_CheckGui14Dropdown:
             NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
             Gui, 85:Add, DropdownList, gNB_DropdownAction y0 w140 -Tabstop altsubmit vNB_DropdownChoice HwndNB_MiniDDLHwnd, %NB_MenuList%
             Gui, 85:+AlwaysOnTop -Caption +ToolWindow +Owner +E0x08000000  ; WS_EX_NOACTIVATE
-            nbMiniX := nbFxnX + nbFxnW + 2
-            nbMiniY := nbFxnY
             Gui, 85:Show, x%nbMiniX% y%nbMiniY% h21 NA, NB_MiniBar
             NB_MiniBarBuilt := true
             NB_MiniBarLastX := nbMiniX
@@ -233,8 +234,6 @@ NB_CheckGui14Dropdown:
             ; Keep mini bar positioned to the right of fxnbar
             IfWinExist, NB_MiniBar
             {
-                nbMiniX := nbFxnX + nbFxnW + 2
-                nbMiniY := nbFxnY
                 ; Only move when the bar actually moved — an unconditional
                 ; WinMove every tick disturbs the control for no reason.
                 if (nbMiniX != NB_MiniBarLastX || nbMiniY != NB_MiniBarLastY) {
@@ -1040,7 +1039,8 @@ return
 NB_CheckCPRS:
     ; No Critical here: it made this 3 s status scan uninterruptible, starving
     ; the 30 ms NB_CheckFKeyHide poll for the whole body — exactly the delayed
-    ; F-key hide dev19/dev20 were fixing. Everything below is idempotent reads.
+    ; F-key hide dev19/dev20 were fixing. Everything below is idempotent
+    ; detection reads plus a status-text update; re-running is harmless.
     ; --- CPRS Detection ---
     cprsStatus := "CPRS: Not detected"
     IfWinExist, ahk_exe CPRSChart.exe
@@ -1118,6 +1118,14 @@ return
 
 
 NB_RestorePanelAfterFKey:
+    ; If NB was disabled while this one-shot was pending (sign, then disable
+    ; within the 6s window), never re-show: with ^+b unhooked and the hide
+    ; poll off, the AlwaysOnTop panel would sit over CPRS with no way to
+    ; dismiss it. Mirrors the NB_TogglePanel show-guard.
+    if (!NB_Enabled) {
+        NB_SignWasVisible := 0
+        return
+    }
     if (NB_SignWasVisible = 1) {
         ; NA: restore without activating — stealing focus here would yank the
         ; user out of whatever they moved on to after signing.
@@ -3565,6 +3573,10 @@ CF_ApplyTemplate(templatePath) {
 
     if (liveControls.Length() = 0) {
         MsgBox, 48, %CF_AppTitle%, No controls found in the current window.
+        ; the WinActivate above stripped the panel's topmost — restore it
+        ; on this and every other exit below (same thesis as the NB cancel fix)
+        if (NB_BoosterGuiVisible = 1)
+            WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         return
     }
 
@@ -3585,6 +3597,8 @@ CF_ApplyTemplate(templatePath) {
         ; Cancel template apply on right-click
         if (NB_ApplyCancelled) {
             Hotkey, ~RButton, NB_CancelApplyHotkey, Off
+            if (NB_BoosterGuiVisible = 1)
+                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
             ToolTip, Template apply cancelled at control %ti%/%cfTotalTpl%.
             SetTimer, CF_ClearToolTip, -3000
             return
@@ -3684,6 +3698,8 @@ CF_ApplyTemplate(templatePath) {
     if (CF_AutoSave && totalApplied > 0) {
         ; Check if Esc/right-click was pressed at any point during apply
         if (cfAutoSaveCancelled || NB_ApplyCancelled || GetKeyState("Escape", "P")) {
+            if (NB_BoosterGuiVisible = 1)
+                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
             ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
             SetTimer, CF_ClearToolTip, -3000
             return
@@ -3693,6 +3709,8 @@ CF_ApplyTemplate(templatePath) {
         Sleep, %CF_AutoSaveDelay%
         ; Re-check cancel after delay
         if (NB_ApplyCancelled || GetKeyState("Escape", "P")) {
+            if (NB_BoosterGuiVisible = 1)
+                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
             ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
             SetTimer, CF_ClearToolTip, -3000
             return

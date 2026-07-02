@@ -104,23 +104,29 @@ def parse_global_names(decl):
     return names
 
 
+MODULE_STATE_ASSIGN_RE = re.compile(r"^\s*((?:NB|CF)_[A-Za-z0-9_]+)\s*:=")
+MODULE_STATE_OUTPUT_RE = re.compile(
+    r"^\s*(?:IniRead|GuiControlGet|FileRead|WinGet[A-Za-z]*|ControlGetText)\s*,\s*((?:NB|CF)_[A-Za-z0-9_]+)\b",
+    re.IGNORECASE,
+)
+
+
 def segment_module(lines):
     """Classify each line of the module.
 
-    Returns (functions, superglobals, init_assigns, toplevel_dead)
+    Returns (functions, superglobals, module_state, if_context_open)
       functions: list of dicts {name, start, end, body_lines, globals}
       superglobals: set of names declared `global` outside any function
-      init_assigns: set of variable names assigned in NB_ModuleInit's body
-      toplevel_dead: list of (lineno, text) executable lines in no context
+      module_state: NB_/CF_-prefixed variables assigned in ANY label body
+        (label code runs in global scope, so these are module state that a
+        function can only read after declaring them)
     """
     functions = []
     superglobals = set()
-    init_assigns = set()
-    toplevel_dead = []
+    module_state = set()
 
     ctx = "none"          # none | label | hotkey | function
     cur_func = None
-    in_init = False
     brace_depth = 0       # inside function bodies
     in_block_comment = False
     if_context_open = False
@@ -168,7 +174,6 @@ def segment_module(lines):
         lm = LABEL_RE.match(scode)
         if lm:
             ctx = "label"
-            in_init = lm.group(1) == "NB_ModuleInit"
             continue
         if HOTKEY_RE.match(scode):
             ctx = "hotkey"
@@ -187,23 +192,19 @@ def segment_module(lines):
         if ctx in ("label", "hotkey", "none") and mgl:
             superglobals.update(parse_global_names(mgl.group(1)))
 
-        if ctx == "label":
-            if in_init:
-                am = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:=", code)
-                if am:
-                    init_assigns.add(am.group(1))
-                hm = re.search(r"\+?Hwnd([A-Za-z_][A-Za-z0-9_]*)", code)
-                if hm:
-                    init_assigns.add(hm.group(1))
+        if ctx in ("label", "hotkey"):
+            am = MODULE_STATE_ASSIGN_RE.match(code)
+            if am:
+                module_state.add(am.group(1))
+            om = MODULE_STATE_OUTPUT_RE.match(code)
+            if om:
+                module_state.add(om.group(1))
+            hm = re.search(r"\+?Hwnd((?:NB|CF)_[A-Za-z0-9_]*)", code)
+            if hm:
+                module_state.add(hm.group(1))
             continue
 
-        if ctx == "hotkey":
-            continue
-
-        # ctx == none: executable statement outside any context -> dead code
-        toplevel_dead.append((idx, scode))
-
-    return functions, superglobals, init_assigns, toplevel_dead, if_context_open
+    return functions, superglobals, module_state, if_context_open
 
 
 CONDITIONAL_PREFIX_RE = re.compile(
@@ -303,12 +304,13 @@ def check_module(repo):
     module = repo / MODULE
     lines = module.read_text(encoding="utf-8", errors="replace").splitlines()
 
-    functions, superglobals, init_assigns, _, if_open = segment_module(lines)
+    functions, superglobals, module_state, if_open = segment_module(lines)
 
     # ---- check 2: missing globals ------------------------------------------
-    # Anything NB_ModuleInit assigns is module state a function may only touch
-    # after declaring it (or via a super-global declaration somewhere).
-    module_vars = {v for v in init_assigns if not v.startswith("nb")}
+    # Any NB_/CF_ variable assigned in a label body (labels run in global
+    # scope) is module state a function may only touch after declaring it
+    # (or via a super-global declaration somewhere).
+    module_vars = module_state
     for fn in functions:
         allowed = fn["globals"] | superglobals
         for lineno, code in fn["body"]:
@@ -343,6 +345,25 @@ def check_module(repo):
     return lines
 
 
+def module_label_bodies(module_lines):
+    """Map label name -> list of body lines (up to the next top-level label)."""
+    bodies = {}
+    current = None
+    for raw in module_lines:
+        code = strip_comment_and_strings(raw).strip()
+        m = LABEL_RE.match(code)
+        if m:
+            current = m.group(1)
+            bodies[current] = []
+            continue
+        if FUNC_RE.match(code):
+            current = None
+            continue
+        if current is not None:
+            bodies[current].append(code)
+    return bodies
+
+
 def check_host_congruence(repo, module_lines):
     host = repo / HOST
     if not host.exists():
@@ -350,6 +371,23 @@ def check_host_congruence(repo, module_lines):
     module_text = "\n".join(module_lines)
     module_labels = set(re.findall(r"^([A-Za-z0-9_][A-Za-z0-9_]*):\s*(?:;.*)?$",
                                    module_text, re.MULTILINE))
+
+    # ---- panel-show timers must be torn down by the host's disable path ----
+    # A SetTimer-targeted label that can re-show the panel (Gui 80:Show) will
+    # resurrect an undismissable AlwaysOnTop panel if it fires after NB is
+    # disabled (^+b unhooked, hide poll off). Require a matching
+    # `SetTimer, <label>, Off` somewhere in the host.
+    host_text = host.read_text(encoding="utf-8", errors="replace")
+    bodies = module_label_bodies(module_lines)
+    timer_targets = set(re.findall(r"SetTimer\s*,\s*(NB_[A-Za-z0-9_]+)", module_text))
+    for label in sorted(timer_targets):
+        body = "\n".join(bodies.get(label, []))
+        if "Gui, 80:Show" not in body:
+            continue
+        if not re.search(rf"SetTimer\s*,\s*{re.escape(label)}\s*,\s*Off", host_text, re.IGNORECASE):
+            finding("host-congruence", HOST, 0,
+                    f"panel-showing timer {label} is never turned Off in the host's "
+                    "disable path - it can re-show the panel after NB is disabled")
 
     host_lines = host.read_text(encoding="utf-8", errors="replace").splitlines()
     in_block_comment = False

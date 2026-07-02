@@ -191,6 +191,51 @@ E2eAssert(histOk, "checkbox depth histogram matches the real-dialog profile")
 E2eAssert((hist[3] ? hist[3] : 0) = 0 && (hist[4] ? hist[4] : 0) > 0
     , "depth 3 skipped while depth 4 populated (empty display-only Box level)")
 
+; --- Cancel path: right-click cancel mid-apply must exit early AND restore
+;     the timers it paused (the dev21 fix). Uses a check-all fixture so the
+;     second walk has ~40 pending 400ms toggles; a 300ms pulse keeps setting
+;     the cancel flag (the flag is reset at walk start, after the ~2s
+;     stable-count wait, so a single one-shot could be wiped) ---
+allPath := MockDir . "\MockAll.json"
+FileRead, tplRaw, %tplPath%
+tplAll := StrReplace(tplRaw, """checked"": false", """checked"": true")
+FileDelete, %allPath%
+FileAppend, %tplAll%, %allPath%, UTF-8
+SetTimer, E2eCancelPulse, 300
+NB_ApplyTemplate(allPath)
+SetTimer, E2eCancelPulse, Off
+NB_ApplyCancelled := false
+
+logCount := 0
+Loop, Files, %NB_LogDir%\APPLY_*.txt
+    logCount++
+E2eAssert(logCount = 1, "cancelled apply exits before logging (APPLY logs=" . logCount . ")")
+
+after2 := NB_EnumDescendantCheckboxes(scrollBox)
+unchecked2 := 0
+for i, cb in after2
+    unchecked2 += cb.checked ? 0 : 1
+E2eAssert(unchecked2 > 0, "cancel stopped the walk early (" . unchecked2 . " still unchecked)")
+
+; timers restored: the Gui-14 tracker must dock a mini bar to a fresh
+; fxnbar window within a few 500ms ticks
+Gui, 5:Add, Text,, fake bar
+Gui, 5:+AlwaysOnTop -Caption +ToolWindow
+Gui, 5:Show, x80 y700 w260 h21 NA, fxnbar
+miniFound := false
+miniStart := A_TickCount
+while (A_TickCount - miniStart < 3000)
+{
+    if WinExist("NB_MiniBar")
+    {
+        miniFound := true
+        break
+    }
+    Sleep, 100
+}
+E2eAssert(miniFound, "cancel path restored the timers (mini bar docked)")
+Gui, 5:Destroy
+
 ; --- Cleanup + summary ---
 WinClose, ahk_id %dlgHwnd%
 Process, Close, CPRSChart.exe
@@ -213,6 +258,10 @@ E2eAssert(cond, msg)
         FileAppend, % "FAIL: " . msg . "`n", *
     }
 }
+
+E2eCancelPulse:
+    NB_ApplyCancelled := true
+return
 
 ; --- The real module under test ---
 #Include %A_ScriptDir%\..\nursingbooster_module.ahk

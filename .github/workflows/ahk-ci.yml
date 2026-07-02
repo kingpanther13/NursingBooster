@@ -1,6 +1,9 @@
 name: AHK Syntax Check & Build
 # CI skips dumps/ and logs/ via sparse-checkout
 
+env:
+  AHK_V1_VERSION: 1.1.37.02   # single source for every job that installs AHK v1
+
 on:
   push:
     paths:
@@ -26,6 +29,12 @@ jobs:
             tools
             .github
           sparse-checkout-cone-mode: true
+
+      # The linter's own self-test first: seeds one known bug per check into
+      # copies of the real files and asserts the check fires (a regex tweak
+      # that neuters a check fails here instead of shipping silently).
+      - name: Lint self-test (seeded bugs)
+        run: python3 tools/test_ci_lint.py
 
       # Channel rules: PRs are judged against their target branch, pushes
       # against the pushed branch. Only master/stable trigger channel-label
@@ -62,7 +71,7 @@ jobs:
         run: |
           $ahkDir = "C:\ahk-v1"
           New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
-          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip"
+          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v$($env:AHK_V1_VERSION)/AutoHotkey_$($env:AHK_V1_VERSION).zip"
           Invoke-WebRequest -Uri $zipUrl -OutFile "$env:TEMP\ahk-v1.zip"
           Expand-Archive -Path "$env:TEMP\ahk-v1.zip" -DestinationPath $ahkDir -Force
           # Find the exe (could be AutoHotkeyU64.exe or AutoHotkey.exe depending on zip layout)
@@ -253,7 +262,7 @@ jobs:
         run: |
           $ahkDir = "C:\ahk-v1"
           New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
-          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip"
+          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v$($env:AHK_V1_VERSION)/AutoHotkey_$($env:AHK_V1_VERSION).zip"
           Invoke-WebRequest -Uri $zipUrl -OutFile "$env:TEMP\ahk-v1.zip"
           Expand-Archive -Path "$env:TEMP\ahk-v1.zip" -DestinationPath $ahkDir -Force
           $exe = Get-ChildItem -Path $ahkDir -Filter "AutoHotkey*.exe" -Recurse | Select-Object -First 1
@@ -333,7 +342,7 @@ jobs:
         run: |
           $ahkDir = "C:\ahk-v1"
           New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
-          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip"
+          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v$($env:AHK_V1_VERSION)/AutoHotkey_$($env:AHK_V1_VERSION).zip"
           Invoke-WebRequest -Uri $zipUrl -OutFile "$env:TEMP\ahk-v1.zip"
           Expand-Archive -Path "$env:TEMP\ahk-v1.zip" -DestinationPath $ahkDir -Force
           # The e2e stubs use 64-bit WNDCLASSEXW offsets - pin the U64 build.
@@ -399,7 +408,7 @@ jobs:
       - name: Compile latest v1 script
         uses: nukdokplex/autohotkey-build@v0.1
         with:
-          version: "1.1.37.02"
+          version: "${{ env.AHK_V1_VERSION }}"
           x64: true
           x86: false
           compression: none

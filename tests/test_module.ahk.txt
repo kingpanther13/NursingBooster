@@ -20,6 +20,35 @@ SetWorkingDir %A_ScriptDir%
 NB_Enabled := 0
 onedrivelocal := A_Temp . "\nb_unit_" . A_TickCount
 
+; --- Hotkey-config save->load round trip. Labels cannot be gosub'd from
+;     inside class methods (function-local label scope), so the file I/O
+;     happens here in the auto-execute section; HKRoundTripTests asserts
+;     the captured results. Hostile characters exercise the EscJson/
+;     UnescJson persistence path this PR changed. ---
+NB_HotkeyConfigPath := A_Temp . "\nb_hkrt_" . A_TickCount . ".json"
+NB_HK1_Label := "say ""hi"" C:\dir\done"
+NB_HK1_Action := "nb_template:Neg ""special"" \ case"
+NB_HK2_Label := "plain"
+NB_HK2_Action := "cf_template:Vitals"
+NB_HK3_Label := "Quick 3"
+NB_HK3_Action := ""
+NB_HK4_Label := "Quick 4"
+NB_HK4_Action := ""
+NB_HK5_Label := "Quick 5"
+NB_HK5_Action := ""
+gosub NB_SaveHotkeyConfig
+HKRT_WantLabel1 := NB_HK1_Label
+HKRT_WantAction1 := NB_HK1_Action
+HKRT_WantAction2 := NB_HK2_Action
+NB_HK1_Label := "clobbered"
+NB_HK1_Action := "clobbered"
+NB_HK2_Action := "clobbered"
+gosub NB_LoadHotkeyConfig
+HKRT_GotLabel1 := NB_HK1_Label
+HKRT_GotAction1 := NB_HK1_Action
+HKRT_GotAction2 := NB_HK2_Action
+FileDelete, %NB_HotkeyConfigPath%
+
 #Include %A_ScriptDir%\..\tools\Yunit\Yunit.ahk
 #Include %A_ScriptDir%\..\tools\Yunit\Stdout.ahk
 
@@ -34,7 +63,8 @@ class YunitFailCount
 }
 
 Yunit.Use(YunitStdOut, YunitFailCount).Test(EscJsonTests, FlatParseTests
-    , CFParseTests, HKTests, SanitizeTests, SpeedFileTests, MatcherTests)
+    , CFParseTests, HKTests, HKRoundTripTests, SanitizeTests, SpeedFileTests
+    , MatcherTests)
 
 if (YunitFailCount.Fails > 0)
 {
@@ -208,6 +238,33 @@ class HKTests
 }
 
 ; ===========================================================================
+; Hotkey-config persistence round trip (I/O ran in the auto-execute section)
+; ===========================================================================
+class HKRoundTripTests
+{
+    LabelSurvivesQuotesAndBackslashes()
+    {
+        global HKRT_WantLabel1, HKRT_GotLabel1
+        Yunit.Assert(HKRT_GotLabel1 == HKRT_WantLabel1
+            , "label round trip: got '" . HKRT_GotLabel1 . "'")
+    }
+
+    ActionSurvivesQuotesAndBackslashes()
+    {
+        global HKRT_WantAction1, HKRT_GotAction1
+        Yunit.Assert(HKRT_GotAction1 == HKRT_WantAction1
+            , "action round trip: got '" . HKRT_GotAction1 . "'")
+    }
+
+    PlainActionSurvives()
+    {
+        global HKRT_WantAction2, HKRT_GotAction2
+        Yunit.Assert(HKRT_GotAction2 == HKRT_WantAction2
+            , "plain action round trip: got '" . HKRT_GotAction2 . "'")
+    }
+}
+
+; ===========================================================================
 ; NB_SanitizeFilename (module behavior: illegal chars become _)
 ; ===========================================================================
 class SanitizeTests
@@ -255,6 +312,8 @@ class SpeedFileTests
         p := A_Temp . "\nb_missing_" . A_TickCount . ".json"
         Yunit.Assert(NB_ReadTemplateSpeed(p) = 600, "default speed 600")
         Yunit.Assert(NB_ReadTemplateLeafSpeed(p) = 50, "default leaf 50")
+        Yunit.Assert(!NB_WriteTemplateSpeed(p, 250), "write speed to missing file returns false")
+        Yunit.Assert(!NB_WriteTemplateLeafSpeed(p, 80), "write leaf to missing file returns false")
     }
 }
 
