@@ -42,10 +42,19 @@ before it was reset to `1.0`.)
     (panel toggles without stealing focus, F-key hide/restore, Ctrl+Shift+B,
     drop-up follows fxnbar and is left alone while open); `tests/e2e_cpfs*.ahk.txt`
     (apply engine against a stub Add Data form run as CPFlowsheets.exe);
-    `tests/e2e_cprs*.ahk.txt` (apply engine against a fake TfrmRemDlg built from
-    superclassed Button classes with CPRS's real VCL class names, including
-    deferred child creation). Always run AHK with `/ErrorStdOut` in CI — a modal
-    error dialog otherwise hangs the runner.
+    `tests/e2e_cprs*.ahk.txt` (apply engine against a HIGH-FIDELITY fake
+    TfrmRemDlg modeled on the real VAAES dialog — sourced from the dumps in
+    `logs/CPRS Booster logs (not cpfs)/` and the CPRS Delphi source: real VCL
+    class names via superclassing, sb1/sb2 hidden-scrollbox twin, panel+checkbox
+    sibling pairs with EMPTY window text (parent labels unreadable, like real
+    CPRS), nested TGroupBoxes with a skipped checkbox-depth level, leaf-caption
+    clusters inside panels, prompt-control noise, and HideChildren parents whose
+    children are created DEFERRED with everything below shifting down on reused
+    HWNDs — partial-rebuild semantics per uReminders.pas. The stub saves its own
+    template fixture from the expanded tree like a real user save; the driver
+    asserts exact Toggled/Not-found counts and position-by-position equality).
+    Always run AHK with `/ErrorStdOut` in CI — a modal error dialog otherwise
+    hangs the runner.
 - The fake TfrmRemDlg e2e IS the "pared-down CPRS": real Win32 checkbox
   semantics under CPRS's real VCL class names, one-off reminder-dialog layouts
   per test, no VistA/login. A modified real CPRS client is not an option — CPRS
