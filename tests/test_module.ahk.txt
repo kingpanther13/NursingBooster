@@ -1,0 +1,338 @@
+; ===========================================================================
+; test_module.ahk - Yunit suite that tests the REAL shipped module.
+;
+; The module is #Include'd at the bottom of this file with NB_Enabled=0, so
+; NB_ModuleInit stays inert (no GUIs, no timers, no hotkey registration via
+; the Hotkey command) while every function becomes callable. This replaces
+; the old test_helpers.ahk.txt, which tested a local copy of helper logic
+; that had already drifted from the module.
+;
+; CI contract: Yunit swallows test exceptions and always exits 0, so this
+; runner counts failures itself (YunitFailCount), writes FAIL to stderr and
+; exits 1 when anything failed. Run with: AutoHotkey.exe /ErrorStdOut <file>
+; ===========================================================================
+#NoEnv
+#SingleInstance force
+SetBatchLines, -1
+SetWorkingDir %A_ScriptDir%
+
+; --- Host stubs the module normally gets from CPRSBooster ---
+NB_Enabled := 0
+onedrivelocal := A_Temp . "\nb_unit_" . A_TickCount
+
+#Include %A_ScriptDir%\..\tools\Yunit\Yunit.ahk
+#Include %A_ScriptDir%\..\tools\Yunit\Stdout.ahk
+
+class YunitFailCount
+{
+    static Fails := 0
+    Update(Category, Test, Result)
+    {
+        if IsObject(Result)   ; exception object = failure
+            YunitFailCount.Fails += 1
+    }
+}
+
+Yunit.Use(YunitStdOut, YunitFailCount).Test(EscJsonTests, FlatParseTests
+    , CFParseTests, HKTests, SanitizeTests, SpeedFileTests, MatcherTests)
+
+if (YunitFailCount.Fails > 0)
+{
+    FileAppend, % "FAIL: " . YunitFailCount.Fails . " test(s) failed`n", **
+    ExitApp, 1
+}
+FileAppend, % "All module unit tests passed`n", *
+ExitApp, 0
+
+; --- fixture helper: single quotes become JSON double quotes --------------
+J(s)
+{
+    return StrReplace(s, "'", """")
+}
+
+; ===========================================================================
+; NB_EscJson / NB_UnescJson
+; ===========================================================================
+class EscJsonTests
+{
+    RoundTripQuotesAndBackslash()
+    {
+        s := "say ""hi"" C:\dir\file"
+        esc := NB_EscJson(s)
+        Yunit.Assert(SubStr(esc, 1, 1) = """" && SubStr(esc, 0) = """", "escaped value must be quoted")
+        inner := SubStr(esc, 2, StrLen(esc) - 2)
+        Yunit.Assert(NB_UnescJson(inner) == s, "quote/backslash round trip")
+    }
+
+    RoundTripLiteralBackslashN()
+    {
+        ; literal backslash followed by n - must NOT come back as a newline
+        s := "a\nb"
+        inner := SubStr(NB_EscJson(s), 2, -1)
+        Yunit.Assert(NB_UnescJson(inner) == s, "literal \n round trip (Chr(1) stash)")
+    }
+
+    RoundTripNewlineTab()
+    {
+        s := "line1`nline2`ttab"
+        inner := SubStr(NB_EscJson(s), 2, -1)
+        Yunit.Assert(NB_UnescJson(inner) == s, "newline/tab round trip")
+    }
+
+    EscUsesJsonEscapes()
+    {
+        esc := NB_EscJson("x`ny")
+        Yunit.Assert(InStr(esc, "\n"), "newline must become \n")
+        Yunit.Assert(!InStr(esc, "`n"), "no raw newline in escaped output")
+    }
+
+    UnescDoubleBackslashBeforeN()
+    {
+        ; JSON \\n = literal backslash then the letter n
+        Yunit.Assert(NB_UnescJson("a\\nb") == "a\nb", "\\n stays backslash+n")
+    }
+}
+
+; ===========================================================================
+; NB_ParseFlatCheckboxes (format v7)
+; ===========================================================================
+class FlatParseTests
+{
+    ParsesItemsWithHostileLabels()
+    {
+        json := J("{ 'name': 'fixture', 'format': 7, 'checkboxes': ["
+            . "{'idx': 0, 'cls': 'TCPRSDialogParentCheckBox', 'checked': true, 'depth': 0, 'label': 'Pain [0-10] \'severe\''},"
+            . "{'idx': 1, 'cls': 'TCPRSDialogCheckBox', 'checked': false, 'depth': 1, 'label': 'has {braces} inside'},"
+            . "{'idx': 2, 'cls': 'TORCheckBox', 'checked': true, 'depth': 2}"
+            . "] }")
+        items := NB_ParseFlatCheckboxes(json)
+        Yunit.Assert(items.Length() = 3, "expected 3 items, got " . items.Length())
+        Yunit.Assert(items[1].checked, "item 1 checked")
+        Yunit.Assert(items[1].label == "Pain [0-10] ""severe""", "bracket+quote label survives: got '" . items[1].label . "'")
+        Yunit.Assert(!items[2].checked, "item 2 unchecked")
+        Yunit.Assert(items[2].label == "has {braces} inside", "brace label survives: got '" . items[2].label . "'")
+        Yunit.Assert(items[2].depth = 1, "item 2 depth")
+        Yunit.Assert(items[3].cls = "TORCheckBox", "item 3 cls")
+        Yunit.Assert(items[3].label = "", "item 3 has no label")
+    }
+
+    BracketLabelDoesNotEatFollowingItem()
+    {
+        ; the pre-fix parser lost items after a ] inside a label
+        json := J("{ 'format': 7, 'checkboxes': ["
+            . "{'idx': 0, 'cls': 'x', 'checked': true, 'depth': 0, 'label': 'scale ]0-10]'},"
+            . "{'idx': 1, 'cls': 'y', 'checked': true, 'depth': 0, 'label': 'after'}"
+            . "] }")
+        items := NB_ParseFlatCheckboxes(json)
+        Yunit.Assert(items.Length() = 2, "expected 2 items, got " . items.Length())
+        Yunit.Assert(items[2].label = "after", "second item parsed")
+    }
+
+    NoCheckboxesKey()
+    {
+        items := NB_ParseFlatCheckboxes("{}")
+        Yunit.Assert(items.Length() = 0, "no checkboxes key -> 0 items")
+    }
+
+    EmptyArray()
+    {
+        items := NB_ParseFlatCheckboxes(J("{ 'checkboxes': [] }"))
+        Yunit.Assert(items.Length() = 0, "empty array -> 0 items")
+    }
+}
+
+; ===========================================================================
+; CF_ParseControls (CPFS format 1)
+; ===========================================================================
+class CFParseTests
+{
+    MixedControls()
+    {
+        json := J("{ 'name': 'cpfs', 'format': 1, 'controls': ["
+            . "{'type': 'checkbox', 'label': 'Oriented x4', 'cls': 'TCheckBox', 'idx': 0, 'y': 120, 'checked': true},"
+            . "{'type': 'radio', 'label': 'Yes', 'cls': 'TRadioButton', 'idx': 1, 'y': 150, 'selected': true, 'group_label': 'Pain \'present\''},"
+            . "{'type': 'combo', 'label': 'Route', 'cls': 'ComboBox', 'idx': 2, 'y': 180, 'value': 'Oral', 'valueIdx': 3},"
+            . "{'type': 'checklist', 'label': 'Fall risk', 'cls': 'TCheckListBox', 'idx': 3, 'y': 210, 'checked': false, 'checklistIdx': 7}"
+            . "] }")
+        c := CF_ParseControls(json)
+        Yunit.Assert(c.Length() = 4, "expected 4 controls, got " . c.Length())
+        Yunit.Assert(c[1].type = "checkbox" && c[1].checked, "checkbox parsed")
+        Yunit.Assert(c[2].type = "radio" && c[2].selected, "radio parsed")
+        Yunit.Assert(c[2].group_label == "Pain ""present""", "group_label unescaped: got '" . c[2].group_label . "'")
+        Yunit.Assert(c[3].value = "Oral" && c[3].valueIdx = 3, "combo value/idx")
+        Yunit.Assert(c[4].checklistIdx = 7, "checklistIdx parsed")
+        Yunit.Assert(c[4].y = 210, "y parsed")
+    }
+
+    BraceInLabelDoesNotTruncate()
+    {
+        json := J("{ 'controls': ["
+            . "{'type': 'checkbox', 'label': 'Set {baseline} now', 'idx': 0, 'y': 1, 'checked': true},"
+            . "{'type': 'checkbox', 'label': 'after', 'idx': 1, 'y': 2, 'checked': false}"
+            . "] }")
+        c := CF_ParseControls(json)
+        Yunit.Assert(c.Length() = 2, "expected 2 controls, got " . c.Length())
+        Yunit.Assert(c[2].label = "after", "control after brace-label parsed")
+    }
+}
+
+; ===========================================================================
+; Quick-action label / action helpers
+; ===========================================================================
+class HKTests
+{
+    CleanStripsPipes()
+    {
+        Yunit.Assert(NB_CleanHKLabel("My|Lab|el", "Quick 1") = "MyLabel", "pipes stripped")
+    }
+
+    CleanEmptyFallsBack()
+    {
+        Yunit.Assert(NB_CleanHKLabel("", "Quick 2") = "Quick 2", "empty -> fallback")
+        Yunit.Assert(NB_CleanHKLabel("|||", "Quick 3") = "Quick 3", "pipes-only -> fallback")
+    }
+
+    CleanTrims()
+    {
+        Yunit.Assert(NB_CleanHKLabel("  Neuro WNL  ", "x") = "Neuro WNL", "trimmed")
+    }
+
+    ParseActionChoices()
+    {
+        Yunit.Assert(NB_HKParseActionChoice("NB Template: Neg Assessment") = "nb_template:Neg Assessment", "NB action")
+        Yunit.Assert(NB_HKParseActionChoice("CPFS Template: Vitals") = "cf_template:Vitals", "CF action")
+        Yunit.Assert(NB_HKParseActionChoice("-- None --") = "", "none -> empty")
+        Yunit.Assert(NB_HKParseActionChoice("") = "", "empty -> empty")
+        Yunit.Assert(NB_HKParseActionChoice("garbage") = "", "garbage -> empty")
+    }
+}
+
+; ===========================================================================
+; NB_SanitizeFilename (module behavior: illegal chars become _)
+; ===========================================================================
+class SanitizeTests
+{
+    ReplacesIllegalChars()
+    {
+        Yunit.Assert(NB_SanitizeFilename("a/b:c*d?e") = "a_b_c_d_e", "illegal chars -> _")
+    }
+
+    PassesCleanNameThrough()
+    {
+        Yunit.Assert(NB_SanitizeFilename("Negative Assessment") = "Negative Assessment", "clean name unchanged")
+    }
+
+    TrimsOuterWhitespace()
+    {
+        Yunit.Assert(NB_SanitizeFilename("  Skin WNL ") = "Skin WNL", "trimmed")
+    }
+}
+
+; ===========================================================================
+; Per-template speed read/write round trip (real file I/O in %A_Temp%)
+; ===========================================================================
+class SpeedFileTests
+{
+    WriteReadRoundTrip()
+    {
+        p := A_Temp . "\nb_speedtest_" . A_TickCount . ".json"
+        FileDelete, %p%
+        base := StrReplace("{`n  'name': 'spd',`n  'format': 7,`n  'checkboxes': []`n}", "'", """")
+        FileAppend, %base%, %p%, UTF-8
+        Yunit.Assert(NB_WriteTemplateSpeed(p, 250), "write speed (insert)")
+        Yunit.Assert(NB_ReadTemplateSpeed(p) = 250, "read back 250")
+        Yunit.Assert(NB_WriteTemplateSpeed(p, 350), "write speed (replace)")
+        Yunit.Assert(NB_ReadTemplateSpeed(p) = 350, "read back 350")
+        Yunit.Assert(NB_WriteTemplateLeafSpeed(p, 80), "write leaf speed")
+        Yunit.Assert(NB_ReadTemplateLeafSpeed(p) = 80, "read back leaf 80")
+        FileDelete, %p%
+    }
+
+    DefaultsWhenMissing()
+    {
+        p := A_Temp . "\nb_missing_" . A_TickCount . ".json"
+        Yunit.Assert(NB_ReadTemplateSpeed(p) = 600, "default speed 600")
+        Yunit.Assert(NB_ReadTemplateLeafSpeed(p) = 50, "default leaf 50")
+    }
+}
+
+; ===========================================================================
+; CF_FindBestMatch (the CPFS matching engine)
+; ===========================================================================
+class MatcherTests
+{
+    ExactLabelBeatsSubstring()
+    {
+        live := [ {type: "checkbox", label: "Oriented", y: 10, parentLabel: ""}
+                , {type: "checkbox", label: "Oriented x4", y: 20, parentLabel: ""} ]
+        tpl := {type: "checkbox", label: "Oriented x4", y: 999, group_label: ""}
+        m := CF_FindBestMatch(tpl, live, {})
+        Yunit.Assert(m.idx = 2 && m.score = 100, "exact match wins: idx=" . m.idx . " score=" . m.score)
+    }
+
+    ClaimedIsSkipped()
+    {
+        live := [ {type: "checkbox", label: "Same", y: 10, parentLabel: ""}
+                , {type: "checkbox", label: "Same", y: 50, parentLabel: ""} ]
+        tpl := {type: "checkbox", label: "Same", y: 10, group_label: ""}
+        claimed := {}
+        claimed[1] := true
+        m := CF_FindBestMatch(tpl, live, claimed)
+        Yunit.Assert(m.idx = 2, "claimed live control skipped, idx=" . m.idx)
+    }
+
+    TypeMustMatch()
+    {
+        live := [ {type: "radio", label: "Oriented", y: 10, parentLabel: ""} ]
+        tpl := {type: "checkbox", label: "Oriented", y: 10, group_label: ""}
+        m := CF_FindBestMatch(tpl, live, {})
+        Yunit.Assert(m.idx = 0, "type mismatch -> no match")
+    }
+
+    TieBrokenByYDistance()
+    {
+        live := [ {type: "radio", label: "Yes", y: 100, parentLabel: ""}
+                , {type: "radio", label: "Yes", y: 200, parentLabel: ""} ]
+        tpl := {type: "radio", label: "Yes", y: 190, group_label: ""}
+        m := CF_FindBestMatch(tpl, live, {})
+        Yunit.Assert(m.idx = 2, "nearest Y wins the tie, idx=" . m.idx)
+    }
+
+    GroupBonusBreaksLabelTie()
+    {
+        live := [ {type: "radio", label: "Yes", y: 100, parentLabel: "Nausea"}
+                , {type: "radio", label: "Yes", y: 300, parentLabel: "Pain"} ]
+        tpl := {type: "radio", label: "Yes", y: 100, group_label: "Pain"}
+        m := CF_FindBestMatch(tpl, live, {})
+        Yunit.Assert(m.idx = 2 && m.score = 120, "group bonus wins despite Y, idx=" . m.idx . " score=" . m.score)
+    }
+
+    UnlabeledMatchesByProximity()
+    {
+        live := [ {type: "checkbox", label: "", y: 105, parentLabel: ""} ]
+        tpl := {type: "checkbox", label: "", y: 100, group_label: ""}
+        m := CF_FindBestMatch(tpl, live, {})
+        Yunit.Assert(m.score = 50, "within 20px -> score 50, got " . m.score)
+    }
+
+    UnlabeledTooFarScoresZero()
+    {
+        live := [ {type: "checkbox", label: "", y: 300, parentLabel: ""} ]
+        tpl := {type: "checkbox", label: "", y: 100, group_label: ""}
+        m := CF_FindBestMatch(tpl, live, {})
+        Yunit.Assert(m.score = 0, "beyond 50px -> score 0 (caller rejects <30)")
+    }
+
+    EmptyLiveListReturnsZero()
+    {
+        tpl := {type: "checkbox", label: "x", y: 1, group_label: ""}
+        m := CF_FindBestMatch(tpl, [], {})
+        Yunit.Assert(m.idx = 0 && m.score = 0, "no live controls -> idx 0")
+    }
+}
+
+; ===========================================================================
+; The real module under test (NB_Enabled=0 keeps it inert; #Include placed
+; after the auto-execute section so NB_ModuleInit's label never auto-runs).
+; ===========================================================================
+#Include %A_ScriptDir%\..\nursingbooster_module.ahk

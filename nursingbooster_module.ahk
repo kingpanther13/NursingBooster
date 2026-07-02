@@ -1573,61 +1573,6 @@ NB__LogCheckboxStates(action, groupBoxHwnds, templateNameOrPath := "", dialogTit
 }
 
 
-;============================================================================================
-; NURSING BOOSTER - GROUP FINGERPRINTING
-;============================================================================================
-
-NB__GroupFingerprint(items) {
-    labels := []
-    depthCounts := {}
-    for k, item in items {
-        lbl := item.HasKey("label") ? item.label : ""
-        if (lbl != "")
-            labels.Push(lbl)
-        d := item.HasKey("depth") ? item.depth : 0
-        if (!depthCounts.HasKey(d))
-            depthCounts[d] := 0
-        depthCounts[d] := depthCounts[d] + 1
-    }
-    ; Sort labels alphabetically (insertion sort)
-    if (labels.Length() > 1) {
-        Loop, % labels.Length() - 1
-        {
-            i := A_Index + 1
-            key := labels[i]
-            j := i - 1
-            while (j >= 1 && labels[j] > key) {
-                labels[j + 1] := labels[j]
-                j--
-            }
-            labels[j + 1] := key
-        }
-    }
-    ; Sort depth keys
-    depthKeys := []
-    for k in depthCounts
-        depthKeys.Push(k)
-    if (depthKeys.Length() > 1) {
-        Loop, % depthKeys.Length() - 1
-        {
-            i := A_Index + 1
-            key := depthKeys[i]
-            j := i - 1
-            while (j >= 1 && depthKeys[j] > key) {
-                depthKeys[j + 1] := depthKeys[j]
-                j--
-            }
-            depthKeys[j + 1] := key
-        }
-    }
-    fp := items.Length() . "|"
-    for k, lbl in labels
-        fp .= lbl . ","
-    fp .= "|"
-    for k, dk in depthKeys
-        fp .= dk . ":" . depthCounts[dk] . ","
-    return fp
-}
 
 
 ;============================================================================================
@@ -1986,7 +1931,7 @@ return
 
 
 ;============================================================================================
-; NURSING BOOSTER - TOP-LEVEL PARENT DISCOVERY
+; NURSING BOOSTER - SCROLL BOX DISCOVERY
 ;============================================================================================
 
 NB_FindVisibleScrollBox(dlgHwnd) {
@@ -2004,40 +1949,67 @@ NB_FindVisibleScrollBox(dlgHwnd) {
     return 0
 }
 
-NB_EnumTopLevelParents(scrollBoxHwnd) {
-    parents := []
-    seenDirectParent := false
-    child := DllCall("GetWindow", "Ptr", scrollBoxHwnd, "UInt", 5, "Ptr")
-    while (child) {
-        VarSetCapacity(buf, 256, 0)
-        DllCall("GetClassName", "Ptr", child, "Str", buf, "Int", 256)
-        if (buf = "TCPRSDialogParentCheckBox") {
-            seenDirectParent := true
-            SendMessage, 0x00F0, 0, 0,, ahk_id %child%
-            checked := ErrorLevel ? true : false
-            parents.Push({hwnd: child, checked: checked})
-        } else if (buf = "TGroupBox" && seenDirectParent) {
-            gbChild := DllCall("GetWindow", "Ptr", child, "UInt", 5, "Ptr")
-            while (gbChild) {
-                VarSetCapacity(gbBuf, 256, 0)
-                DllCall("GetClassName", "Ptr", gbChild, "Str", gbBuf, "Int", 256)
-                if (gbBuf = "TCPRSDialogParentCheckBox") {
-                    SendMessage, 0x00F0, 0, 0,, ahk_id %gbChild%
-                    checked := ErrorLevel ? true : false
-                    parents.Push({hwnd: gbChild, checked: checked})
-                }
-                gbChild := DllCall("GetWindow", "Ptr", gbChild, "UInt", 2, "Ptr")
-            }
-        }
-        child := DllCall("GetWindow", "Ptr", child, "UInt", 2, "Ptr")
-    }
-    return parents
-}
 
 
 ;============================================================================================
 ; NURSING BOOSTER - TEMPLATE PARSING
 ;============================================================================================
+
+; --- String-aware JSON scanning helpers -----------------------------------
+; The old parsers counted [ ] { } wherever they appeared, so a checkbox label
+; containing a bracket or brace silently corrupted the parse. These helpers
+; skip the contents of quoted strings (honoring \" escapes).
+
+; Position of the next occurrence of needle (a single char) at or after
+; startPos that is OUTSIDE any quoted string; 0 if none.
+NB_JsonFind(content, needle, startPos) {
+    inStr := false
+    len := StrLen(content)
+    pos := startPos
+    while (pos <= len) {
+        ch := SubStr(content, pos, 1)
+        if (inStr) {
+            if (ch = "\")
+                pos++
+            else if (ch = """")
+                inStr := false
+        } else if (ch = """") {
+            inStr := true
+        } else if (ch = needle) {
+            return pos
+        }
+        pos++
+    }
+    return 0
+}
+
+; Position of the closer matching the opener at openPos, ignoring characters
+; inside quoted strings; 0 if unbalanced.
+NB_JsonMatch(content, openPos, openCh, closeCh) {
+    inStr := false
+    depth := 0
+    len := StrLen(content)
+    pos := openPos
+    while (pos <= len) {
+        ch := SubStr(content, pos, 1)
+        if (inStr) {
+            if (ch = "\")
+                pos++
+            else if (ch = """")
+                inStr := false
+        } else if (ch = """") {
+            inStr := true
+        } else if (ch = openCh) {
+            depth++
+        } else if (ch = closeCh) {
+            depth--
+            if (depth = 0)
+                return pos
+        }
+        pos++
+    }
+    return 0
+}
 
 NB_ParseFlatCheckboxes(jsonContent) {
     items := []
@@ -2047,33 +2019,20 @@ NB_ParseFlatCheckboxes(jsonContent) {
     if (!cPos)
         return items
 
-    arrStart := InStr(jsonContent, "[",, cPos)
+    arrStart := NB_JsonFind(jsonContent, "[", cPos + StrLen("""checkboxes"""))
     if (!arrStart)
         return items
 
-    ; Find matching ]
-    depth := 1
-    scanPos := arrStart + 1
-    arrEnd := 0
-    while (scanPos <= StrLen(jsonContent) && depth > 0) {
-        ch := SubStr(jsonContent, scanPos, 1)
-        if (ch = "[")
-            depth++
-        else if (ch = "]")
-            depth--
-        if (depth = 0)
-            arrEnd := scanPos
-        scanPos++
-    }
+    arrEnd := NB_JsonMatch(jsonContent, arrStart, "[", "]")
     if (!arrEnd)
         return items
 
-    ; Parse each checkbox object
+    ; Parse each checkbox object (string-aware: labels may contain {}[])
     itemPos := arrStart
-    while (itemPos := InStr(jsonContent, "{",, itemPos + 1)) {
+    while (itemPos := NB_JsonFind(jsonContent, "{", itemPos + 1)) {
         if (itemPos > arrEnd)
             break
-        itemEnd := InStr(jsonContent, "}",, itemPos)
+        itemEnd := NB_JsonMatch(jsonContent, itemPos, "{", "}")
         if (!itemEnd)
             break
         itemStr := SubStr(jsonContent, itemPos, itemEnd - itemPos + 1)
@@ -2104,31 +2063,6 @@ NB_ParseFlatCheckboxes(jsonContent) {
     return items
 }
 
-NB_ParseTopLevelParents(jsonContent) {
-    states := []
-    pos := InStr(jsonContent, """topLevelParents""")
-    if (!pos)
-        return states
-    arrStart := InStr(jsonContent, "[",, pos)
-    arrEnd := InStr(jsonContent, "]",, arrStart)
-    if (!arrStart || !arrEnd)
-        return states
-    arrStr := SubStr(jsonContent, arrStart + 1, arrEnd - arrStart - 1)
-    searchPos := 1
-    while (searchPos <= StrLen(arrStr)) {
-        chunk := SubStr(arrStr, searchPos, 6)
-        if (SubStr(chunk, 1, 4) = "true") {
-            states.Push(true)
-            searchPos += 4
-        } else if (SubStr(chunk, 1, 5) = "false") {
-            states.Push(false)
-            searchPos += 5
-        } else {
-            searchPos++
-        }
-    }
-    return states
-}
 
 ; ---------------------------------------------------------------------------
 ; TEMPLATE SPEED HELPERS (per-template speed settings)
@@ -2223,104 +2157,6 @@ NB_WriteTemplateLeafSpeed(filePath, speed) {
     f.Write(content)
     f.Close()
     return true
-}
-
-; Parse groups array from format-3 JSON
-NB_ParseGroups(jsonContent) {
-    groups := []
-
-    gPos := InStr(jsonContent, """groups""")
-    if (!gPos)
-        return groups
-
-    gArrStart := InStr(jsonContent, "[",, gPos)
-    if (!gArrStart)
-        return groups
-
-    ; Find matching ] using depth counting
-    depth := 1
-    scanPos := gArrStart + 1
-    gArrEnd := 0
-    while (scanPos <= StrLen(jsonContent) && depth > 0) {
-        ch := SubStr(jsonContent, scanPos, 1)
-        if (ch = "[")
-            depth++
-        else if (ch = "]")
-            depth--
-        if (depth = 0)
-            gArrEnd := scanPos
-        scanPos++
-    }
-    if (!gArrEnd)
-        return groups
-
-    ; Find each group object
-    searchPos := gArrStart
-    while (true) {
-        cbPos := InStr(jsonContent, """checkboxes""",, searchPos + 1)
-        if (!cbPos || cbPos > gArrEnd)
-            break
-
-        cbArrStart := InStr(jsonContent, "[",, cbPos)
-        if (!cbArrStart || cbArrStart > gArrEnd)
-            break
-
-        ; Find matching ]
-        cbDepth := 1
-        cbScan := cbArrStart + 1
-        cbArrEnd := 0
-        while (cbScan <= StrLen(jsonContent) && cbDepth > 0) {
-            c := SubStr(jsonContent, cbScan, 1)
-            if (c = "[")
-                cbDepth++
-            else if (c = "]")
-                cbDepth--
-            if (cbDepth = 0)
-                cbArrEnd := cbScan
-            cbScan++
-        }
-        if (!cbArrEnd)
-            break
-
-        ; Parse checkbox items within this group
-        groupItems := []
-        itemPos := cbArrStart
-        while (itemPos := InStr(jsonContent, "{",, itemPos + 1)) {
-            if (itemPos > cbArrEnd)
-                break
-            itemEnd := InStr(jsonContent, "}",, itemPos)
-            if (!itemEnd)
-                break
-            itemStr := SubStr(jsonContent, itemPos, itemEnd - itemPos + 1)
-
-            idx := 0
-            if (RegExMatch(itemStr, """idx"":\s*(\d+)", idxM))
-                idx := idxM1 + 0
-
-            cls := ""
-            if (RegExMatch(itemStr, """cls"":\s*""([^""]*)""", clsM))
-                cls := clsM1
-
-            checked := (InStr(itemStr, """checked"": true") || InStr(itemStr, """checked"":true"))
-                ? true : false
-
-            depthVal := 0
-            if (RegExMatch(itemStr, """depth"":\s*(\d+)", depM))
-                depthVal := depM1 + 0
-
-            label := ""
-            if (RegExMatch(itemStr, """label"":\s*""((?:[^""\\]|\\.)*)""", lblM))
-                label := lblM1
-
-            groupItems.Push({idx: idx, cls: cls, checked: checked, label: label, depth: depthVal})
-            itemPos := itemEnd
-        }
-
-        groups.Push(groupItems)
-        searchPos := cbArrEnd
-    }
-
-    return groups
 }
 
 
@@ -3736,60 +3572,9 @@ CF_ApplyTemplate(templatePath) {
         ToolTip, Applying control %ti%/%cfTotalTpl%: %cfTplLabel%
 
         ; Find best matching live control (that hasn't been claimed yet)
-        bestLiveIdx := 0
-        bestScore := 0
-        bestYDist := 999999
-
-        for li, liveCtrl in liveControls {
-            ; Skip already-claimed controls
-            if (cfClaimed[li])
-                continue
-
-            ; Extract live control properties to plain variables
-            cfLiveType := liveCtrl.type
-            cfLiveLabel := liveCtrl.label
-            cfLiveY := liveCtrl.y
-            cfLiveParentLabel := liveCtrl.parentLabel
-
-            ; Must be same type (checklist matches checklist)
-            if (cfLiveType != cfTplType)
-                continue
-
-            score := 0
-
-            ; Label match (highest priority)
-            if (cfTplLabel != "" && cfLiveLabel = cfTplLabel) {
-                score := 100
-            }
-            else if (cfTplLabel != "" && cfLiveLabel != "" && InStr(cfLiveLabel, cfTplLabel)) {
-                score := 70
-            }
-            else if (cfTplLabel != "" && cfLiveLabel != "" && InStr(cfTplLabel, cfLiveLabel)) {
-                score := 60
-            }
-
-            ; Y-position proximity bonus (if labels don't match, use position)
-            if (score = 0 && cfTplLabel = "" && cfLiveLabel = "") {
-                yDiff := Abs(cfLiveY - cfTplY)
-                if (yDiff < 20)
-                    score := 50
-                else if (yDiff < 50)
-                    score := 30
-            }
-
-            ; For radios, also check group label
-            if (cfTplType = "radio" && cfTplGroupLabel != "" && cfLiveParentLabel = cfTplGroupLabel) {
-                score += 20
-            }
-
-            ; When scores tie, prefer the one closest in Y position
-            yDist := Abs(cfLiveY - cfTplY)
-            if (score > bestScore || (score = bestScore && score > 0 && yDist < bestYDist)) {
-                bestScore := score
-                bestLiveIdx := li
-                bestYDist := yDist
-            }
-        }
+        cfMatch := CF_FindBestMatch(tplCtrl, liveControls, cfClaimed)
+        bestLiveIdx := cfMatch.idx
+        bestScore := cfMatch.score
 
         if (bestLiveIdx = 0 || bestScore < 30) {
             totalNotFound++
@@ -3893,6 +3678,81 @@ CF_ApplyTemplate(templatePath) {
 
 
 ;============================================================================================
+; CF - TEMPLATE-TO-LIVE CONTROL MATCHING
+;
+; Pure scoring logic, extracted from CF_ApplyTemplate so it is unit-testable.
+; tplCtrl: parsed template control (type/label/y/group_label fields).
+; liveControls: array from CF_EnumFormControls (type/label/y/parentLabel).
+; claimed: object mapping live indices already matched this apply.
+; Returns {idx, score}; idx = 0 when nothing scored. Caller applies the
+; score >= 30 acceptance threshold.
+;============================================================================================
+
+CF_FindBestMatch(tplCtrl, liveControls, claimed) {
+    cfTplType := tplCtrl.type
+    cfTplLabel := tplCtrl.label
+    cfTplY := tplCtrl.y
+    cfTplGroupLabel := tplCtrl.group_label
+
+    bestLiveIdx := 0
+    bestScore := 0
+    bestYDist := 999999
+
+    for li, liveCtrl in liveControls {
+        ; Skip already-claimed controls
+        if (claimed[li])
+            continue
+
+        cfLiveType := liveCtrl.type
+        cfLiveLabel := liveCtrl.label
+        cfLiveY := liveCtrl.y
+        cfLiveParentLabel := liveCtrl.parentLabel
+
+        ; Must be same type (checklist matches checklist)
+        if (cfLiveType != cfTplType)
+            continue
+
+        score := 0
+
+        ; Label match (highest priority)
+        if (cfTplLabel != "" && cfLiveLabel = cfTplLabel) {
+            score := 100
+        }
+        else if (cfTplLabel != "" && cfLiveLabel != "" && InStr(cfLiveLabel, cfTplLabel)) {
+            score := 70
+        }
+        else if (cfTplLabel != "" && cfLiveLabel != "" && InStr(cfTplLabel, cfLiveLabel)) {
+            score := 60
+        }
+
+        ; Y-position proximity bonus (if labels don't match, use position)
+        if (score = 0 && cfTplLabel = "" && cfLiveLabel = "") {
+            yDiff := Abs(cfLiveY - cfTplY)
+            if (yDiff < 20)
+                score := 50
+            else if (yDiff < 50)
+                score := 30
+        }
+
+        ; For radios, also check group label
+        if (cfTplType = "radio" && cfTplGroupLabel != "" && cfLiveParentLabel = cfTplGroupLabel) {
+            score += 20
+        }
+
+        ; When scores tie, prefer the one closest in Y position
+        yDist := Abs(cfLiveY - cfTplY)
+        if (score > bestScore || (score = bestScore && score > 0 && yDist < bestYDist)) {
+            bestScore := score
+            bestLiveIdx := li
+            bestYDist := yDist
+        }
+    }
+
+    return {idx: bestLiveIdx, score: bestScore}
+}
+
+
+;============================================================================================
 ; CF - DELETE TEMPLATE
 ;============================================================================================
 
@@ -3946,35 +3806,22 @@ CF_ParseControls(jsonContent) {
     if (!cPos)
         return controls
 
-    ; Find opening [
-    arrStart := InStr(jsonContent, "[",, cPos)
+    ; Find opening [ / matching ] (string-aware: labels may contain {}[])
+    arrStart := NB_JsonFind(jsonContent, "[", cPos + StrLen("""controls"""))
     if (!arrStart)
         return controls
 
-    ; Find matching ] using depth counting
-    depth := 1
-    scanPos := arrStart + 1
-    arrEnd := 0
-    while (scanPos <= StrLen(jsonContent) && depth > 0) {
-        ch := SubStr(jsonContent, scanPos, 1)
-        if (ch = "[")
-            depth++
-        else if (ch = "]")
-            depth--
-        if (depth = 0)
-            arrEnd := scanPos
-        scanPos++
-    }
+    arrEnd := NB_JsonMatch(jsonContent, arrStart, "[", "]")
     if (!arrEnd)
         return controls
 
     ; Find each control object
     itemPos := arrStart
     while (true) {
-        itemPos := InStr(jsonContent, "{",, itemPos + 1)
+        itemPos := NB_JsonFind(jsonContent, "{", itemPos + 1)
         if (!itemPos || itemPos > arrEnd)
             break
-        itemEnd := InStr(jsonContent, "}",, itemPos)
+        itemEnd := NB_JsonMatch(jsonContent, itemPos, "{", "}")
         if (!itemEnd)
             break
         itemStr := SubStr(jsonContent, itemPos, itemEnd - itemPos + 1)

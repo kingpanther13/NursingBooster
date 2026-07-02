@@ -1,0 +1,151 @@
+; ===========================================================================
+; e2e_cprs_stub.ahk - fake CPRS reminder dialog with REAL Win32 semantics.
+;
+; Run with a copy of AutoHotkeyU64.exe RENAMED to CPRSChart.exe.
+;
+; Technique: superclassing. We copy the system "Button" window class under
+; the exact Delphi VCL class names CPRS uses at runtime (VCL sets the Win32
+; class name to the Delphi class name - verified in the CPRS source:
+; TCPRSDialogParentCheckBox/TCPRSDialogCheckBox extend TORCheckBox extends
+; TCheckBox, uDlgComponents.pas:60,91 / ORCtrls.pas:866). The containers
+; (TfrmRemDlg, TScrollBox, TDlgFieldPanel) are fresh classes backed directly
+; by DefWindowProcW.
+;
+; Faithful CPRS behaviors reproduced:
+;   - parent checkboxes have caption " " (single space); their visible text
+;     lives in a sibling TDlgFieldPanel (uReminders.pas:5754,5770)
+;   - checking a parent creates its child controls DEFERRED, not inside the
+;     click (CPRS posts UM_RESYNCREM; we poll at 50ms - fReminderDialog.pas
+;     RequestRebuild comment explains why it must be deferred)
+;
+; x64 only (WNDCLASSEXW offsets are 64-bit). #Persistent keeps the AHK
+; message loop pumping so the raw windows paint and answer cross-process
+; SendMessage probes.
+; ===========================================================================
+#NoEnv
+#SingleInstance force
+#Persistent
+SetBatchLines, -1
+
+global WS_CHILD := 0x40000000, WS_VISIBLE := 0x10000000
+global WS_CLIPCHILDREN := 0x02000000, WS_BORDER := 0x00800000
+global WS_OVERLAPPEDWINDOW := 0x00CF0000
+global BS_AUTOCHECKBOX := 0x3, BS_GROUPBOX := 0x7
+global gHInst := DllCall("GetModuleHandleW", "Ptr", 0, "Ptr")
+
+; --- register the fake VCL classes ---
+SuperClass("Button", "TCPRSDialogParentCheckBox")
+SuperClass("Button", "TCPRSDialogCheckBox")
+SuperClass("Button", "TORCheckBox")
+SuperClass("Button", "TGroupBox")
+PlainClass("TfrmRemDlg")
+PlainClass("TScrollBox")
+PlainClass("TDlgFieldPanel")
+
+; --- build the dialog tree ---
+global hDlg := MakeWin(0, "TfrmRemDlg", "Reminder Resolution: Test Reminder"
+    , WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN, 200, 200, 560, 640, 0, 0)
+global hBox := MakeWin(0, "TScrollBox", ""
+    , WS_CHILD | WS_VISIBLE | WS_BORDER | WS_CLIPCHILDREN, 8, 8, 530, 560, hDlg, 0)
+
+; element 1: parent checkbox (caption " ") + its TDlgFieldPanel text panel
+global hPar1 := MakeWin(0, "TCPRSDialogParentCheckBox", " "
+    , WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 12, 10, 24, 20, hBox, 1001)
+MakeWin(0, "TDlgFieldPanel", "Tobacco Screening"
+    , WS_CHILD | WS_VISIBLE, 44, 10, 300, 20, hBox, 0)
+
+; element 2: a TGroupBox with two static children (depth 1)
+global hGrp := MakeWin(0, "TGroupBox", "Vitals"
+    , WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 12, 44, 480, 92, hBox, 0)
+MakeWin(0, "TCPRSDialogCheckBox", "BP recorded"
+    , WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 14, 22, 250, 20, hGrp, 1002)
+MakeWin(0, "TORCheckBox", "Pain assessed"
+    , WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 14, 52, 250, 20, hGrp, 1003)
+
+; element 3: second parent checkbox + panel
+global hPar2 := MakeWin(0, "TCPRSDialogParentCheckBox", " "
+    , WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 12, 150, 24, 20, hBox, 1004)
+MakeWin(0, "TDlgFieldPanel", "Education"
+    , WS_CHILD | WS_VISIBLE, 44, 150, 300, 20, hBox, 0)
+
+; --- deferred child creation: watch parent1, build children when checked ---
+global gDynBuilt := false
+SetTimer, WatchParent1, 50
+
+; --- failsafe: never outlive the CI step ---
+SetTimer, StubSelfDestruct, -180000
+return
+
+WatchParent1:
+    if (gDynBuilt)
+        return
+    SendMessage, 0xF0, 0, 0,, ahk_id %hPar1%   ; BM_GETCHECK
+    if (ErrorLevel = 1) {
+        MakeWin(0, "TCPRSDialogCheckBox", "Current smoker"
+            , WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 32, 190, 250, 20, hBox, 1005)
+        MakeWin(0, "TCPRSDialogCheckBox", "Counseling given"
+            , WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 32, 220, 250, 20, hBox, 1006)
+        gDynBuilt := true
+    }
+return
+
+StubSelfDestruct:
+    ExitApp
+return
+
+; ---------------------------------------------------------------------------
+; Superclass a system window class under a new name: copy its WNDCLASSEXW,
+; overwrite hInstance + lpszClassName (GetClassInfoEx does not fill those),
+; re-register. The clone keeps the original wndproc, so a superclassed
+; Button behaves exactly like a Button while GetClassName reports the new
+; name. ERROR_CLASS_ALREADY_EXISTS (1410) is fine on re-run.
+; ---------------------------------------------------------------------------
+SuperClass(baseClass, newName)
+{
+    global gHInst
+    VarSetCapacity(wc, 80, 0)
+    NumPut(80, wc, 0, "UInt")                                        ; cbSize
+    if !DllCall("GetClassInfoExW", "Ptr", 0, "WStr", baseClass, "Ptr", &wc, "Int")
+        throw Exception("GetClassInfoExW(" . baseClass . ") failed, err=" . A_LastError)
+    NumPut(gHInst, wc, 24, "Ptr")                                    ; hInstance
+    NumPut(0, wc, 56, "Ptr")                                         ; lpszMenuName
+    VarSetCapacity(nameBuf, 128, 0)
+    StrPut(newName, &nameBuf, "UTF-16")
+    NumPut(&nameBuf, wc, 64, "Ptr")                                  ; lpszClassName
+    atom := DllCall("RegisterClassExW", "Ptr", &wc, "UShort")
+    if (!atom && A_LastError != 1410)
+        throw Exception("RegisterClassExW(" . newName . ") failed, err=" . A_LastError)
+}
+
+; Fresh class backed by DefWindowProcW (plain container: paints COLOR_BTNFACE,
+; arrow cursor, no menu). Used for the form/scrollbox/panel fakes.
+PlainClass(newName)
+{
+    global gHInst
+    hUser := DllCall("GetModuleHandleW", "Str", "user32", "Ptr")
+    defProc := DllCall("GetProcAddress", "Ptr", hUser, "AStr", "DefWindowProcW", "Ptr")
+    hCursor := DllCall("LoadCursorW", "Ptr", 0, "Ptr", 32512, "Ptr") ; IDC_ARROW
+    VarSetCapacity(wc, 80, 0)
+    NumPut(80, wc, 0, "UInt")                                        ; cbSize
+    NumPut(defProc, wc, 8, "Ptr")                                    ; lpfnWndProc
+    NumPut(gHInst, wc, 24, "Ptr")                                    ; hInstance
+    NumPut(hCursor, wc, 40, "Ptr")                                   ; hCursor
+    NumPut(16, wc, 48, "Ptr")                                        ; hbrBackground = COLOR_BTNFACE+1
+    VarSetCapacity(nameBuf, 128, 0)
+    StrPut(newName, &nameBuf, "UTF-16")
+    NumPut(&nameBuf, wc, 64, "Ptr")                                  ; lpszClassName
+    atom := DllCall("RegisterClassExW", "Ptr", &wc, "UShort")
+    if (!atom && A_LastError != 1410)
+        throw Exception("RegisterClassExW(" . newName . ") failed, err=" . A_LastError)
+}
+
+MakeWin(exStyle, cls, title, style, x, y, w, h, parent, id)
+{
+    global gHInst
+    hwnd := DllCall("CreateWindowExW", "UInt", exStyle, "WStr", cls, "WStr", title
+        , "UInt", style, "Int", x, "Int", y, "Int", w, "Int", h
+        , "Ptr", parent, "Ptr", id, "Ptr", gHInst, "Ptr", 0, "Ptr")
+    if (!hwnd)
+        throw Exception("CreateWindowExW(" . cls . ") failed, err=" . A_LastError)
+    return hwnd
+}

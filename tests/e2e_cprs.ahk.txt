@@ -1,0 +1,131 @@
+; ===========================================================================
+; e2e_cprs.ahk - end-to-end test of the reminder-dialog engine against the
+; fake CPRS dialog (e2e_cprs_stub.ahk running as CPRSChart.exe).
+;
+; Exercises the real module code paths end to end:
+;   NB_FindActiveDialogWindow (ahk_class TfrmRemDlg)
+;   NB_FindVisibleScrollBox / NB_EnumDescendantCheckboxes (Y-sort, TGroupBox
+;     depth computation, parent-label resolution via sibling TDlgFieldPanel)
+;   NB_ApplyTemplate (format v7 flat-sequential walk, BM_SETCHECK+WM_COMMAND,
+;     re-enumeration when a parent toggle creates children DEFERRED, the
+;     never-uncheck contract)
+;
+; Output: PASS/FAIL lines on stdout; exit code = failures.
+; Run with: AutoHotkeyU64.exe /ErrorStdOut e2e_cprs.ahk  (after starting the stub)
+; ===========================================================================
+#NoEnv
+#SingleInstance force
+SetBatchLines, -1
+SetTitleMatchMode, 2
+
+global E2eFails := 0
+
+; --- Module globals normally set by NB_ModuleInit (init stays inert) ---
+NB_Enabled := 0
+onedrivelocal := A_Temp . "\nb_e2e_cprs_" . A_TickCount
+NB_TemplateDir := onedrivelocal
+NB_LogDir := onedrivelocal . "\Logs"
+FileCreateDir, %NB_TemplateDir%
+FileCreateDir, %NB_LogDir%
+NB_AppTitle := "Nursing Booster"
+NB_ApplySpeed := 0
+NB_LeafSpeed := 150          ; give the stub's 50ms child-builder time, like real CPRS's deferred rebuild
+NB_SpeedOverride := 1        ; use the speeds above instead of the 0/0 default
+NB_DebugLogging := 0
+NB_BoosterGuiVisible := 0
+NB_PanelHwnd := 0
+NB_ApplyCancelled := false
+
+; --- Wait for the fake dialog ---
+WinWait, ahk_class TfrmRemDlg,, 20
+if (ErrorLevel) {
+    FileAppend, % "FAIL: fake TfrmRemDlg never appeared`n", **
+    ExitApp, 1
+}
+
+dlgHwnd := NB_FindActiveDialogWindow()
+E2eAssert(dlgHwnd != 0, "NB_FindActiveDialogWindow finds the dialog by class")
+WinGetClass, dlgCls, ahk_id %dlgHwnd%
+E2eAssert(dlgCls = "TfrmRemDlg", "dialog class is TfrmRemDlg (got " . dlgCls . ")")
+
+scrollBox := NB_FindVisibleScrollBox(dlgHwnd)
+E2eAssert(scrollBox != 0, "visible TScrollBox found")
+
+; --- Enumeration before any toggle: 4 checkboxes in Y order ---
+items := NB_EnumDescendantCheckboxes(scrollBox)
+E2eAssert(items.Length() = 4, "4 checkboxes before expansion (got " . items.Length() . ")")
+E2eAssert(items[1].className = "TCPRSDialogParentCheckBox", "item 1 is the parent checkbox")
+E2eAssert(items[1].label = "Tobacco Screening"
+    , "parent label resolved from sibling TDlgFieldPanel (got '" . items[1].label . "')")
+E2eAssert(items[2].label = "BP recorded" && items[2].depth = 1
+    , "groupbox child 1 in Y order at depth 1 (got '" . items[2].label . "' depth " . items[2].depth . ")")
+E2eAssert(items[3].label = "Pain assessed" && items[3].depth = 1
+    , "groupbox child 2 in Y order at depth 1")
+E2eAssert(items[4].className = "TCPRSDialogParentCheckBox" && items[4].depth = 0
+    , "second parent last, depth 0")
+
+; --- Never-uncheck setup: pre-check parent 2; the template says false ---
+hPar2 := items[4].hwnd
+SendMessage, 0xF1, 1, 0,, ahk_id %hPar2%   ; BM_SETCHECK checked
+
+; --- Template fixture (format v7 flat, saved-from-expanded-dialog order):
+;     parent1 T, BP recorded T, Pain assessed F, parent2 F,
+;     Current smoker T, Counseling given T (the last two only exist after
+;     parent1 is checked - tests deferred re-enumeration) ---
+q := """"
+tpl := "{`n  " . q . "name" . q . ": " . q . "e2e" . q . ",`n  " . q . "format" . q . ": 7,`n"
+tpl .= "  " . q . "matching" . q . ": " . q . "flat-sequential" . q . ",`n"
+tpl .= "  " . q . "checkboxes" . q . ": [`n"
+tpl .= "    {" . q . "idx" . q . ": 0, " . q . "cls" . q . ": " . q . "TCPRSDialogParentCheckBox" . q . ", " . q . "checked" . q . ": true, " . q . "depth" . q . ": 0, " . q . "label" . q . ": " . q . "Tobacco Screening" . q . "},`n"
+tpl .= "    {" . q . "idx" . q . ": 1, " . q . "cls" . q . ": " . q . "TCPRSDialogCheckBox" . q . ", " . q . "checked" . q . ": true, " . q . "depth" . q . ": 1, " . q . "label" . q . ": " . q . "BP recorded" . q . "},`n"
+tpl .= "    {" . q . "idx" . q . ": 2, " . q . "cls" . q . ": " . q . "TORCheckBox" . q . ", " . q . "checked" . q . ": false, " . q . "depth" . q . ": 1, " . q . "label" . q . ": " . q . "Pain assessed" . q . "},`n"
+tpl .= "    {" . q . "idx" . q . ": 3, " . q . "cls" . q . ": " . q . "TCPRSDialogParentCheckBox" . q . ", " . q . "checked" . q . ": false, " . q . "depth" . q . ": 0, " . q . "label" . q . ": " . q . "Education" . q . "},`n"
+tpl .= "    {" . q . "idx" . q . ": 4, " . q . "cls" . q . ": " . q . "TCPRSDialogCheckBox" . q . ", " . q . "checked" . q . ": true, " . q . "depth" . q . ": 0, " . q . "label" . q . ": " . q . "Current smoker" . q . "},`n"
+tpl .= "    {" . q . "idx" . q . ": 5, " . q . "cls" . q . ": " . q . "TCPRSDialogCheckBox" . q . ", " . q . "checked" . q . ": true, " . q . "depth" . q . ": 0, " . q . "label" . q . ": " . q . "Counseling given" . q . "}`n"
+tpl .= "  ]`n}"
+tplPath := NB_TemplateDir . "\e2e.json"
+FileDelete, %tplPath%
+FileAppend, %tpl%, %tplPath%, UTF-8
+
+; --- Apply through the real engine ---
+NB_ApplyTemplate(tplPath)
+Sleep, 500
+
+; --- Final state: dynamics created and checked, never-uncheck honored ---
+after := NB_EnumDescendantCheckboxes(scrollBox)
+E2eAssert(after.Length() = 6, "6 checkboxes after apply (deferred children found; got " . after.Length() . ")")
+state := {}
+for i, cb in after
+    state[cb.label] := cb.checked
+E2eAssert(state["Tobacco Screening"], "parent 1 checked")
+E2eAssert(state["BP recorded"], "groupbox child checked")
+E2eAssert(!state["Pain assessed"], "template-false child left unchecked")
+E2eAssert(state["Education"], "pre-checked parent NOT unchecked (never-uncheck contract)")
+E2eAssert(state["Current smoker"], "deferred child 1 checked via re-enumeration")
+E2eAssert(state["Counseling given"], "deferred child 2 checked via re-enumeration")
+
+; --- Cleanup + summary ---
+WinClose, ahk_id %dlgHwnd%
+Process, Close, CPRSChart.exe
+if (E2eFails > 0)
+{
+    FileAppend, % "FAIL: " . E2eFails . " CPRS e2e assertion(s) failed`n", **
+    ExitApp, %E2eFails%
+}
+FileAppend, % "All CPRS e2e assertions passed`n", *
+ExitApp, 0
+
+E2eAssert(cond, msg)
+{
+    global E2eFails
+    if (cond)
+        FileAppend, % "PASS: " . msg . "`n", *
+    else
+    {
+        E2eFails += 1
+        FileAppend, % "FAIL: " . msg . "`n", *
+    }
+}
+
+; --- The real module under test ---
+#Include %A_ScriptDir%\..\nursingbooster_module.ahk
