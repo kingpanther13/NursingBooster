@@ -1645,53 +1645,18 @@ NB_EnumScrollBoxGroupBoxes(scrollBoxHwnd) {
     return sorted
 }
 
-; Enumerate ALL descendant checkboxes within a container.
-;
-; SAFETY: the Fast enum callback below only does pure DllCalls and string
-; concatenation. Fast callbacks are executed on whatever AHK thread is
-; current — an interruption mid-enumeration (mouse hook installed for the
-; right-click-cancel hotkey, host timers/hotstrings) while the callback runs
-; AHK commands or object methods errors the callback out and ABORTS
-; EnumChildWindows, silently truncating the result list (observed as flaky
-; "N not found" applies). All command/object work happens after the
-; enumeration returns, in a normal thread context.
+; Enumerate ALL descendant checkboxes within a container
 NB_EnumDescendantCheckboxes(containerHwnd) {
-    global NB__descHwndList
-    NB__descHwndList := ""
+    global NB__descCBResults, NB__descContainer
+    NB__descCBResults := []
+    NB__descContainer := containerHwnd
     enumCB := RegisterCallback("NB__EnumDescCBCallback", "Fast")
     DllCall("EnumChildWindows", "Ptr", containerHwnd, "Ptr", enumCB, "Ptr", 0)
 
-    ; Build result objects OUTSIDE the callback (commands/objects are safe here)
-    results := []
-    Loop, Parse, NB__descHwndList, |
-    {
-        if (A_LoopField = "")
-            continue
-        hwnd := A_LoopField + 0
-
-        VarSetCapacity(buf, 256, 0)
-        DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
-
-        SendMessage, 0x00F0, 0, 0,, ahk_id %hwnd%
-        checked := (ErrorLevel != "FAIL" && ErrorLevel) ? true : false
-
-        ; Screen position for Y-sorting
-        VarSetCapacity(rect, 16, 0)
-        DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", &rect)
-        y := NumGet(rect, 4, "Int")
-        x := NumGet(rect, 0, "Int")
-
-        label := ""
-        tLen := DllCall("GetWindowTextLengthW", "Ptr", hwnd, "Int")
-        if (tLen > 0) {
-            VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
-            DllCall("GetWindowTextW", "Ptr", hwnd, "Ptr", &tBuf, "Int", tLen + 1)
-            label := Trim(StrGet(&tBuf, "UTF-16"))
-        }
-
-        ; Nesting depth (TGroupBox ancestors below the container)
+    ; Compute nesting depth for each checkbox
+    for k, item in NB__descCBResults {
         depth := 0
-        p := DllCall("GetParent", "Ptr", hwnd, "Ptr")
+        p := DllCall("GetParent", "Ptr", item.hwnd, "Ptr")
         while (p && p != containerHwnd) {
             VarSetCapacity(pBuf, 256, 0)
             DllCall("GetClassName", "Ptr", p, "Str", pBuf, "Int", 256)
@@ -1699,19 +1664,18 @@ NB_EnumDescendantCheckboxes(containerHwnd) {
                 depth++
             p := DllCall("GetParent", "Ptr", p, "Ptr")
         }
-
-        results.Push({hwnd: hwnd, className: buf, checked: checked, label: label
-            , y: y, x: x, depth: depth})
+        item.depth := depth
     }
 
     ; Resolve parent checkbox labels via sibling TDlgFieldPanel + MSAA
-    for k, item in results {
+    for k, item in NB__descCBResults {
         if (item.label = "" && item.className = "TCPRSDialogParentCheckBox") {
             item.label := NB_ResolveParentCBLabel(item.hwnd)
         }
     }
 
     ; Sort by screen Y position (with X tiebreaker)
+    results := NB__descCBResults
     if (results.Length() > 1) {
         Loop, % results.Length() - 1
         {
@@ -1729,39 +1693,51 @@ NB_EnumDescendantCheckboxes(containerHwnd) {
     return results
 }
 
-; Fast callback: pure DllCall class filter + string append ONLY (see the
-; safety note on NB_EnumDescendantCheckboxes).
 NB__EnumDescCBCallback(hwnd, lParam) {
-    global NB__descHwndList
+    global NB__descCBResults
     VarSetCapacity(buf, 256, 0)
     DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
-    if (buf = "TCPRSDialogParentCheckBox" || buf = "TCPRSDialogCheckBox" || buf = "TORCheckBox")
-        NB__descHwndList .= hwnd . "|"
+    if !(buf = "TCPRSDialogParentCheckBox" || buf = "TCPRSDialogCheckBox" || buf = "TORCheckBox")
+        return 1
+
+    SendMessage, 0x00F0, 0, 0,, ahk_id %hwnd%
+    checked := ErrorLevel ? true : false
+
+    ; Get screen position for Y-sorting
+    VarSetCapacity(rect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", &rect)
+    y := NumGet(rect, 4, "Int")
+    x := NumGet(rect, 0, "Int")
+
+    ; Read label via simple DllCalls only (this is a Fast callback - no COM allowed)
+    label := ""
+    tLen := DllCall("GetWindowTextLengthW", "Ptr", hwnd, "Int")
+    if (tLen > 0) {
+        VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+        DllCall("GetWindowTextW", "Ptr", hwnd, "Ptr", &tBuf, "Int", tLen + 1)
+        label := Trim(StrGet(&tBuf, "UTF-16"))
+    }
+
+    NB__descCBResults.Push({hwnd: hwnd, className: buf, checked: checked, label: label, y: y, x: x})
     return 1
 }
 
-; Lightweight count-only enumeration for stability checks (same safe pattern)
+; Lightweight count-only enumeration for stability checks
 NB_FindAllCheckboxes(dlgHwnd) {
-    global NB__findHwndList
-    NB__findHwndList := ""
+    global NB__findCBResults
+    NB__findCBResults := []
     enumCB := RegisterCallback("NB__EnumCBCallback", "Fast")
     DllCall("EnumChildWindows", "Ptr", dlgHwnd, "Ptr", enumCB, "Ptr", 0)
-    results := []
-    Loop, Parse, NB__findHwndList, |
-    {
-        if (A_LoopField = "")
-            continue
-        results.Push({hwnd: A_LoopField + 0})
-    }
-    return results
+    return NB__findCBResults
 }
 
 NB__EnumCBCallback(hwnd, lParam) {
-    global NB__findHwndList
+    global NB__findCBResults
     VarSetCapacity(buf, 256, 0)
     DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
-    if (buf = "TORCheckBox" || buf = "TCPRSDialogParentCheckBox" || buf = "TCPRSDialogCheckBox")
-        NB__findHwndList .= hwnd . "|"
+    if !(buf = "TORCheckBox" || buf = "TCPRSDialogParentCheckBox" || buf = "TCPRSDialogCheckBox")
+        return 1
+    NB__findCBResults.Push({hwnd: hwnd, className: buf})
     return 1
 }
 
@@ -1820,25 +1796,26 @@ NB_DismissIntermediatePopups() {
     }
 }
 
-; Both scanners use the safe enum pattern (see NB_EnumDescendantCheckboxes):
-; the Fast callback only class-filters and appends HWNDs; button text is
-; read with SendMessage OUTSIDE the enumeration.
 NB_HasDangerousButton(windowHwnd) {
-    global NB__dangerHasEdit, NB__dangerBtnList
-    NB__dangerHasEdit := false
-    NB__dangerBtnList := ""
+    global NB__hasDangerous
+    NB__hasDangerous := false
     enumDangerous := RegisterCallback("NB__CheckDangerousCallback", "Fast")
     DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumDangerous, "Ptr", 0)
-    if (NB__dangerHasEdit)
-        return true
-    Loop, Parse, NB__dangerBtnList, |
-    {
-        if (A_LoopField = "")
-            continue
-        hwnd := A_LoopField + 0
+    return NB__hasDangerous
+}
+
+NB__CheckDangerousCallback(hwnd, lParam) {
+    global NB__hasDangerous
+    VarSetCapacity(buf, 256, 0)
+    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
+    if (InStr(buf, "TEdit") || InStr(buf, "TMemo") || InStr(buf, "TRichEdit")) {
+        NB__hasDangerous := true
+        return 0
+    }
+    if (InStr(buf, "TButton") || InStr(buf, "TBitBtn")) {
         SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
         tLen := ErrorLevel
-        if (tLen != "FAIL" && tLen > 0) {
+        if (tLen > 0) {
             VarSetCapacity(textBuf, (tLen + 1) * 2, 0)
             SendMessage, 0x000D, tLen + 1, &textBuf,, ahk_id %hwnd%
             textStr := StrGet(&textBuf)
@@ -1846,57 +1823,42 @@ NB_HasDangerousButton(windowHwnd) {
             if (InStr(textUpper, "FINISH") || InStr(textUpper, "SUBMIT")
                 || InStr(textUpper, "SIGN") || InStr(textUpper, "FILE")
                 || InStr(textUpper, "COMPLETE") || InStr(textUpper, "SAVE")
-                || InStr(textUpper, "DELETE") || InStr(textUpper, "REMOVE"))
-                return true
+                || InStr(textUpper, "DELETE") || InStr(textUpper, "REMOVE")) {
+                NB__hasDangerous := true
+                return 0
+            }
         }
     }
-    return false
-}
-
-NB__CheckDangerousCallback(hwnd, lParam) {
-    global NB__dangerHasEdit, NB__dangerBtnList
-    VarSetCapacity(buf, 256, 0)
-    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
-    if (InStr(buf, "TEdit") || InStr(buf, "TMemo") || InStr(buf, "TRichEdit")) {
-        NB__dangerHasEdit := true
-        return 0
-    }
-    if (InStr(buf, "TButton") || InStr(buf, "TBitBtn"))
-        NB__dangerBtnList .= hwnd . "|"
     return 1
 }
 
 NB_FindOKButton(windowHwnd) {
-    global NB__okBtnList
-    NB__okBtnList := ""
+    global NB__foundOKHwnd
+    NB__foundOKHwnd := 0
     enumOK := RegisterCallback("NB__FindOKCallback", "Fast")
     DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumOK, "Ptr", 0)
-    Loop, Parse, NB__okBtnList, |
-    {
-        if (A_LoopField = "")
-            continue
-        hwnd := A_LoopField + 0
-        SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
-        tLen := ErrorLevel
-        if (tLen != "FAIL" && tLen > 0) {
-            VarSetCapacity(textBuf, (tLen + 1) * 2, 0)
-            SendMessage, 0x000D, tLen + 1, &textBuf,, ahk_id %hwnd%
-            textStr := StrGet(&textBuf)
-            StringUpper, textUpper, textStr
-            if (textUpper = "OK" || textUpper = "&OK" || textUpper = "CONTINUE"
-                || textUpper = "&CONTINUE" || textUpper = "YES" || textUpper = "&YES")
-                return hwnd
-        }
-    }
-    return 0
+    return NB__foundOKHwnd
 }
 
 NB__FindOKCallback(hwnd, lParam) {
-    global NB__okBtnList
+    global NB__foundOKHwnd
     VarSetCapacity(buf, 256, 0)
     DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
-    if (InStr(buf, "TButton") || InStr(buf, "TBitBtn"))
-        NB__okBtnList .= hwnd . "|"
+    if !(InStr(buf, "TButton") || InStr(buf, "TBitBtn"))
+        return 1
+    SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
+    tLen := ErrorLevel
+    if (tLen > 0) {
+        VarSetCapacity(textBuf, (tLen + 1) * 2, 0)
+        SendMessage, 0x000D, tLen + 1, &textBuf,, ahk_id %hwnd%
+        textStr := StrGet(&textBuf)
+        StringUpper, textUpper, textStr
+        if (textUpper = "OK" || textUpper = "&OK" || textUpper = "CONTINUE"
+            || textUpper = "&CONTINUE" || textUpper = "YES" || textUpper = "&YES") {
+            NB__foundOKHwnd := hwnd
+            return 0
+        }
+    }
     return 1
 }
 
@@ -2933,22 +2895,13 @@ CF__SpyCallback(hwnd, lParam) {
 ;============================================================================================
 
 CF_EnumFormControls(windowHwnd) {
-    global CF__enumResults, CF__enumHwndList, CF__checkListHwndStr
+    global CF__enumResults, CF__enumTargetHwnd, CF__checkListHwndStr
     CF__enumResults := []
+    CF__enumTargetHwnd := windowHwnd
 
-    ; Pass 1: collect candidate control HWNDs. Same safety rule as
-    ; NB_EnumDescendantCheckboxes: the Fast callback only does pure DllCalls
-    ; + string appends; commands/objects run after the enumeration returns.
-    CF__enumHwndList := ""
+    ; Pass 1: Enumerate standard controls (checkboxes, radios, combos)
     enumCB := RegisterCallback("CF__EnumFormCallback", "Fast")
     DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumCB, "Ptr", 0)
-
-    Loop, Parse, CF__enumHwndList, |
-    {
-        if (A_LoopField = "")
-            continue
-        CF__BuildFormControlEntry(A_LoopField + 0, windowHwnd)
-    }
 
     ; Pass 2: Find TCheckListBox controls (separate pass — no array methods in callbacks)
     CF__checkListHwndStr := ""
@@ -2983,10 +2936,8 @@ CF_EnumFormControls(windowHwnd) {
     return results
 }
 
-; Fast callback: pure visibility check + classify (DllCall-only) + string
-; append. Everything else happens in CF__BuildFormControlEntry.
 CF__EnumFormCallback(hwnd, lParam) {
-    global CF__enumHwndList
+    global CF__enumResults, CF__enumTargetHwnd
 
     ; Skip invisible controls (WS_VISIBLE = 0x10000000)
     cfStyle := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
@@ -2996,19 +2947,6 @@ CF__EnumFormCallback(hwnd, lParam) {
     controlType := CF_ClassifyControl(hwnd)
     if (controlType != "checkbox" && controlType != "radio" && controlType != "combo")
         return 1
-
-    CF__enumHwndList .= hwnd . "|"
-    return 1
-}
-
-; Runs OUTSIDE the enum callback: reads label/state/parent info (commands are
-; safe here) and pushes the entry onto CF__enumResults.
-CF__BuildFormControlEntry(hwnd, targetHwnd) {
-    global CF__enumResults
-
-    controlType := CF_ClassifyControl(hwnd)
-    if (controlType != "checkbox" && controlType != "radio" && controlType != "combo")
-        return
 
     VarSetCapacity(buf, 512, 0)
     DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
@@ -3024,7 +2962,7 @@ CF__BuildFormControlEntry(hwnd, targetHwnd) {
     label := ""
     SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%   ; WM_GETTEXTLENGTH
     tLen := ErrorLevel
-    if (tLen != "FAIL" && tLen > 0 && tLen < 1024) {
+    if (tLen > 0 && tLen < 1024) {
         VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
         SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%   ; WM_GETTEXT
         label := Trim(StrGet(&tBuf))
@@ -3032,7 +2970,7 @@ CF__BuildFormControlEntry(hwnd, targetHwnd) {
 
     ; If label is empty or just a space, try to find adjacent label control
     if (label = "" || label = " ") {
-        label := CF_FindAdjacentLabel(hwnd, targetHwnd)
+        label := CF_FindAdjacentLabel(hwnd, CF__enumTargetHwnd)
     }
 
     ; Get parent for radio button grouping
@@ -3047,7 +2985,7 @@ CF__BuildFormControlEntry(hwnd, targetHwnd) {
             || (DllCall("GetWindowLong", "Ptr", parentHwnd, "Int", -16, "UInt") & 0x0F) = 0x07) {
             SendMessage, 0x000E, 0, 0,, ahk_id %parentHwnd%
             pLen := ErrorLevel
-            if (pLen != "FAIL" && pLen > 0 && pLen < 256) {
+            if (pLen > 0 && pLen < 256) {
                 VarSetCapacity(plBuf, (pLen + 1) * 2, 0)
                 SendMessage, 0x000D, pLen + 1, &plBuf,, ahk_id %parentHwnd%
                 parentLabel := Trim(StrGet(&plBuf))
@@ -3063,20 +3001,20 @@ CF__BuildFormControlEntry(hwnd, targetHwnd) {
 
     if (controlType = "checkbox") {
         SendMessage, 0x00F0, 0, 0,, ahk_id %hwnd%   ; BM_GETCHECK
-        checked := (ErrorLevel != "FAIL" && ErrorLevel) ? true : false
+        checked := ErrorLevel ? true : false
     }
     else if (controlType = "radio") {
         SendMessage, 0x00F0, 0, 0,, ahk_id %hwnd%   ; BM_GETCHECK
-        selected := (ErrorLevel != "FAIL" && ErrorLevel) ? true : false
+        selected := ErrorLevel ? true : false
     }
     else if (controlType = "combo") {
         SendMessage, 0x0147, 0, 0,, ahk_id %hwnd%   ; CB_GETCURSEL
         valueIdx := ErrorLevel
-        if (valueIdx != "FAIL" && valueIdx != 0xFFFFFFFF && valueIdx >= 0) {
+        if (valueIdx != 0xFFFFFFFF && valueIdx >= 0) {
             ; Get the text of the selected item
             SendMessage, 0x0149, valueIdx, 0,, ahk_id %hwnd%  ; CB_GETLBTEXTLEN
             cbLen := ErrorLevel
-            if (cbLen != "FAIL" && cbLen > 0 && cbLen < 1024) {
+            if (cbLen > 0 && cbLen < 1024) {
                 VarSetCapacity(cbBuf, (cbLen + 2) * 2, 0)
                 SendMessage, 0x0148, valueIdx, &cbBuf,, ahk_id %hwnd%  ; CB_GETLBTEXT
                 value := StrGet(&cbBuf)
@@ -3088,6 +3026,7 @@ CF__BuildFormControlEntry(hwnd, targetHwnd) {
         , checked: checked, selected: selected, value: value, valueIdx: valueIdx
         , y: y, x: x, parentHwnd: parentHwnd, parentLabel: parentLabel}
     CF__enumResults.Push(entry)
+    return 1
 }
 
 
@@ -3129,61 +3068,64 @@ CF__FindCheckListCallback(hwnd, lParam) {
 ;============================================================================================
 
 CF_FindAdjacentLabel(controlHwnd, dialogHwnd) {
-    global CF__adjHwndList
+    global CF__adjLabel, CF__adjControlRect, CF__adjControlHwnd
 
     ; Get the control's rect
     VarSetCapacity(rect, 16, 0)
     DllCall("GetWindowRect", "Ptr", controlHwnd, "Ptr", &rect)
-    ctrlTop := NumGet(rect, 4, "Int")
-    ctrlRight := NumGet(rect, 8, "Int")
+    CF__adjControlRect := {left: NumGet(rect, 0, "Int"), top: NumGet(rect, 4, "Int")
+        , right: NumGet(rect, 8, "Int"), bottom: NumGet(rect, 12, "Int")}
+    CF__adjControlHwnd := controlHwnd
+    CF__adjLabel := ""
 
     parentHwnd := DllCall("GetParent", "Ptr", controlHwnd, "Ptr")
     if (!parentHwnd)
         parentHwnd := dialogHwnd
 
-    ; Fast callback collects label-class HWNDs only; filtering by position and
-    ; reading text happens here (same safety rule as the other enumerators).
-    CF__adjHwndList := ""
     enumAdj := RegisterCallback("CF__AdjLabelCallback", "Fast")
     DllCall("EnumChildWindows", "Ptr", parentHwnd, "Ptr", enumAdj, "Ptr", 0)
-
-    Loop, Parse, CF__adjHwndList, |
-    {
-        if (A_LoopField = "")
-            continue
-        hwnd := A_LoopField + 0
-        if (hwnd = controlHwnd)
-            continue
-
-        ; Must be on the same row (within 10px Y) and to the right
-        VarSetCapacity(lRect, 16, 0)
-        DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", &lRect)
-        labelTop := NumGet(lRect, 4, "Int")
-        labelLeft := NumGet(lRect, 0, "Int")
-        if (Abs(labelTop - ctrlTop) > 10 || labelLeft < ctrlRight)
-            continue
-
-        SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
-        tLen := ErrorLevel
-        if (tLen != "FAIL" && tLen > 0 && tLen < 256) {
-            VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
-            SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%
-            text := Trim(StrGet(&tBuf))
-            if (text != "" && text != " ")
-                return text
-        }
-    }
-    return ""
+    return CF__adjLabel
 }
 
 CF__AdjLabelCallback(hwnd, lParam) {
-    global CF__adjHwndList
+    global CF__adjLabel, CF__adjControlRect, CF__adjControlHwnd
+
+    if (hwnd = CF__adjControlHwnd)
+        return 1
+
     VarSetCapacity(buf, 512, 0)
     DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
     className := buf
-    if (className = "Static" || InStr(className, "TLabel") || InStr(className, "TStaticText")
+
+    ; Only look at label-type controls
+    if !(className = "Static" || InStr(className, "TLabel") || InStr(className, "TStaticText")
         || InStr(className, "TVA508StaticText") || InStr(className, "TCPRSDialogStaticLabel"))
-        CF__adjHwndList .= hwnd . "|"
+        return 1
+
+    ; Check position: must be on the same row (within 10px Y) and to the right
+    VarSetCapacity(rect, 16, 0)
+    DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", &rect)
+    labelTop := NumGet(rect, 4, "Int")
+    labelLeft := NumGet(rect, 0, "Int")
+
+    yDiff := Abs(labelTop - CF__adjControlRect.top)
+    if (yDiff > 10)
+        return 1
+    if (labelLeft < CF__adjControlRect.right)
+        return 1
+
+    ; Get text
+    SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
+    tLen := ErrorLevel
+    if (tLen > 0 && tLen < 256) {
+        VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+        SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%
+        text := Trim(StrGet(&tBuf))
+        if (text != "" && text != " ") {
+            CF__adjLabel := text
+            return 0  ; Stop searching
+        }
+    }
     return 1
 }
 
@@ -4010,39 +3952,16 @@ CF_DismissIntermediatePopups() {
     }
 }
 
-; Same safe enum pattern as the NB scanners: class filtering in the Fast
-; callback, button-text reads outside the enumeration.
 CF_HasDangerousButton(windowHwnd) {
-    global CF__dangerHasEdit, CF__dangerBtnList
-    CF__dangerHasEdit := false
-    CF__dangerBtnList := ""
+    global CF__hasDangerous
+    CF__hasDangerous := false
     enumDang := RegisterCallback("CF__CheckDangerousCallback", "Fast")
     DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumDang, "Ptr", 0)
-    if (CF__dangerHasEdit)
-        return true
-    Loop, Parse, CF__dangerBtnList, |
-    {
-        if (A_LoopField = "")
-            continue
-        hwnd := A_LoopField + 0
-        SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
-        tLen := ErrorLevel
-        if (tLen != "FAIL" && tLen > 0 && tLen < 256) {
-            VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
-            SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%
-            StringUpper, textUpper, % StrGet(&tBuf)
-            if (InStr(textUpper, "FINISH") || InStr(textUpper, "SUBMIT")
-                || InStr(textUpper, "SIGN") || InStr(textUpper, "FILE")
-                || InStr(textUpper, "COMPLETE") || InStr(textUpper, "SAVE")
-                || InStr(textUpper, "DELETE") || InStr(textUpper, "REMOVE"))
-                return true
-        }
-    }
-    return false
+    return CF__hasDangerous
 }
 
 CF__CheckDangerousCallback(hwnd, lParam) {
-    global CF__dangerHasEdit, CF__dangerBtnList
+    global CF__hasDangerous
     VarSetCapacity(buf, 512, 0)
     DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
     className := buf
@@ -4050,46 +3969,59 @@ CF__CheckDangerousCallback(hwnd, lParam) {
     ; Text input fields = data entry form, not an OK popup
     if (InStr(className, "TEdit") || InStr(className, "TMemo") || InStr(className, "TRichEdit")
         || InStr(className, "Edit") || InStr(className, "RichEdit")) {
-        CF__dangerHasEdit := true
+        CF__hasDangerous := true
         return 0
     }
 
-    if (InStr(className, "Button") || InStr(className, "TButton") || InStr(className, "TBitBtn"))
-        CF__dangerBtnList .= hwnd . "|"
+    ; Check button text for dangerous labels
+    if (InStr(className, "Button") || InStr(className, "TButton") || InStr(className, "TBitBtn")) {
+        SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
+        tLen := ErrorLevel
+        if (tLen > 0 && tLen < 256) {
+            VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+            SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%
+            StringUpper, textUpper, % StrGet(&tBuf)
+            if (InStr(textUpper, "FINISH") || InStr(textUpper, "SUBMIT")
+                || InStr(textUpper, "SIGN") || InStr(textUpper, "FILE")
+                || InStr(textUpper, "COMPLETE") || InStr(textUpper, "SAVE")
+                || InStr(textUpper, "DELETE") || InStr(textUpper, "REMOVE")) {
+                CF__hasDangerous := true
+                return 0
+            }
+        }
+    }
     return 1
 }
 
 CF_FindOKButton(windowHwnd) {
-    global CF__okBtnList
-    CF__okBtnList := ""
+    global CF__foundOKHwnd
+    CF__foundOKHwnd := 0
     enumOK := RegisterCallback("CF__FindOKCallback", "Fast")
     DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumOK, "Ptr", 0)
-    Loop, Parse, CF__okBtnList, |
-    {
-        if (A_LoopField = "")
-            continue
-        hwnd := A_LoopField + 0
-        SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
-        tLen := ErrorLevel
-        if (tLen != "FAIL" && tLen > 0 && tLen < 256) {
-            VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
-            SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%
-            StringUpper, textUpper, % StrGet(&tBuf)
-            if (textUpper = "OK" || textUpper = "&OK" || textUpper = "CONTINUE"
-                || textUpper = "&CONTINUE" || textUpper = "YES" || textUpper = "&YES")
-                return hwnd
-        }
-    }
-    return 0
+    return CF__foundOKHwnd
 }
 
 CF__FindOKCallback(hwnd, lParam) {
-    global CF__okBtnList
+    global CF__foundOKHwnd
     VarSetCapacity(buf, 512, 0)
     DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
     className := buf
-    if (InStr(className, "Button") || InStr(className, "TButton") || InStr(className, "TBitBtn"))
-        CF__okBtnList .= hwnd . "|"
+
+    if !(InStr(className, "Button") || InStr(className, "TButton") || InStr(className, "TBitBtn"))
+        return 1
+
+    SendMessage, 0x000E, 0, 0,, ahk_id %hwnd%
+    tLen := ErrorLevel
+    if (tLen > 0 && tLen < 256) {
+        VarSetCapacity(tBuf, (tLen + 1) * 2, 0)
+        SendMessage, 0x000D, tLen + 1, &tBuf,, ahk_id %hwnd%
+        StringUpper, textUpper, % StrGet(&tBuf)
+        if (textUpper = "OK" || textUpper = "&OK" || textUpper = "CONTINUE"
+            || textUpper = "&CONTINUE" || textUpper = "YES" || textUpper = "&YES") {
+            CF__foundOKHwnd := hwnd
+            return 0
+        }
+    }
     return 1
 }
 
