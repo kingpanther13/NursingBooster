@@ -53,11 +53,16 @@ if (ErrorLevel) {
     ExitApp, 1
 }
 ; Wait for the stub to finish building + advertise its fixture
+ready := 0
 Loop, 60 {
     IniRead, ready, %MockDir%\expect.ini, expect, ready, 0
     if (ready = 1)
         break
     Sleep, 250
+}
+if (ready != 1) {
+    MsgBox, 48, Demo, The fake dialog never finished building (no fixture written).`nTry again, or run the automated mode to see the error.
+    ExitApp, 1
 }
 
 dlgHwnd := NB_FindActiveDialogWindow()

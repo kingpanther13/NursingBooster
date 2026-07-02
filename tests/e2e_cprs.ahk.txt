@@ -38,7 +38,7 @@ FileCreateDir, %NB_TemplateDir%
 FileCreateDir, %NB_LogDir%
 NB_AppTitle := "Nursing Booster"
 NB_ApplySpeed := 0
-NB_LeafSpeed := 400          ; > the stub's 30ms deferred-rebuild watcher, like real CPRS's posted rebuild
+NB_LeafSpeed := 400          ; > the stub's 150ms deferred-rebuild watcher, like real CPRS's posted rebuild
 NB_SpeedOverride := 1
 NB_DebugLogging := 1
 NB_BoosterGuiVisible := 0
