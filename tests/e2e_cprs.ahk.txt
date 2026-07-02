@@ -100,12 +100,18 @@ for i, cb in items {
 E2eAssert(checkedPre = 0, "nothing checked before apply (got " . checkedPre . ")")
 E2eAssert(unlabeledParents > 0 && labeledLeaves > 0
     , "parents unreadable / leaves readable (" . unlabeledParents . " parents, " . labeledLeaves . " leaves)")
+; label BLEED is real-CPRS behavior: a cluster pair's parent can resolve a
+; leaf caption via its panel's windowed children (the real VAAES dump has
+; exactly one such labeled parent, 'Other:'). Assert bleed stays confined
+; to cluster parents.
+IniRead, expClusters, %MockDir%\expect.ini, expect, clusters, 0
+labeledParents := 0
 for i, cb in items {
-    if (cb.className = "TCPRSDialogParentCheckBox" && cb.label != "") {
-        E2eAssert(false, "parent checkbox unexpectedly has readable label '" . cb.label . "'")
-        break
-    }
+    if (cb.className = "TCPRSDialogParentCheckBox" && cb.label != "")
+        labeledParents++
 }
+E2eAssert(labeledParents <= expClusters
+    , "labeled parents only from cluster bleed (" . labeledParents . " <= " . expClusters . ")")
 
 ; --- Apply the stub-saved template through the real engine ---
 tplPath := MockDir . "\MockNeg.json"

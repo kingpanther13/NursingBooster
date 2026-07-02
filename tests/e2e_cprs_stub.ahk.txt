@@ -419,6 +419,13 @@ WriteFixtureAndExpectations() {
     IniWrite, %collapsed%, %OutDir%\expect.ini, expect, collapsed
     IniWrite, %checkedCount%, %OutDir%\expect.ini, expect, toggled
     IniWrite, 0, %OutDir%\expect.ini, expect, notfound
+    ; cluster pairs can "bleed" a leaf caption into the parent's resolved
+    ; label (module reads the panel's windowed children) - the real VAAES
+    ; dump shows the same quirk (single labeled parent 'Other:')
+    clusters := 0
+    for i, it in items
+        clusters += (it.leafIdx = 1) ? 1 : 0
+    IniWrite, %clusters%, %OutDir%\expect.ini, expect, clusters
     ; depth histogram of the EXPANDED dialog (module semantics: TGroupBox
     ; ancestors below the scrollbox) - depth 3 must be ABSENT
     hist := {}
