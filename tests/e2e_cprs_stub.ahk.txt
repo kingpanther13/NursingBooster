@@ -45,6 +45,21 @@ global WS_OVERLAPPEDWINDOW := 0x00CF0000
 global BS_AUTOCHECKBOX := 0x3, BS_GROUPBOX := 0x7, ES_MULTILINE := 0x4
 global gHInst := DllCall("GetModuleHandleW", "Ptr", 0, "Ptr")
 
+; VISUAL MODE (opt-in, human inspection only): when the env var
+; NB_E2E_VISUAL=1 is set, parent checkboxes get a readable caption + width so
+; a person watching an apply can see which boxes toggle. The automated e2e
+; NEVER sets this, so the default path (parent caption ' ', unreadable like
+; real CPRS) is byte-identical - do not rely on captions in any assertion.
+global gVisual := false
+EnvGet, nbVisEnv, NB_E2E_VISUAL
+if (nbVisEnv = "1")
+    gVisual := true
+global gVisCounter := 0
+global gVisNames := ["Neuro WNL", "Cardiac WNL", "Respiratory WNL", "GI WNL"
+    , "GU WNL", "Skin intact", "Musculoskeletal WNL", "Pain denied", "Psychosocial WNL"
+    , "Safety addressed", "ADLs independent", "Fall risk assessed", "Education given"
+    , "Lines/drains WNL", "Nutrition WNL", "Mobility WNL", "Sleep WNL", "Comfort WNL"]
+
 global DIALOG_TITLE := "Reminder Dialog Template: MOCK NSG SHIFT ASSESSMENT"
 global OutDir := A_Temp . "\nb_e2e_mock"
 FileCreateDir, %OutDir%
@@ -134,9 +149,11 @@ WatchHideParents:
                 unbuilt++
         }
     }
-    ; all deferred content built - go silent so nothing contends with the
-    ; driver's post-apply enumerations
-    if (unbuilt = 0)
+    ; Automated mode: once all deferred content is built, go silent so
+    ; nothing contends with the driver's post-apply enumerations.
+    ; Visual/interactive mode: keep watching so a human clicking a
+    ; HideChildren parent still spawns its children live.
+    if (unbuilt = 0 && !gVisual)
         SetTimer, WatchHideParents, Off
 return
 
@@ -294,8 +311,18 @@ BuildNode(node, parentHwnd, parentWidth, x, y) {
             ; BOTH have empty window text (checkbox caption is ' ')
             node.pnlHwnd := MakeWin(0, "TDlgFieldPanel", ""
                 , WS_CHILD | WS_VISIBLE, x + 18, y, pnlW, pnlH, parentHwnd, 0)
-            node.cbHwnd := MakeWin(0, "TCPRSDialogParentCheckBox", " "
-                , WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, x, y, 17, 17, parentHwnd, 0)
+            ; default caption ' ' (unreadable, like real CPRS); visual mode
+            ; only: readable caption + width so a human can watch the apply
+            cbCap := " "
+            cbW := 17
+            if (gVisual && node.kind = "pair") {
+                gVisCounter += 1
+                idx := Mod(gVisCounter - 1, gVisNames.Length()) + 1
+                cbCap := gVisNames[idx]
+                cbW := pnlW
+            }
+            node.cbHwnd := MakeWin(0, "TCPRSDialogParentCheckBox", cbCap
+                , WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, x, y, cbW, 17, parentHwnd, 0)
             gNodeById.Push(node)
         } else {
             MoveWin(node.pnlHwnd, x + 18, y)
