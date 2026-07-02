@@ -74,7 +74,16 @@ dlgHwnd := NB_FindActiveDialogWindow()
 E2eAssert(dlgHwnd != 0, "NB_FindActiveDialogWindow finds the dialog by class")
 WinGetTitle, dlgTitle, ahk_id %dlgHwnd%
 
-scrollBox := NB_FindVisibleScrollBox(dlgHwnd)
+; The stub writes ready=1 from its auto-execute thread BEFORE it has pumped
+; a single message, so on a loaded runner the visible TScrollBox can lag its
+; creation call and not yet be a findable direct child when the driver races
+; in cross-process. NB_ApplyTemplate never hits this because it runs
+; NB_WaitForStableCheckboxCount before it picks the scrollbox; give the
+; driver's pre-apply pick the same stabilization - wait until the scrollbox
+; is findable AND enumerates its known collapsed count. On timeout this
+; returns 0 / a wrong scrollbox so the assertions below FAIL loudly instead
+; of every downstream enumeration silently running against handle 0.
+scrollBox := E2eWaitForScrollBox(dlgHwnd, expCollapsed)
 E2eAssert(scrollBox != 0, "visible TScrollBox found despite hidden sb1 sibling")
 WinGet, sbStyle, Style, ahk_id %scrollBox%
 E2eAssert(sbStyle & 0x10000000, "picked scrollbox is the VISIBLE one")
@@ -84,7 +93,7 @@ ver := NB_GetDialogVersion(dlgHwnd)
 E2eAssert(ver = "3.2", "dialog version 3.2 greppable from TRichEdit (got '" . ver . "')")
 
 ; --- Pre-apply enumeration: collapsed count, unreadable parents ---
-items := E2eStableEnum(scrollBox)
+items := E2eEnumUntilCount(scrollBox, expCollapsed)
 E2eAssert(items.Length() = expCollapsed
     , "collapsed dialog has " . expCollapsed . " checkboxes (got " . items.Length() . ")")
 unlabeledParents := 0
@@ -97,7 +106,10 @@ for i, cb in items {
         labeledLeaves++
     checkedPre += cb.checked ? 1 : 0
 }
-E2eAssert(checkedPre = 0, "nothing checked before apply (got " . checkedPre . ")")
+; Gate on the known collapsed count so a truncated (0-item) enumeration
+; FAILS here instead of vacuously passing "0 checked".
+E2eAssert(items.Length() = expCollapsed && checkedPre = 0
+    , "nothing checked before apply (" . items.Length() . " boxes, " . checkedPre . " checked)")
 E2eAssert(unlabeledParents > 0 && labeledLeaves > 0
     , "parents unreadable / leaves readable (" . unlabeledParents . " parents, " . labeledLeaves . " leaves)")
 ; label BLEED is real-CPRS behavior: a cluster pair's parent can resolve a
@@ -144,7 +156,7 @@ E2eAssert(notfound = expNotFound
 tplFile := ""
 FileRead, tplFile, %tplPath%
 tplItems := NB_ParseFlatCheckboxes(tplFile)
-after := E2eStableEnum(scrollBox)
+after := E2eEnumUntilCount(scrollBox, expTotal)
 E2eAssert(after.Length() = expTotal
     , "expanded dialog has " . expTotal . " checkboxes (got " . after.Length() . ")")
 E2eAssert(tplItems.Length() = expTotal
@@ -168,8 +180,10 @@ Loop, %n%
                 . " depth=" . tpl.depth . " lbl='" . tpl.label . "'`n", *
     }
 }
-E2eAssert(mismatches = 0
-    , "apply reproduces the save position-by-position (" . mismatches . " mismatches)")
+; Require both sides fully enumerated to expTotal so a truncated live
+; enumeration (n=0 -> zero-iteration loop) cannot vacuously report 0 mismatches.
+E2eAssert(after.Length() = expTotal && tplItems.Length() = expTotal && mismatches = 0
+    , "apply reproduces the save position-by-position (" . mismatches . " mismatches over " . n . " positions)")
 
 ; --- Depth histogram: matches expectations, and depth 3 is ABSENT while
 ;     depth 4 is populated (the display-only empty Box skip mechanism) ---
@@ -211,7 +225,9 @@ Loop, Files, %NB_LogDir%\APPLY_*.txt
     logCount++
 E2eAssert(logCount = 1, "cancelled apply exits before logging (APPLY logs=" . logCount . ")")
 
-after2 := E2eStableEnum(scrollBox)
+after2 := E2eEnumUntilCount(scrollBox, expTotal)
+E2eAssert(after2.Length() = expTotal
+    , "cancel-path enumeration sees the full dialog (got " . after2.Length() . ")")
 unchecked2 := 0
 for i, cb in after2
     unchecked2 += cb.checked ? 0 : 1
@@ -259,23 +275,45 @@ E2eAssert(cond, msg)
     }
 }
 
-; Enumerate until two consecutive passes agree on a nonzero count (the same
-; stabilization contract NB_ApplyTemplate itself uses via
-; NB_WaitForStableCheckboxCount before it enumerates). A raw one-shot
-; enumeration can transiently return a truncated list when the stub thread
-; is mid-timer while servicing our cross-process reads - a harness
-; artifact, not a module behavior, so it is absorbed here in the harness.
-E2eStableEnum(scrollBox)
+; Wait until the dialog's visible TScrollBox is findable the way the module
+; finds it AND enumerates its known checkbox count. The stub advertises
+; ready=1 before its window tree is guaranteed realized cross-process, so a
+; raw one-shot pick can return 0 (then every NB_EnumDescendantCheckboxes(0)
+; enumerates top-level windows and yields nothing). This mirrors the
+; NB_WaitForStableCheckboxCount stabilization the module runs before its own
+; enumeration. On timeout it returns the last handle seen (0 or wrong) so the
+; caller's assertions FAIL loudly rather than the test running against 0.
+E2eWaitForScrollBox(dlgHwnd, wantCount)
 {
-    prev := -1
+    sb := 0
+    Loop, 150   ; ~15s ceiling, well past the module's own 10s stability wait
+    {
+        sb := NB_FindVisibleScrollBox(dlgHwnd)
+        if (sb)
+        {
+            cur := NB_EnumDescendantCheckboxes(sb)
+            if (cur.Length() = wantCount)
+                return sb
+        }
+        Sleep, 100
+    }
+    return sb
+}
+
+; Enumerate a known-good scrollbox until it returns EXACTLY wantCount
+; checkboxes (the collapsed or expanded total). A transient truncation from
+; the stub's timer contending with our cross-process reads just retries. On
+; timeout it returns the last (short) list so the caller's exact-count
+; assertion FAILS loudly - a truncated enumeration can never pass vacuously.
+E2eEnumUntilCount(scrollBox, wantCount)
+{
     best := ""
-    Loop, 30
+    Loop, 100   ; ~10s ceiling
     {
         cur := NB_EnumDescendantCheckboxes(scrollBox)
-        if (cur.Length() > 0 && cur.Length() = prev)
-            return cur
-        prev := cur.Length()
         best := cur
+        if (cur.Length() = wantCount)
+            return cur
         Sleep, 100
     }
     return best

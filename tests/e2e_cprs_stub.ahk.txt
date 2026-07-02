@@ -48,6 +48,12 @@ global gHInst := DllCall("GetModuleHandleW", "Ptr", 0, "Ptr")
 global DIALOG_TITLE := "Reminder Dialog Template: MOCK NSG SHIFT ASSESSMENT"
 global OutDir := A_Temp . "\nb_e2e_mock"
 FileCreateDir, %OutDir%
+; Clear any prior readiness/fixture BEFORE the dialog window exists, so the
+; driver (which waits for the window then polls ready=1) can never latch a
+; stale or half-written ready=1 from an earlier state and race ahead of this
+; build. ready=1 is (re)written only at the very end of the build below.
+FileDelete, %OutDir%\expect.ini
+FileDelete, %OutDir%\MockNeg.json
 
 ; --- register the fake VCL classes (superclassed Button / plain containers) ---
 SuperClass("Button", "TCPRSDialogParentCheckBox")
@@ -90,6 +96,9 @@ global gExpandPending := []     ; nodes awaiting deferred child creation
 ; --- build chrome + collapsed dialog, then save fixture + expectations ---
 BuildChrome()
 LayoutDialog()                  ; creates collapsed-state windows
+RealizeDialog()                 ; pump until the visible TScrollBox is a
+                                ; findable direct child (the way the module
+                                ; picks it) BEFORE advertising ready=1
 WriteFixtureAndExpectations()   ; template = fully-expanded save, Y-order
 
 ; --- deferred-rebuild watcher: mirrors the posted UM_RESYNCREM partial
@@ -395,6 +404,39 @@ IsChecked(node) {
         return false
     SendMessage, 0xF0, 0, 0,, % "ahk_id " . node.cbHwnd
     return (ErrorLevel = 1)
+}
+
+; Force the dialog's window tree to realize before we advertise ready=1.
+; The build above runs entirely in the auto-execute thread, which has not
+; pumped a single message yet; a Sleep here pumps this thread's queue so the
+; children (notably the visible TScrollBox the driver picks cross-process)
+; are fully created/shown. Confirm the scrollbox is findable the exact way
+; the module finds it (GW_CHILD walk + WS_VISIBLE) so ready=1 truly means
+; "the pickable scrollbox exists". Bounded so a pathological runner still
+; proceeds and lets the driver's own stabilization report the failure.
+RealizeDialog() {
+    global gDlg
+    DllCall("UpdateWindow", "Ptr", gDlg)
+    Loop, 100 {
+        if (FindVisibleScrollBoxLikeModule(gDlg))
+            return
+        Sleep, 20   ; pumps this thread's message queue
+    }
+}
+
+FindVisibleScrollBoxLikeModule(dlgHwnd) {
+    child := DllCall("GetWindow", "Ptr", dlgHwnd, "UInt", 5, "Ptr")   ; GW_CHILD
+    while (child) {
+        VarSetCapacity(buf, 256, 0)
+        DllCall("GetClassName", "Ptr", child, "Str", buf, "Int", 256)
+        if (buf = "TScrollBox") {
+            style := DllCall("GetWindowLong", "Ptr", child, "Int", -16, "Int")   ; GWL_STYLE
+            if (style & 0x10000000)   ; WS_VISIBLE
+                return child
+        }
+        child := DllCall("GetWindow", "Ptr", child, "UInt", 2, "Ptr")   ; GW_HWNDNEXT
+    }
+    return 0
 }
 
 ; ===========================================================================
