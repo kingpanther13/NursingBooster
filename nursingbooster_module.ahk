@@ -1552,7 +1552,10 @@ NB__ApplyDebug(msg) {
     global NB_LogDir
     FormatTime, nbDbgTime,, HH:mm:ss
     logLine := nbDbgTime . " " . msg . "`n"
-    logPath := NB_LogDir . "\apply_debug.txt"
+    ; NOTE: name must not match APPLY_*.txt — Windows file patterns are
+    ; case-insensitive, so "apply_debug.txt" would collide with the
+    ; APPLY_<timestamp>.txt snapshot logs when globbing.
+    logPath := NB_LogDir . "\walk_trace.txt"
     FileAppend, %logLine%, %logPath%, UTF-8
 }
 

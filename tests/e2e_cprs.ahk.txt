@@ -119,7 +119,7 @@ NB_ApplyTemplate(tplPath)
 Sleep, 600
 
 ; --- Walk trace diagnostics + exact toggle accounting ---
-dbgPath := NB_LogDir . "\apply_debug.txt"
+dbgPath := NB_LogDir . "\walk_trace.txt"
 walkTrace := ""
 if FileExist(dbgPath) {
     FileRead, walkTrace, %dbgPath%
