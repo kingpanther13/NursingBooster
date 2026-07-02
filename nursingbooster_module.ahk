@@ -1395,6 +1395,10 @@ NB_ApplyTemplate(templatePath) {
     ; Enumerate ALL checkboxes in the scroll box (flat, Y-sorted)
     liveItems := NB_EnumDescendantCheckboxes(scrollBox)
 
+    if (NB_DebugLogging)
+        NB__ApplyDebug("start dlg=" . dlgHwnd . " scrollBox=" . scrollBox
+            . " tpl=" . tplCount . " live=" . liveItems.Length())
+
     ToolTip, Applying %tplCount% items... (Right-click to cancel)
 
     ; Pause timers during apply to prevent interference
@@ -1431,6 +1435,8 @@ NB_ApplyTemplate(templatePath) {
 
         liveCount := liveItems.Length()
         if (tplPos > liveCount) {
+            if (NB_DebugLogging)
+                NB__ApplyDebug("pos=" . tplPos . " NOT FOUND (live=" . liveCount . ")")
             totalNotFound++
             tplPos++
             continue
@@ -1473,6 +1479,9 @@ NB_ApplyTemplate(templatePath) {
                 ; Only re-enumerate if count actually changed
                 Sleep, %effectiveLeafSpeed%
                 newItems := NB_EnumDescendantCheckboxes(scrollBox)
+                if (NB_DebugLogging)
+                    NB__ApplyDebug("pos=" . tplPos . " toggled hwnd=" . nb_tmpHwnd
+                        . " re-enum=" . newItems.Length() . " (was " . liveCount . ")")
                 if (newItems.Length() != liveCount) {
                     ; Structure changed — use new list
                     liveItems := newItems
@@ -1527,6 +1536,17 @@ return
 ;============================================================================================
 ; NURSING BOOSTER - CHECKBOX STATE LOGGING
 ;============================================================================================
+
+; Append one line to the apply-debug trace (only called when NB_DebugLogging).
+; Separate from the APPLY_*.txt snapshots: this traces the walk itself, which
+; is what's needed to diagnose "N not found" reports.
+NB__ApplyDebug(msg) {
+    global NB_LogDir
+    FormatTime, nbDbgTime,, HH:mm:ss
+    logLine := nbDbgTime . " " . msg . "`n"
+    logPath := NB_LogDir . "\apply_debug.txt"
+    FileAppend, %logLine%, %logPath%, UTF-8
+}
 
 NB__LogCheckboxStates(action, groupBoxHwnds, templateNameOrPath := "", dialogTitle := "", statA := 0, statB := 0) {
     global NB_LogDir

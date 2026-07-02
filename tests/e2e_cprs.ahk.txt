@@ -102,6 +102,11 @@ if (applyLog != "") {
 } else {
     FileAppend, % "--- no APPLY log written (early return before logging?) ---`n", *
 }
+dbgPath := NB_LogDir . "\apply_debug.txt"
+if FileExist(dbgPath) {
+    FileRead, dbgText, %dbgPath%
+    FileAppend, % "--- apply walk trace ---`n" . dbgText . "--- end walk trace ---`n", *
+}
 
 ; --- Final state: dynamics created and checked, never-uncheck honored ---
 after := NB_EnumDescendantCheckboxes(scrollBox)
