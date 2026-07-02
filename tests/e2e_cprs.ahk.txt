@@ -84,7 +84,7 @@ ver := NB_GetDialogVersion(dlgHwnd)
 E2eAssert(ver = "3.2", "dialog version 3.2 greppable from TRichEdit (got '" . ver . "')")
 
 ; --- Pre-apply enumeration: collapsed count, unreadable parents ---
-items := NB_EnumDescendantCheckboxes(scrollBox)
+items := E2eStableEnum(scrollBox)
 E2eAssert(items.Length() = expCollapsed
     , "collapsed dialog has " . expCollapsed . " checkboxes (got " . items.Length() . ")")
 unlabeledParents := 0
@@ -144,7 +144,7 @@ E2eAssert(notfound = expNotFound
 tplFile := ""
 FileRead, tplFile, %tplPath%
 tplItems := NB_ParseFlatCheckboxes(tplFile)
-after := NB_EnumDescendantCheckboxes(scrollBox)
+after := E2eStableEnum(scrollBox)
 E2eAssert(after.Length() = expTotal
     , "expanded dialog has " . expTotal . " checkboxes (got " . after.Length() . ")")
 E2eAssert(tplItems.Length() = expTotal
@@ -211,7 +211,7 @@ Loop, Files, %NB_LogDir%\APPLY_*.txt
     logCount++
 E2eAssert(logCount = 1, "cancelled apply exits before logging (APPLY logs=" . logCount . ")")
 
-after2 := NB_EnumDescendantCheckboxes(scrollBox)
+after2 := E2eStableEnum(scrollBox)
 unchecked2 := 0
 for i, cb in after2
     unchecked2 += cb.checked ? 0 : 1
@@ -257,6 +257,28 @@ E2eAssert(cond, msg)
         E2eFails += 1
         FileAppend, % "FAIL: " . msg . "`n", *
     }
+}
+
+; Enumerate until two consecutive passes agree on a nonzero count (the same
+; stabilization contract NB_ApplyTemplate itself uses via
+; NB_WaitForStableCheckboxCount before it enumerates). A raw one-shot
+; enumeration can transiently return a truncated list when the stub thread
+; is mid-timer while servicing our cross-process reads - a harness
+; artifact, not a module behavior, so it is absorbed here in the harness.
+E2eStableEnum(scrollBox)
+{
+    prev := -1
+    best := ""
+    Loop, 30
+    {
+        cur := NB_EnumDescendantCheckboxes(scrollBox)
+        if (cur.Length() > 0 && cur.Length() = prev)
+            return cur
+        prev := cur.Length()
+        best := cur
+        Sleep, 100
+    }
+    return best
 }
 
 E2eCancelPulse:

@@ -93,22 +93,42 @@ LayoutDialog()                  ; creates collapsed-state windows
 WriteFixtureAndExpectations()   ; template = fully-expanded save, Y-order
 
 ; --- deferred-rebuild watcher: mirrors the posted UM_RESYNCREM partial
-;     rebuild (runs strictly after the click's WM_COMMAND returns) ---
-SetTimer, WatchHideParents, 30
+;     rebuild (runs strictly after the click's WM_COMMAND returns).
+;     150ms is comfortably inside the module's 400ms leaf-speed window,
+;     while keeping this thread mostly idle: an aggressive poll makes the
+;     stub contend with the cross-process SendMessages the module's
+;     enumeration sends it, which can abort EnumChildWindows mid-walk (a
+;     harness artifact - real Delphi CPRS has a dedicated pump and no
+;     such timer). The watcher switches itself OFF once every hide-parent
+;     is built, so post-apply enumerations run against a silent stub. ---
+SetTimer, WatchHideParents, 150
 SetTimer, StubSelfDestruct, -240000
 return
 
 WatchHideParents:
     rebuildNeeded := false
+    unbuilt := 0
     for i, node in gNodeById {
         if (node.hide && !node.built && node.cbHwnd) {
+            unbuilt++
             SendMessage, 0xF0, 0, 0,, % "ahk_id " . node.cbHwnd
             if (ErrorLevel = 1)
                 rebuildNeeded := true
         }
     }
-    if (rebuildNeeded)
+    if (rebuildNeeded) {
         LayoutDialog()   ; partial rebuild: reuses HWNDs, creates missing children, shifts Tops
+        ; recount after the rebuild marked nodes built
+        unbuilt := 0
+        for i, node in gNodeById {
+            if (node.hide && !node.built)
+                unbuilt++
+        }
+    }
+    ; all deferred content built - go silent so nothing contends with the
+    ; driver's post-apply enumerations
+    if (unbuilt = 0)
+        SetTimer, WatchHideParents, Off
 return
 
 StubSelfDestruct:
