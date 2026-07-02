@@ -71,20 +71,11 @@ New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 $cprs = Join-Path $runDir "CPRSChart.exe"
 Copy-Item $ahk $cprs -Force
 
-# AHK only runs files with a .ahk extension; copy each .ahk.txt source we need.
-$copied = @()
-function Copy-Script($name) {
-    $dst = Join-Path $tests $name
-    Copy-Item (Join-Path $tests "$name.txt") $dst -Force
-    $script:copied += $dst
-    return $dst
-}
-
 try {
-    $stub = Copy-Script "e2e_cprs_stub.ahk"
+    $stub = Join-Path $tests "e2e_cprs_stub.ahk"
 
     if ($Interactive) {
-        $play = Copy-Script "playground_host.ahk"
+        $play = Join-Path $tests "playground_host.ahk"
         $env:NB_E2E_VISUAL = "1"
         Write-Host "INTERACTIVE mode: opening the fake dialog + the NursingBooster panel..."
         Start-Process -FilePath $cprs -ArgumentList "/ErrorStdOut", "`"$stub`"" | Out-Null
@@ -98,7 +89,7 @@ try {
         Start-Sleep -Seconds 3   # let both processes finish loading before cleanup
     }
     elseif ($Watch) {
-        $demo = Copy-Script "demo_cprs_apply.ahk"
+        $demo = Join-Path $tests "demo_cprs_apply.ahk"
         $env:NB_E2E_VISUAL = "1"
         Write-Host "WATCH mode: launching the fake dialog with readable captions..."
         Start-Process -FilePath $cprs -ArgumentList "/ErrorStdOut", "`"$stub`"" | Out-Null
@@ -110,7 +101,7 @@ try {
         Write-Host "Demo driver exited. The fake dialog stays open until you close it."
     }
     else {
-        $driver = Copy-Script "e2e_cprs.ahk"
+        $driver = Join-Path $tests "e2e_cprs.ahk"
         Write-Host "Running the automated CPRS e2e (same as CI)..."
         $stubProc = Start-Process -FilePath $cprs -ArgumentList "/ErrorStdOut", "`"$stub`"" -PassThru
         $out = Join-Path $runDir "out.txt"
@@ -136,9 +127,6 @@ try {
 finally {
     # Don't leak the visual flag into a later run in the same shell session.
     Remove-Item Env:NB_E2E_VISUAL -ErrorAction SilentlyContinue
-    # The running processes already loaded their scripts into memory, so
-    # removing the temp .ahk copies here does not affect them.
-    foreach ($f in $copied) { Remove-Item $f -ErrorAction SilentlyContinue }
     # Default mode's stub is already stopped; in Watch/Interactive the stub
     # (and its per-run dir) stay alive on purpose until the user closes it.
     if (-not $Watch -and -not $Interactive) {

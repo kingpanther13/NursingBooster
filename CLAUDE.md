@@ -34,15 +34,15 @@ before it was reset to `1.0`.)
     labels, host↔module label/Gui-number congruence, `#If` balance. Runs locally:
     `python3 tools/ci_lint.py --repo . --channel-branch master`.
   - **syntax** (windows): real AHK v1/v2 load-validation of every script.
-  - **unit tests** (windows): `tests/test_module.ahk.txt` — Yunit against the REAL
+  - **unit tests** (windows): `tests/test_module.ahk` — Yunit against the REAL
     module (`#Include`d with `NB_Enabled=0`): JSON escape/parse round-trips, the
     CPFS matcher (`CF_FindBestMatch`), quick-action helpers, speed file I/O.
     Yunit alone always exits 0 — the runner counts failures and exits nonzero.
-  - **GUI smoke + e2e** (windows, interactive desktop): `tests/smoke_gui.ahk.txt`
+  - **GUI smoke + e2e** (windows, interactive desktop): `tests/smoke_gui.ahk`
     (panel toggles without stealing focus, F-key hide/restore, Ctrl+Shift+B,
-    drop-up follows fxnbar and is left alone while open); `tests/e2e_cpfs*.ahk.txt`
+    drop-up follows fxnbar and is left alone while open); `tests/e2e_cpfs*.ahk`
     (apply engine against a stub Add Data form run as CPFlowsheets.exe);
-    `tests/e2e_cprs*.ahk.txt` (apply engine against a HIGH-FIDELITY fake
+    `tests/e2e_cprs*.ahk` (apply engine against a HIGH-FIDELITY fake
     TfrmRemDlg modeled on the real VAAES dialog — sourced from the dumps in
     `logs/CPRS Booster logs (not cpfs)/` and the CPRS Delphi source: real VCL
     class names via superclassing, sb1/sb2 hidden-scrollbox twin, panel+checkbox

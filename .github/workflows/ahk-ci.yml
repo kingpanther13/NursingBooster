@@ -272,7 +272,7 @@ jobs:
         shell: pwsh
         run: |
           $ahk1 = $env:AHK1_EXE
-          $testFiles = Get-ChildItem -Path tests -Filter "test_*.ahk.txt" -Recurse
+          $testFiles = Get-ChildItem -Path tests -Filter "test_*.ahk" -Recurse
           $failed = @()
 
           if ($testFiles.Count -eq 0) {
@@ -283,11 +283,8 @@ jobs:
           foreach ($test in $testFiles) {
             Write-Host "Running: $($test.Name)"
 
-            $tempAhk = "$($test.FullName -replace '\.txt$', '')"
-            Copy-Item $test.FullName $tempAhk
-
             $proc = Start-Process -FilePath $ahk1 `
-              -ArgumentList "/ErrorStdOut", $tempAhk `
+              -ArgumentList "/ErrorStdOut", $test.FullName `
               -Wait -PassThru -NoNewWindow `
               -RedirectStandardError "$env:TEMP\test_stderr.txt" `
               -RedirectStandardOutput "$env:TEMP\test_stdout.txt"
@@ -300,8 +297,6 @@ jobs:
             if (Test-Path "$env:TEMP\test_stdout.txt") {
               $stdout = Get-Content "$env:TEMP\test_stdout.txt" -Raw
             }
-
-            Remove-Item $tempAhk -ErrorAction SilentlyContinue
 
             if ($stdout) { Write-Host $stdout }
 
@@ -350,12 +345,9 @@ jobs:
           if (-not $exe) { Write-Host "::error::AutoHotkeyU64.exe not found"; exit 1 }
           echo "AHK1_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
 
-      - name: Prepare scripts and stub executables
+      - name: Prepare stub executables
         shell: pwsh
         run: |
-          foreach ($f in Get-ChildItem tests -Filter "*.ahk.txt") {
-            Copy-Item $f.FullName ($f.FullName -replace '\.txt$', '') -Force
-          }
           # Renamed copies so the module's ahk_exe detection sees the real
           # process names (CPFlowsheets.exe / CPRSChart.exe).
           Copy-Item $env:AHK1_EXE "$env:TEMP\CPFlowsheets.exe"

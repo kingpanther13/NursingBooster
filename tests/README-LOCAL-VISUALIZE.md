@@ -57,8 +57,8 @@ If AutoHotkey installed somewhere unusual, point at it:
   same code path it runs against real CPRS.
 
 To run the pieces manually instead of via the script: copy
-`AutoHotkeyU64.exe` to `CPRSChart.exe`, rename the `.ahk.txt` files to
-`.ahk`, launch `CPRSChart.exe e2e_cprs_stub.ahk`, then launch
+`AutoHotkeyU64.exe` to `CPRSChart.exe`, launch
+`CPRSChart.exe e2e_cprs_stub.ahk`, then launch
 `AutoHotkeyU64.exe e2e_cprs.ahk` (or `playground_host.ahk`, or
 `demo_cprs_apply.ahk`). For readable captions in the watch/playground
 scripts, set the environment variable `NB_E2E_VISUAL=1` before launching the
@@ -109,9 +109,9 @@ So confirm fidelity **structurally**, not by "does it look like CPRS."
 
 ## Files
 
-- `tests/e2e_cprs_stub.ahk.txt` — the fake dialog (runs as `CPRSChart.exe`).
-- `tests/e2e_cprs.ahk.txt` — the automated driver (asserts).
-- `tests/demo_cprs_apply.ahk.txt` — the slow, narrated `-Watch` driver.
-- `tests/playground_host.ahk.txt` — loads the real module for `-Interactive`.
+- `tests/e2e_cprs_stub.ahk` — the fake dialog (runs as `CPRSChart.exe`).
+- `tests/e2e_cprs.ahk` — the automated driver (asserts).
+- `tests/demo_cprs_apply.ahk` — the slow, narrated `-Watch` driver.
+- `tests/playground_host.ahk` — loads the real module for `-Interactive`.
 - `tests/run_cprs_local.ps1` — the runner that wires it all up.
 - `nursingbooster_module.ahk` — the module under test (unchanged by any of this).
