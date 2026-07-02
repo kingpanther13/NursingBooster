@@ -73,7 +73,6 @@ IniRead, expNotFound, %MockDir%\expect.ini, expect, notfound, -1
 dlgHwnd := NB_FindActiveDialogWindow()
 E2eAssert(dlgHwnd != 0, "NB_FindActiveDialogWindow finds the dialog by class")
 WinGetTitle, dlgTitle, ahk_id %dlgHwnd%
-E2eDiag("initial", dlgHwnd)   ; compare against the apply walk trace's dlg=/scrollBox=
 
 ; The stub writes ready=1 from its auto-execute thread BEFORE it has pumped
 ; a single message, so on a loaded runner the visible TScrollBox can lag its
