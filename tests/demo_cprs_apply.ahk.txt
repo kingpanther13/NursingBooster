@@ -26,7 +26,10 @@ SetBatchLines, -1
 SetTitleMatchMode, 2
 
 ; --- Module globals normally set by NB_ModuleInit (init stays inert) ---
-NB_Enabled := 0
+; NB_Enabled := 1 so the module's #If-scoped inspector hotkeys (Ctrl+Shift+I
+; control inspector, Ctrl+Shift+D dialog dump) are live for the viewer; we
+; still never call NB_ModuleInit, so no panel/timers start on their own.
+NB_Enabled := 1
 onedrivelocal := A_Temp . "\nb_demo_cprs_" . A_TickCount
 NB_TemplateDir := onedrivelocal
 NB_LogDir := onedrivelocal . "\Logs"

@@ -126,7 +126,11 @@ WriteFixtureAndExpectations()   ; template = fully-expanded save, Y-order
 ;     such timer). The watcher switches itself OFF once every hide-parent
 ;     is built, so post-apply enumerations run against a silent stub. ---
 SetTimer, WatchHideParents, 150
-SetTimer, StubSelfDestruct, -240000
+; Failsafe self-close only for the automated run (so a hung CI run cannot
+; wedge). In visual/interactive mode the dialog must stay open until the
+; user closes it, so no timed self-destruct there.
+if (!gVisual)
+    SetTimer, StubSelfDestruct, -240000
 return
 
 WatchHideParents:

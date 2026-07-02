@@ -60,7 +60,9 @@ To run the pieces manually instead of via the script: copy
 `AutoHotkeyU64.exe` to `CPRSChart.exe`, rename the `.ahk.txt` files to
 `.ahk`, launch `CPRSChart.exe e2e_cprs_stub.ahk`, then launch
 `AutoHotkeyU64.exe e2e_cprs.ahk` (or `playground_host.ahk`, or
-`demo_cprs_apply.ahk`). The script just automates that.
+`demo_cprs_apply.ahk`). For readable captions in the watch/playground
+scripts, set the environment variable `NB_E2E_VISUAL=1` before launching the
+stub (`set NB_E2E_VISUAL=1`). The runner script just automates all of this.
 
 ## 3. What is faithful, and what is not (read this)
 
