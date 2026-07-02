@@ -549,15 +549,22 @@ NB_ShowBothBars:
 return
 
 NB_ShowBarsDeferred:
+    ; Host labels are gosub'd DYNAMICALLY (variable + IsLabel) — a literal
+    ; `gosub !+z` to a host-owned label fails at LOAD time when the module is
+    ; loaded standalone (CI unit/e2e harnesses #Include it without the host).
     ; Top bar (Hyperdrive, Gui 7/8)
     savedHBO := HBO
     HBO := 0
-    gosub !+z
+    nbHostBarLbl := "!+z"
+    if IsLabel(nbHostBarLbl)
+        Gosub %nbHostBarLbl%
     HBO := savedHBO
     ; Bottom bar (Function keys, Gui 14)
     savedFBO := FBO
     FBO := 0
-    gosub !+h
+    nbHostBarLbl := "!+h"
+    if IsLabel(nbHostBarLbl)
+        Gosub %nbHostBarLbl%
     FBO := savedFBO
 return
 
@@ -682,7 +689,10 @@ NB_DebugLogChanged:
     GuiControlGet, chkVal, 84:, NB_DebugLogChk
     NB_DebugLogging := chkVal
     gosub NB_SaveSettings
-    gosub, writeit
+    ; host settings-writer label, gosub'd dynamically (see NB_ShowBarsDeferred)
+    nbHostWriteLbl := "writeit"
+    if IsLabel(nbHostWriteLbl)
+        Gosub %nbHostWriteLbl%
 return
 
 84GuiClose:
