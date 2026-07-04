@@ -1,19 +1,53 @@
 name: AHK Syntax Check & Build
 # CI skips dumps/ and logs/ via sparse-checkout
 
+env:
+  AHK_V1_VERSION: 1.1.37.02   # single source for every job that installs AHK v1
+
 on:
   push:
     paths:
       - '**.ahk'
       - '**.ahk.txt'
+      - 'tools/ci_lint.py'
       - '.github/workflows/ahk-ci.yml'
   pull_request:
     paths:
       - '**.ahk'
       - '**.ahk.txt'
+      - 'tools/ci_lint.py'
       - '.github/workflows/ahk-ci.yml'
 
 jobs:
+  lint:
+    name: Lint & Congruence Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            tools
+            .github
+          sparse-checkout-cone-mode: true
+
+      # The linter's own self-test first: seeds one known bug per check into
+      # copies of the real files and asserts the check fires (a regex tweak
+      # that neuters a check fails here instead of shipping silently).
+      - name: Lint self-test (seeded bugs)
+        run: python3 tools/test_ci_lint.py
+
+      # Channel rules: PRs are judged against their target branch, pushes
+      # against the pushed branch. Only master/stable trigger channel-label
+      # enforcement inside the linter; other branches get the generic checks.
+      # BRANCH goes through env (never inline in run:) — branch names are
+      # attacker-controlled on fork PRs and would otherwise be shell-injected.
+      - name: Run lint / congruence checks
+        env:
+          BRANCH: ${{ github.base_ref || github.ref_name }}
+        run: |
+          echo "Channel rules for branch: $BRANCH"
+          python3 tools/ci_lint.py --repo . --channel-branch "$BRANCH"
+
   syntax-check:
     name: Syntax Validation
     runs-on: windows-latest
@@ -37,7 +71,7 @@ jobs:
         run: |
           $ahkDir = "C:\ahk-v1"
           New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
-          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip"
+          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v$($env:AHK_V1_VERSION)/AutoHotkey_$($env:AHK_V1_VERSION).zip"
           Invoke-WebRequest -Uri $zipUrl -OutFile "$env:TEMP\ahk-v1.zip"
           Expand-Archive -Path "$env:TEMP\ahk-v1.zip" -DestinationPath $ahkDir -Force
           # Find the exe (could be AutoHotkeyU64.exe or AutoHotkey.exe depending on zip layout)
@@ -160,8 +194,9 @@ jobs:
           }
 
           foreach ($script in $scripts) {
-            $firstLines = Get-Content $script.FullName -TotalCount 5
-            $isV2 = $firstLines | Where-Object { $_ -match "#Requires AutoHotkey v2" }
+            # Scan the whole file: the #Requires directive is not always in
+            # the first few lines (NursingAddon scripts declare it late).
+            $isV2 = Select-String -Path $script.FullName -Pattern '#Requires\s+AutoHotkey\s+v2' -Quiet
 
             if (-not $isV2) {
               Write-Host "Skipping $($script.Name) (not a v2 script)"
@@ -170,8 +205,9 @@ jobs:
 
             Write-Host "Checking: $($script.FullName)"
 
+            # /validate is the v2 load-without-running switch (/iLib is v1-only)
             $proc = Start-Process -FilePath $ahk2 `
-              -ArgumentList "/ErrorStdOut=utf-8", "/iLib", "NUL", $script.FullName `
+              -ArgumentList "/ErrorStdOut=utf-8", "/validate", $script.FullName `
               -Wait -PassThru -NoNewWindow `
               -RedirectStandardError "$env:TEMP\ahk_stderr.txt" `
               -RedirectStandardOutput "$env:TEMP\ahk_stdout.txt"
@@ -226,7 +262,7 @@ jobs:
         run: |
           $ahkDir = "C:\ahk-v1"
           New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
-          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip"
+          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v$($env:AHK_V1_VERSION)/AutoHotkey_$($env:AHK_V1_VERSION).zip"
           Invoke-WebRequest -Uri $zipUrl -OutFile "$env:TEMP\ahk-v1.zip"
           Expand-Archive -Path "$env:TEMP\ahk-v1.zip" -DestinationPath $ahkDir -Force
           $exe = Get-ChildItem -Path $ahkDir -Filter "AutoHotkey*.exe" -Recurse | Select-Object -First 1
@@ -236,7 +272,7 @@ jobs:
         shell: pwsh
         run: |
           $ahk1 = $env:AHK1_EXE
-          $testFiles = Get-ChildItem -Path tests -Filter "test_*.ahk.txt" -Recurse
+          $testFiles = Get-ChildItem -Path tests -Filter "test_*.ahk" -Recurse
           $failed = @()
 
           if ($testFiles.Count -eq 0) {
@@ -247,11 +283,8 @@ jobs:
           foreach ($test in $testFiles) {
             Write-Host "Running: $($test.Name)"
 
-            $tempAhk = "$($test.FullName -replace '\.txt$', '')"
-            Copy-Item $test.FullName $tempAhk
-
             $proc = Start-Process -FilePath $ahk1 `
-              -ArgumentList "/ErrorStdOut", $tempAhk `
+              -ArgumentList "/ErrorStdOut", $test.FullName `
               -Wait -PassThru -NoNewWindow `
               -RedirectStandardError "$env:TEMP\test_stderr.txt" `
               -RedirectStandardOutput "$env:TEMP\test_stdout.txt"
@@ -264,8 +297,6 @@ jobs:
             if (Test-Path "$env:TEMP\test_stdout.txt") {
               $stdout = Get-Content "$env:TEMP\test_stdout.txt" -Raw
             }
-
-            Remove-Item $tempAhk -ErrorAction SilentlyContinue
 
             if ($stdout) { Write-Host $stdout }
 
@@ -287,6 +318,78 @@ jobs:
           Write-Host ""
           Write-Host "All unit tests passed"
 
+  gui-e2e:
+    name: GUI Smoke & E2E
+    runs-on: windows-latest   # x64 image: interactive desktop (windows-11-arm is headless - never move this job there)
+    needs: syntax-check
+    timeout-minutes: 20       # /ErrorStdOut prevents modal-dialog hangs, this is the backstop
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            tests
+            tools
+            .github
+          sparse-checkout-cone-mode: true
+
+      - name: Install AutoHotkey v1 (U64)
+        shell: pwsh
+        run: |
+          $ahkDir = "C:\ahk-v1"
+          New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
+          $zipUrl = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v$($env:AHK_V1_VERSION)/AutoHotkey_$($env:AHK_V1_VERSION).zip"
+          Invoke-WebRequest -Uri $zipUrl -OutFile "$env:TEMP\ahk-v1.zip"
+          Expand-Archive -Path "$env:TEMP\ahk-v1.zip" -DestinationPath $ahkDir -Force
+          # The e2e stubs use 64-bit WNDCLASSEXW offsets - pin the U64 build.
+          $exe = Get-ChildItem -Path $ahkDir -Filter "AutoHotkeyU64.exe" -Recurse | Select-Object -First 1
+          if (-not $exe) { Write-Host "::error::AutoHotkeyU64.exe not found"; exit 1 }
+          echo "AHK1_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
+
+      - name: Prepare stub executables
+        shell: pwsh
+        run: |
+          # Renamed copies so the module's ahk_exe detection sees the real
+          # process names (CPFlowsheets.exe / CPRSChart.exe).
+          Copy-Item $env:AHK1_EXE "$env:TEMP\CPFlowsheets.exe"
+          Copy-Item $env:AHK1_EXE "$env:TEMP\CPRSChart.exe"
+
+      # NOTE: AutoHotkey is a GUI-subsystem exe — PowerShell's call operator (&)
+      # does NOT wait for it and $LASTEXITCODE would be stale (steps would pass
+      # vacuously). Start-Process -Wait -PassThru is required.
+      - name: GUI smoke test (panel focus, F-key hide, drop-up follow)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath $env:AHK1_EXE -ArgumentList "/ErrorStdOut", "$PWD\tests\smoke_gui.ahk" `
+            -Wait -PassThru -NoNewWindow `
+            -RedirectStandardOutput "$env:TEMP\smoke_out.txt" -RedirectStandardError "$env:TEMP\smoke_err.txt"
+          Get-Content "$env:TEMP\smoke_out.txt" -ErrorAction SilentlyContinue
+          Get-Content "$env:TEMP\smoke_err.txt" -ErrorAction SilentlyContinue
+          exit $p.ExitCode
+
+      - name: CPFS e2e (stub Add Data form)
+        shell: pwsh
+        run: |
+          Start-Process "$env:TEMP\CPFlowsheets.exe" -ArgumentList "/ErrorStdOut", "$PWD\tests\e2e_cpfs_stub.ahk"
+          $p = Start-Process -FilePath $env:AHK1_EXE -ArgumentList "/ErrorStdOut", "$PWD\tests\e2e_cpfs.ahk" `
+            -Wait -PassThru -NoNewWindow `
+            -RedirectStandardOutput "$env:TEMP\cpfs_out.txt" -RedirectStandardError "$env:TEMP\cpfs_err.txt"
+          Get-Content "$env:TEMP\cpfs_out.txt" -ErrorAction SilentlyContinue
+          Get-Content "$env:TEMP\cpfs_err.txt" -ErrorAction SilentlyContinue
+          Stop-Process -Name CPFlowsheets -Force -ErrorAction SilentlyContinue
+          exit $p.ExitCode
+
+      - name: CPRS e2e (fake TfrmRemDlg via superclassed VCL classes)
+        shell: pwsh
+        run: |
+          Start-Process "$env:TEMP\CPRSChart.exe" -ArgumentList "/ErrorStdOut", "$PWD\tests\e2e_cprs_stub.ahk"
+          $p = Start-Process -FilePath $env:AHK1_EXE -ArgumentList "/ErrorStdOut", "$PWD\tests\e2e_cprs.ahk" `
+            -Wait -PassThru -NoNewWindow `
+            -RedirectStandardOutput "$env:TEMP\cprs_out.txt" -RedirectStandardError "$env:TEMP\cprs_err.txt"
+          Get-Content "$env:TEMP\cprs_out.txt" -ErrorAction SilentlyContinue
+          Get-Content "$env:TEMP\cprs_err.txt" -ErrorAction SilentlyContinue
+          Stop-Process -Name CPRSChart -Force -ErrorAction SilentlyContinue
+          exit $p.ExitCode
+
   compile-check:
     name: Compilation Check
     runs-on: windows-latest
@@ -297,7 +400,7 @@ jobs:
       - name: Compile latest v1 script
         uses: nukdokplex/autohotkey-build@v0.1
         with:
-          version: "1.1.37.02"
+          version: "${{ env.AHK_V1_VERSION }}"
           x64: true
           x86: false
           compression: none

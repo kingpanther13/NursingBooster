@@ -22,8 +22,8 @@
 ;
 ; OPTIONAL HOST INTEGRATION HOOKS (enhance behavior, not required):
 ;   - Add `winactive("NursingBoosterPanel")` to host's hotkey suppression checks
-;   - Add NB dropdown to host's Gui 14 (function bar) — call gosub NB_AddDropdownToGui14
-;   - Wrap host's sign hotkey with `Gosub NB_SignWrapper`
+;   - The NB drop-up menu (Gui 85) attaches itself next to the host's Gui 14
+;     (function bar) automatically via the NB_CheckGui14Dropdown timer
 ;
 ; ============================================================================================
 
@@ -62,6 +62,10 @@ NB_ModuleInit:
     NB_HK5_Action := ""
     NB_SettingsVisible := 0
     NB_PanelHwnd := 0
+    NB_MiniBarBuilt := false
+    NB_MiniDDLHwnd := 0
+    NB_MiniBarLastX := ""
+    NB_MiniBarLastY := ""
     CF_AppTitle := "CP Flowsheets Booster"
     CF_Detected := 0
     CF_SpyResults := []
@@ -97,7 +101,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev20  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev21  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -148,7 +152,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev20
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev21
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -181,7 +185,7 @@ NB_ModuleInit:
     SetTimer, NB_CheckFKeyHide, 30
 
     ; --- Start Gui 14 dropdown injection timer ---
-    SetTimer, NB_CheckGui14Dropdown, 2000
+    SetTimer, NB_CheckGui14Dropdown, 500
 
 return
 
@@ -190,36 +194,53 @@ return
 ; Periodically checks if the function bar (fxnbar) exists and adds
 ; the NB dropdown if it's missing. Handles the host rebuilding Gui 14
 ; via internal gosub calls that bypass any hotkey wrapper.
-; NB_Gui14LastHwnd tracks the last seen fxnbar HWND to detect rebuilds.
-
-NB_Gui14LastHwnd := 0
-NB_MiniBarBuilt := false
+; NB_MiniBarBuilt / NB_MiniDDLHwnd / NB_MiniBarLastX/Y are initialized
+; in NB_ModuleInit (statements between labels in an #Include'd module
+; never execute — only the host's auto-execute section runs).
 
 NB_CheckGui14Dropdown:
-    ; Check if fxnbar window exists — position our mini toolbar above it
+    ; Don't inherit the host's title match mode (its auto-execute leaves RegEx
+    ; as the thread default) — match "fxnbar"/"NB_MiniBar" as plain substrings.
+    SetTitleMatchMode, 2
+    ; If the drop-up list is currently open, leave the mini bar completely
+    ; alone: a WinMove or Destroy on the owner window closes the open list
+    ; out from under the user (the reported "menu closes by itself" bug).
+    if (NB_MiniBarBuilt && NB_MiniDDLHwnd) {
+        SendMessage, 0x0157, 0, 0,, ahk_id %NB_MiniDDLHwnd%  ; CB_GETDROPPEDSTATE
+        if (ErrorLevel = 1)
+            return
+    }
+    ; Check if fxnbar window exists — position our mini toolbar next to it
     IfWinExist, fxnbar
     {
         nbFxnHwnd := WinExist("fxnbar")
         WinGetPos, nbFxnX, nbFxnY, nbFxnW,, ahk_id %nbFxnHwnd%
+        ; dock position: right edge of the bar (single source for both branches)
+        nbMiniX := nbFxnX + nbFxnW + 2
+        nbMiniY := nbFxnY
         if (!NB_MiniBarBuilt) {
-            ; Build our own mini toolbar (Gui 85) — sits above the function bar
+            ; Build our own mini toolbar (Gui 85) — sits to the right of the function bar
             Gui, 85:Destroy
             Gui, 85:Color, F0F0F0
             Gui, 85:Font, s8 cBlack, Verdana
             NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
-            Gui, 85:Add, DropdownList, gNB_DropdownAction y0 w140 -Tabstop altsubmit vNB_DropdownChoice, %NB_MenuList%
+            Gui, 85:Add, DropdownList, gNB_DropdownAction y0 w140 -Tabstop altsubmit vNB_DropdownChoice HwndNB_MiniDDLHwnd, %NB_MenuList%
             Gui, 85:+AlwaysOnTop -Caption +ToolWindow +Owner +E0x08000000  ; WS_EX_NOACTIVATE
-            nbMiniX := nbFxnX + nbFxnW + 2
-            nbMiniY := nbFxnY
             Gui, 85:Show, x%nbMiniX% y%nbMiniY% h21 NA, NB_MiniBar
             NB_MiniBarBuilt := true
+            NB_MiniBarLastX := nbMiniX
+            NB_MiniBarLastY := nbMiniY
         } else {
             ; Keep mini bar positioned to the right of fxnbar
             IfWinExist, NB_MiniBar
             {
-                nbMiniX := nbFxnX + nbFxnW + 2
-                nbMiniY := nbFxnY
-                WinMove, NB_MiniBar,, %nbMiniX%, %nbMiniY%
+                ; Only move when the bar actually moved — an unconditional
+                ; WinMove every tick disturbs the control for no reason.
+                if (nbMiniX != NB_MiniBarLastX || nbMiniY != NB_MiniBarLastY) {
+                    WinMove, NB_MiniBar,, %nbMiniX%, %nbMiniY%
+                    NB_MiniBarLastX := nbMiniX
+                    NB_MiniBarLastY := nbMiniY
+                }
             }
             else
             {
@@ -234,6 +255,7 @@ NB_CheckGui14Dropdown:
         if (NB_MiniBarBuilt) {
             Gui, 85:Destroy
             NB_MiniBarBuilt := false
+            NB_MiniDDLHwnd := 0
         }
     }
 return
@@ -303,7 +325,16 @@ NB_TogglePanel:
     }
     else
     {
-        Gui, 80:Show
+        ; Hiding above stays allowed after disable (the host's disable path
+        ; gosubs here to hide the panel), but never SHOW while disabled —
+        ; ^+b stays registered until the host unhooks it.
+        if (!NB_Enabled)
+            return
+        ; NA: never activate the panel. WS_EX_NOACTIVATE only blocks *mouse*
+        ; activation — a plain Gui Show still activates programmatically, which
+        ; pulls focus off CPRS and makes the host's toolbar watchdog tear down
+        ; the bottom function bar (it only whitelists its own bars).
+        Gui, 80:Show, NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
         NB_SignWasVisible := 0  ; clear auto-hide state so the next F-key hide isn't blocked
@@ -502,7 +533,10 @@ NB_ToggleSettings:
                 settingsY := nbPosY + nbPosH + 2
             }
         }
-        Gui, 84:Show, x%settingsX% y%settingsY%
+        ; NA: keep CPRS active so the host's toolbar watchdog doesn't hide the
+        ; bottom bar while settings are open. Checkboxes/sliders work by mouse
+        ; without activation.
+        Gui, 84:Show, x%settingsX% y%settingsY% NA
         NB_SettingsVisible := 1
     }
 return
@@ -514,15 +548,22 @@ NB_ShowBothBars:
 return
 
 NB_ShowBarsDeferred:
+    ; Host labels are gosub'd DYNAMICALLY (variable + IsLabel) — a literal
+    ; `gosub !+z` to a host-owned label fails at LOAD time when the module is
+    ; loaded standalone (CI unit/e2e harnesses #Include it without the host).
     ; Top bar (Hyperdrive, Gui 7/8)
     savedHBO := HBO
     HBO := 0
-    gosub !+z
+    nbHostBarLbl := "!+z"
+    if IsLabel(nbHostBarLbl)
+        Gosub %nbHostBarLbl%
     HBO := savedHBO
     ; Bottom bar (Function keys, Gui 14)
     savedFBO := FBO
     FBO := 0
-    gosub !+h
+    nbHostBarLbl := "!+h"
+    if IsLabel(nbHostBarLbl)
+        Gosub %nbHostBarLbl%
     FBO := savedFBO
 return
 
@@ -647,7 +688,10 @@ NB_DebugLogChanged:
     GuiControlGet, chkVal, 84:, NB_DebugLogChk
     NB_DebugLogging := chkVal
     gosub NB_SaveSettings
-    gosub, writeit
+    ; host settings-writer label, gosub'd dynamically (see NB_ShowBarsDeferred)
+    nbHostWriteLbl := "writeit"
+    if IsLabel(nbHostWriteLbl)
+        Gosub %nbHostWriteLbl%
 return
 
 84GuiClose:
@@ -735,7 +779,7 @@ NB_HK5_Run:
 return
 
 NB_RunHotkeyAction(action, slotName) {
-    global NB_TemplateDir, CF_TemplateDir, NB_AppTitle
+    global NB_TemplateDir, CF_TemplateDir, NB_AppTitle, CF_ChainAddData, CF_AddDataDelay
     if (action = "") {
         ToolTip, %slotName% not configured - click [...] to set up
         SetTimer, NB_ClearToolTip, -2000
@@ -769,7 +813,7 @@ NB_RunHotkeyAction(action, slotName) {
 }
 
 ;============================================================================================
-; QUICK ACTION SETUP DIALOG (Gui 71)
+; QUICK ACTION SETUP DIALOG (Gui 83)
 ;============================================================================================
 
 NB_HK_Setup:
@@ -852,16 +896,19 @@ NB_HKSetup_Save:
     global NB_HK3_Label, NB_HK3_Action, NB_HK4_Label, NB_HK4_Action
     global NB_HK5_Label, NB_HK5_Action
 
-    ; Convert display text back to action strings
-    NB_HK1_Label := NB_HKSetup_L1
+    ; Convert display text back to action strings.
+    ; Labels feed a |-delimited DropDownList — strip | (breaks item indexing)
+    ; and default empty labels (an empty item creates a stray || which the DDL
+    ; treats as a default-selection marker).
+    NB_HK1_Label := NB_CleanHKLabel(NB_HKSetup_L1, "Quick 1")
     NB_HK1_Action := NB_HKParseActionChoice(NB_HKSetup_A1)
-    NB_HK2_Label := NB_HKSetup_L2
+    NB_HK2_Label := NB_CleanHKLabel(NB_HKSetup_L2, "Quick 2")
     NB_HK2_Action := NB_HKParseActionChoice(NB_HKSetup_A2)
-    NB_HK3_Label := NB_HKSetup_L3
+    NB_HK3_Label := NB_CleanHKLabel(NB_HKSetup_L3, "Quick 3")
     NB_HK3_Action := NB_HKParseActionChoice(NB_HKSetup_A3)
-    NB_HK4_Label := NB_HKSetup_L4
+    NB_HK4_Label := NB_CleanHKLabel(NB_HKSetup_L4, "Quick 4")
     NB_HK4_Action := NB_HKParseActionChoice(NB_HKSetup_A4)
-    NB_HK5_Label := NB_HKSetup_L5
+    NB_HK5_Label := NB_CleanHKLabel(NB_HKSetup_L5, "Quick 5")
     NB_HK5_Action := NB_HKParseActionChoice(NB_HKSetup_A5)
 
     ; Update button labels on panel
@@ -884,6 +931,11 @@ return
 NB_HKSetup_Cancel:
     Gui, 83:Destroy
 return
+
+NB_CleanHKLabel(label, fallback) {
+    label := Trim(StrReplace(label, "|", ""))
+    return label != "" ? label : fallback
+}
 
 NB_HKParseActionChoice(displayText) {
     ; Convert dropdown display text to stored action string
@@ -913,27 +965,28 @@ NB_LoadHotkeyConfig:
     if (hkJson = "")
         return
 
-    ; Parse each slot with regex (guard against empty labels — they break dropdown indexing)
+    ; Parse each slot with regex (guard against empty labels — they break dropdown indexing).
+    ; Values were escaped with NB_EscJson on save, so unescape on the way in.
     if (RegExMatch(hkJson, """label1"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK1_Label := m1
+        NB_HK1_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action1"":\s*""((?:[^""\\]|\\.)*)""", m))
-        NB_HK1_Action := m1
+        NB_HK1_Action := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """label2"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK2_Label := m1
+        NB_HK2_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action2"":\s*""((?:[^""\\]|\\.)*)""", m))
-        NB_HK2_Action := m1
+        NB_HK2_Action := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """label3"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK3_Label := m1
+        NB_HK3_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action3"":\s*""((?:[^""\\]|\\.)*)""", m))
-        NB_HK3_Action := m1
+        NB_HK3_Action := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """label4"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK4_Label := m1
+        NB_HK4_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action4"":\s*""((?:[^""\\]|\\.)*)""", m))
-        NB_HK4_Action := m1
+        NB_HK4_Action := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """label5"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK5_Label := m1
+        NB_HK5_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action5"":\s*""((?:[^""\\]|\\.)*)""", m))
-        NB_HK5_Action := m1
+        NB_HK5_Action := NB_UnescJson(m1)
 return
 
 NB_SaveHotkeyConfig:
@@ -984,7 +1037,10 @@ return
 ;============================================================================================
 
 NB_CheckCPRS:
-    Critical
+    ; No Critical here: it made this 3 s status scan uninterruptible, starving
+    ; the 30 ms NB_CheckFKeyHide poll for the whole body — exactly the delayed
+    ; F-key hide dev19/dev20 were fixing. Everything below is idempotent
+    ; detection reads plus a status-text update; re-running is harmless.
     ; --- CPRS Detection ---
     cprsStatus := "CPRS: Not detected"
     IfWinExist, ahk_exe CPRSChart.exe
@@ -1062,8 +1118,18 @@ return
 
 
 NB_RestorePanelAfterFKey:
+    ; If NB was disabled while this one-shot was pending (sign, then disable
+    ; within the 6s window), never re-show: with ^+b unhooked and the hide
+    ; poll off, the AlwaysOnTop panel would sit over CPRS with no way to
+    ; dismiss it. Mirrors the NB_TogglePanel show-guard.
+    if (!NB_Enabled) {
+        NB_SignWasVisible := 0
+        return
+    }
     if (NB_SignWasVisible = 1) {
-        Gui, 80:Show
+        ; NA: restore without activating — stealing focus here would yank the
+        ; user out of whatever they moved on to after signing.
+        Gui, 80:Show, NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         NB_BoosterGuiVisible := 1
         NB_SignWasVisible := 0
@@ -1246,7 +1312,11 @@ return
 ;============================================================================================
 
 NB_ApplyTemplate(templatePath) {
+    ; NB_BoosterGuiVisible/NB_PanelHwnd have no top-level declaration, so without
+    ; them here the function reads blank locals and the AlwaysOnTop re-assert
+    ; below never fired (panel lost topmost after every apply).
     global NB_AppTitle, NB_TemplateDir, NB_ApplySpeed, NB_LeafSpeed, NB_SpeedOverride, NB_ApplyCancelled
+    global NB_BoosterGuiVisible, NB_PanelHwnd, NB_DebugLogging
     dlgHwnd := NB_FindActiveDialogWindow()
     if (!dlgHwnd)
         return
@@ -1272,10 +1342,11 @@ NB_ApplyTemplate(templatePath) {
     ; Check if template was saved from a different dialogue type
     dialogueMatched := true
     if (RegExMatch(content, """source_dialogue"":\s*""((?:[^""\\]|\\.)*)""", sdM)) {
+        savedDlgTitle := NB_UnescJson(sdM1)
         WinGetTitle, currentDlgTitle, ahk_id %dlgHwnd%
-        if (sdM1 != "" && currentDlgTitle != "" && sdM1 != currentDlgTitle) {
+        if (savedDlgTitle != "" && currentDlgTitle != "" && savedDlgTitle != currentDlgTitle) {
             dialogueMatched := false
-            MsgBox, 262452, %NB_AppTitle% - Dialogue Mismatch, This template was saved from:`n%sdM1%`n`nBut you are applying it to:`n%currentDlgTitle%`n`nAre you sure you want to continue?
+            MsgBox, 262452, %NB_AppTitle% - Dialogue Mismatch, This template was saved from:`n%savedDlgTitle%`n`nBut you are applying it to:`n%currentDlgTitle%`n`nAre you sure you want to continue?
             IfMsgBox, No
                 return
         }
@@ -1332,6 +1403,10 @@ NB_ApplyTemplate(templatePath) {
     ; Enumerate ALL checkboxes in the scroll box (flat, Y-sorted)
     liveItems := NB_EnumDescendantCheckboxes(scrollBox)
 
+    if (NB_DebugLogging)
+        NB__ApplyDebug("start dlg=" . dlgHwnd . " scrollBox=" . scrollBox
+            . " tpl=" . tplCount . " live=" . liveItems.Length())
+
     ToolTip, Applying %tplCount% items... (Right-click to cancel)
 
     ; Pause timers during apply to prevent interference
@@ -1351,9 +1426,16 @@ NB_ApplyTemplate(templatePath) {
     tplPos := 1
     while (tplPos <= tplCount)
     {
-        ; Cancel on right-click
+        ; Cancel on right-click. Must undo everything the apply set up above:
+        ; the paused timers stayed off on this path before, killing the F-key
+        ; auto-hide, status updates, and mini-bar tracking until reload.
         if (NB_ApplyCancelled) {
             Hotkey, ~RButton, NB_CancelApplyHotkey, Off
+            SetTimer, NB_CheckCPRS, 3000
+            SetTimer, NB_CheckFKeyHide, 30
+            SetTimer, NB_CheckGui14Dropdown, 500
+            if (NB_BoosterGuiVisible = 1)
+                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
             ToolTip, Template apply cancelled at item %tplPos%/%tplCount%.
             SetTimer, NB_ClearToolTip, -3000
             return
@@ -1361,6 +1443,8 @@ NB_ApplyTemplate(templatePath) {
 
         liveCount := liveItems.Length()
         if (tplPos > liveCount) {
+            if (NB_DebugLogging)
+                NB__ApplyDebug("pos=" . tplPos . " NOT FOUND (live=" . liveCount . ")")
             totalNotFound++
             tplPos++
             continue
@@ -1403,6 +1487,9 @@ NB_ApplyTemplate(templatePath) {
                 ; Only re-enumerate if count actually changed
                 Sleep, %effectiveLeafSpeed%
                 newItems := NB_EnumDescendantCheckboxes(scrollBox)
+                if (NB_DebugLogging)
+                    NB__ApplyDebug("pos=" . tplPos . " toggled hwnd=" . nb_tmpHwnd
+                        . " re-enum=" . newItems.Length() . " (was " . liveCount . ")")
                 if (newItems.Length() != liveCount) {
                     ; Structure changed — use new list
                     liveItems := newItems
@@ -1442,7 +1529,7 @@ NB_ApplyTemplate(templatePath) {
     ; Resume timers
     SetTimer, NB_CheckCPRS, 3000
     SetTimer, NB_CheckFKeyHide, 30
-    SetTimer, NB_CheckGui14Dropdown, 2000
+    SetTimer, NB_CheckGui14Dropdown, 500
 
     ; Re-assert AlwaysOnTop on the panel — WinActivate on CPRS dialog strips it
     if (NB_BoosterGuiVisible = 1)
@@ -1457,6 +1544,20 @@ return
 ;============================================================================================
 ; NURSING BOOSTER - CHECKBOX STATE LOGGING
 ;============================================================================================
+
+; Append one line to the apply-debug trace (only called when NB_DebugLogging).
+; Separate from the APPLY_*.txt snapshots: this traces the walk itself, which
+; is what's needed to diagnose "N not found" reports.
+NB__ApplyDebug(msg) {
+    global NB_LogDir
+    FormatTime, nbDbgTime,, HH:mm:ss
+    logLine := nbDbgTime . " " . msg . "`n"
+    ; NOTE: name must not match APPLY_*.txt — Windows file patterns are
+    ; case-insensitive, so "apply_debug.txt" would collide with the
+    ; APPLY_<timestamp>.txt snapshot logs when globbing.
+    logPath := NB_LogDir . "\walk_trace.txt"
+    FileAppend, %logLine%, %logPath%, UTF-8
+}
 
 NB__LogCheckboxStates(action, groupBoxHwnds, templateNameOrPath := "", dialogTitle := "", statA := 0, statB := 0) {
     global NB_LogDir
@@ -1513,61 +1614,6 @@ NB__LogCheckboxStates(action, groupBoxHwnds, templateNameOrPath := "", dialogTit
 }
 
 
-;============================================================================================
-; NURSING BOOSTER - GROUP FINGERPRINTING
-;============================================================================================
-
-NB__GroupFingerprint(items) {
-    labels := []
-    depthCounts := {}
-    for k, item in items {
-        lbl := item.HasKey("label") ? item.label : ""
-        if (lbl != "")
-            labels.Push(lbl)
-        d := item.HasKey("depth") ? item.depth : 0
-        if (!depthCounts.HasKey(d))
-            depthCounts[d] := 0
-        depthCounts[d] := depthCounts[d] + 1
-    }
-    ; Sort labels alphabetically (insertion sort)
-    if (labels.Length() > 1) {
-        Loop, % labels.Length() - 1
-        {
-            i := A_Index + 1
-            key := labels[i]
-            j := i - 1
-            while (j >= 1 && labels[j] > key) {
-                labels[j + 1] := labels[j]
-                j--
-            }
-            labels[j + 1] := key
-        }
-    }
-    ; Sort depth keys
-    depthKeys := []
-    for k in depthCounts
-        depthKeys.Push(k)
-    if (depthKeys.Length() > 1) {
-        Loop, % depthKeys.Length() - 1
-        {
-            i := A_Index + 1
-            key := depthKeys[i]
-            j := i - 1
-            while (j >= 1 && depthKeys[j] > key) {
-                depthKeys[j + 1] := depthKeys[j]
-                j--
-            }
-            depthKeys[j + 1] := key
-        }
-    }
-    fp := items.Length() . "|"
-    for k, lbl in labels
-        fp .= lbl . ","
-    fp .= "|"
-    for k, dk in depthKeys
-        fp .= dk . ":" . depthCounts[dk] . ","
-    return fp
-}
 
 
 ;============================================================================================
@@ -1926,7 +1972,7 @@ return
 
 
 ;============================================================================================
-; NURSING BOOSTER - TOP-LEVEL PARENT DISCOVERY
+; NURSING BOOSTER - SCROLL BOX DISCOVERY
 ;============================================================================================
 
 NB_FindVisibleScrollBox(dlgHwnd) {
@@ -1944,40 +1990,67 @@ NB_FindVisibleScrollBox(dlgHwnd) {
     return 0
 }
 
-NB_EnumTopLevelParents(scrollBoxHwnd) {
-    parents := []
-    seenDirectParent := false
-    child := DllCall("GetWindow", "Ptr", scrollBoxHwnd, "UInt", 5, "Ptr")
-    while (child) {
-        VarSetCapacity(buf, 256, 0)
-        DllCall("GetClassName", "Ptr", child, "Str", buf, "Int", 256)
-        if (buf = "TCPRSDialogParentCheckBox") {
-            seenDirectParent := true
-            SendMessage, 0x00F0, 0, 0,, ahk_id %child%
-            checked := ErrorLevel ? true : false
-            parents.Push({hwnd: child, checked: checked})
-        } else if (buf = "TGroupBox" && seenDirectParent) {
-            gbChild := DllCall("GetWindow", "Ptr", child, "UInt", 5, "Ptr")
-            while (gbChild) {
-                VarSetCapacity(gbBuf, 256, 0)
-                DllCall("GetClassName", "Ptr", gbChild, "Str", gbBuf, "Int", 256)
-                if (gbBuf = "TCPRSDialogParentCheckBox") {
-                    SendMessage, 0x00F0, 0, 0,, ahk_id %gbChild%
-                    checked := ErrorLevel ? true : false
-                    parents.Push({hwnd: gbChild, checked: checked})
-                }
-                gbChild := DllCall("GetWindow", "Ptr", gbChild, "UInt", 2, "Ptr")
-            }
-        }
-        child := DllCall("GetWindow", "Ptr", child, "UInt", 2, "Ptr")
-    }
-    return parents
-}
 
 
 ;============================================================================================
 ; NURSING BOOSTER - TEMPLATE PARSING
 ;============================================================================================
+
+; --- String-aware JSON scanning helpers -----------------------------------
+; The old parsers counted [ ] { } wherever they appeared, so a checkbox label
+; containing a bracket or brace silently corrupted the parse. These helpers
+; skip the contents of quoted strings (honoring \" escapes).
+
+; Position of the next occurrence of needle (a single char) at or after
+; startPos that is OUTSIDE any quoted string; 0 if none.
+NB_JsonFind(content, needle, startPos) {
+    inStr := false
+    len := StrLen(content)
+    pos := startPos
+    while (pos <= len) {
+        ch := SubStr(content, pos, 1)
+        if (inStr) {
+            if (ch = "\")
+                pos++
+            else if (ch = """")
+                inStr := false
+        } else if (ch = """") {
+            inStr := true
+        } else if (ch = needle) {
+            return pos
+        }
+        pos++
+    }
+    return 0
+}
+
+; Position of the closer matching the opener at openPos, ignoring characters
+; inside quoted strings; 0 if unbalanced.
+NB_JsonMatch(content, openPos, openCh, closeCh) {
+    inStr := false
+    depth := 0
+    len := StrLen(content)
+    pos := openPos
+    while (pos <= len) {
+        ch := SubStr(content, pos, 1)
+        if (inStr) {
+            if (ch = "\")
+                pos++
+            else if (ch = """")
+                inStr := false
+        } else if (ch = """") {
+            inStr := true
+        } else if (ch = openCh) {
+            depth++
+        } else if (ch = closeCh) {
+            depth--
+            if (depth = 0)
+                return pos
+        }
+        pos++
+    }
+    return 0
+}
 
 NB_ParseFlatCheckboxes(jsonContent) {
     items := []
@@ -1987,33 +2060,20 @@ NB_ParseFlatCheckboxes(jsonContent) {
     if (!cPos)
         return items
 
-    arrStart := InStr(jsonContent, "[",, cPos)
+    arrStart := NB_JsonFind(jsonContent, "[", cPos + StrLen("""checkboxes"""))
     if (!arrStart)
         return items
 
-    ; Find matching ]
-    depth := 1
-    scanPos := arrStart + 1
-    arrEnd := 0
-    while (scanPos <= StrLen(jsonContent) && depth > 0) {
-        ch := SubStr(jsonContent, scanPos, 1)
-        if (ch = "[")
-            depth++
-        else if (ch = "]")
-            depth--
-        if (depth = 0)
-            arrEnd := scanPos
-        scanPos++
-    }
+    arrEnd := NB_JsonMatch(jsonContent, arrStart, "[", "]")
     if (!arrEnd)
         return items
 
-    ; Parse each checkbox object
+    ; Parse each checkbox object (string-aware: labels may contain {}[])
     itemPos := arrStart
-    while (itemPos := InStr(jsonContent, "{",, itemPos + 1)) {
+    while (itemPos := NB_JsonFind(jsonContent, "{", itemPos + 1)) {
         if (itemPos > arrEnd)
             break
-        itemEnd := InStr(jsonContent, "}",, itemPos)
+        itemEnd := NB_JsonMatch(jsonContent, itemPos, "{", "}")
         if (!itemEnd)
             break
         itemStr := SubStr(jsonContent, itemPos, itemEnd - itemPos + 1)
@@ -2035,7 +2095,7 @@ NB_ParseFlatCheckboxes(jsonContent) {
 
         label := ""
         if (RegExMatch(itemStr, """label"":\s*""((?:[^""\\]|\\.)*)""", lblM))
-            label := lblM1
+            label := NB_UnescJson(lblM1)
 
         items.Push({idx: idx, cls: cls, checked: checked, label: label, depth: depthVal})
         itemPos := itemEnd
@@ -2044,31 +2104,6 @@ NB_ParseFlatCheckboxes(jsonContent) {
     return items
 }
 
-NB_ParseTopLevelParents(jsonContent) {
-    states := []
-    pos := InStr(jsonContent, """topLevelParents""")
-    if (!pos)
-        return states
-    arrStart := InStr(jsonContent, "[",, pos)
-    arrEnd := InStr(jsonContent, "]",, arrStart)
-    if (!arrStart || !arrEnd)
-        return states
-    arrStr := SubStr(jsonContent, arrStart + 1, arrEnd - arrStart - 1)
-    searchPos := 1
-    while (searchPos <= StrLen(arrStr)) {
-        chunk := SubStr(arrStr, searchPos, 6)
-        if (SubStr(chunk, 1, 4) = "true") {
-            states.Push(true)
-            searchPos += 4
-        } else if (SubStr(chunk, 1, 5) = "false") {
-            states.Push(false)
-            searchPos += 5
-        } else {
-            searchPos++
-        }
-    }
-    return states
-}
 
 ; ---------------------------------------------------------------------------
 ; TEMPLATE SPEED HELPERS (per-template speed settings)
@@ -2107,7 +2142,12 @@ NB_RefreshSettingsTplList() {
     GuiControl, 84:, NB_SettingsTplDDL, |%list%
 }
 
+; NOTE (all four speed helpers): check FileExist before FileRead. A failing
+; FileRead inside a `try` block throws in AHK v1 instead of setting
+; ErrorLevel, so the guard keeps these functions safe under any caller.
 NB_ReadTemplateSpeed(filePath) {
+    if (!FileExist(filePath))
+        return 600
     FileRead, content, %filePath%
     if (ErrorLevel)
         return 600
@@ -2117,6 +2157,8 @@ NB_ReadTemplateSpeed(filePath) {
 }
 
 NB_WriteTemplateSpeed(filePath, speed) {
+    if (!FileExist(filePath))
+        return false
     FileRead, content, %filePath%
     if (ErrorLevel)
         return false
@@ -2135,6 +2177,8 @@ NB_WriteTemplateSpeed(filePath, speed) {
 }
 
 NB_ReadTemplateLeafSpeed(filePath) {
+    if (!FileExist(filePath))
+        return 50
     FileRead, content, %filePath%
     if (ErrorLevel)
         return 50
@@ -2144,6 +2188,8 @@ NB_ReadTemplateLeafSpeed(filePath) {
 }
 
 NB_WriteTemplateLeafSpeed(filePath, speed) {
+    if (!FileExist(filePath))
+        return false
     FileRead, content, %filePath%
     if (ErrorLevel)
         return false
@@ -2163,104 +2209,6 @@ NB_WriteTemplateLeafSpeed(filePath, speed) {
     f.Write(content)
     f.Close()
     return true
-}
-
-; Parse groups array from format-3 JSON
-NB_ParseGroups(jsonContent) {
-    groups := []
-
-    gPos := InStr(jsonContent, """groups""")
-    if (!gPos)
-        return groups
-
-    gArrStart := InStr(jsonContent, "[",, gPos)
-    if (!gArrStart)
-        return groups
-
-    ; Find matching ] using depth counting
-    depth := 1
-    scanPos := gArrStart + 1
-    gArrEnd := 0
-    while (scanPos <= StrLen(jsonContent) && depth > 0) {
-        ch := SubStr(jsonContent, scanPos, 1)
-        if (ch = "[")
-            depth++
-        else if (ch = "]")
-            depth--
-        if (depth = 0)
-            gArrEnd := scanPos
-        scanPos++
-    }
-    if (!gArrEnd)
-        return groups
-
-    ; Find each group object
-    searchPos := gArrStart
-    while (true) {
-        cbPos := InStr(jsonContent, """checkboxes""",, searchPos + 1)
-        if (!cbPos || cbPos > gArrEnd)
-            break
-
-        cbArrStart := InStr(jsonContent, "[",, cbPos)
-        if (!cbArrStart || cbArrStart > gArrEnd)
-            break
-
-        ; Find matching ]
-        cbDepth := 1
-        cbScan := cbArrStart + 1
-        cbArrEnd := 0
-        while (cbScan <= StrLen(jsonContent) && cbDepth > 0) {
-            c := SubStr(jsonContent, cbScan, 1)
-            if (c = "[")
-                cbDepth++
-            else if (c = "]")
-                cbDepth--
-            if (cbDepth = 0)
-                cbArrEnd := cbScan
-            cbScan++
-        }
-        if (!cbArrEnd)
-            break
-
-        ; Parse checkbox items within this group
-        groupItems := []
-        itemPos := cbArrStart
-        while (itemPos := InStr(jsonContent, "{",, itemPos + 1)) {
-            if (itemPos > cbArrEnd)
-                break
-            itemEnd := InStr(jsonContent, "}",, itemPos)
-            if (!itemEnd)
-                break
-            itemStr := SubStr(jsonContent, itemPos, itemEnd - itemPos + 1)
-
-            idx := 0
-            if (RegExMatch(itemStr, """idx"":\s*(\d+)", idxM))
-                idx := idxM1 + 0
-
-            cls := ""
-            if (RegExMatch(itemStr, """cls"":\s*""([^""]*)""", clsM))
-                cls := clsM1
-
-            checked := (InStr(itemStr, """checked"": true") || InStr(itemStr, """checked"":true"))
-                ? true : false
-
-            depthVal := 0
-            if (RegExMatch(itemStr, """depth"":\s*(\d+)", depM))
-                depthVal := depM1 + 0
-
-            label := ""
-            if (RegExMatch(itemStr, """label"":\s*""((?:[^""\\]|\\.)*)""", lblM))
-                label := lblM1
-
-            groupItems.Push({idx: idx, cls: cls, checked: checked, label: label, depth: depthVal})
-            itemPos := itemEnd
-        }
-
-        groups.Push(groupItems)
-        searchPos := cbArrEnd
-    }
-
-    return groups
 }
 
 
@@ -2415,6 +2363,19 @@ NB_EscJson(str) {
     str := StrReplace(str, "`r", "\r")
     str := StrReplace(str, "`t", "\t")
     return """" . str . """"
+}
+
+; Reverse of NB_EscJson for values read back out of our JSON files.
+; \\ is stashed as a placeholder first so \\n round-trips as \ + n,
+; not as a newline.
+NB_UnescJson(str) {
+    str := StrReplace(str, "\\", Chr(1))
+    str := StrReplace(str, "\""", """")
+    str := StrReplace(str, "\n", "`n")
+    str := StrReplace(str, "\r", "`r")
+    str := StrReplace(str, "\t", "`t")
+    str := StrReplace(str, Chr(1), "\")
+    return str
 }
 
 ; Attempt to resolve parent checkbox label. CPRS sets parent CB Caption to ' '
@@ -3514,7 +3475,7 @@ CF_BtnLoadTemplate:
         return
     }
 
-    ; Show picker GUI (using Gui 69 to avoid conflicts)
+    ; Show picker GUI (Gui 82)
     Gui, 82:Destroy
     Gui, 82:+AlwaysOnTop
     Gui, 82:Font, s9, Segoe UI
@@ -3559,7 +3520,10 @@ CF_CancelLoad:
 return
 
 CF_ApplyTemplate(templatePath) {
+    ; Same as NB_ApplyTemplate: NB_BoosterGuiVisible/NB_PanelHwnd must be declared
+    ; or the final AlwaysOnTop re-assert reads blank locals and never fires.
     global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride, CF_AutoSaveDelay, NB_ApplyCancelled
+    global NB_BoosterGuiVisible, NB_PanelHwnd, CF_AutoSave, NB_DebugLogging, CF_ChainAddData, CF_AddDataDelay
 
     targetHwnd := CF_FindAddDataWindow()
     if (!targetHwnd) {
@@ -3612,6 +3576,10 @@ CF_ApplyTemplate(templatePath) {
 
     if (liveControls.Length() = 0) {
         MsgBox, 48, %CF_AppTitle%, No controls found in the current window.
+        ; the WinActivate above stripped the panel's topmost — restore it
+        ; on this and every other exit below (same thesis as the NB cancel fix)
+        if (NB_BoosterGuiVisible = 1)
+            WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
         return
     }
 
@@ -3632,6 +3600,8 @@ CF_ApplyTemplate(templatePath) {
         ; Cancel template apply on right-click
         if (NB_ApplyCancelled) {
             Hotkey, ~RButton, NB_CancelApplyHotkey, Off
+            if (NB_BoosterGuiVisible = 1)
+                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
             ToolTip, Template apply cancelled at control %ti%/%cfTotalTpl%.
             SetTimer, CF_ClearToolTip, -3000
             return
@@ -3660,60 +3630,9 @@ CF_ApplyTemplate(templatePath) {
         ToolTip, Applying control %ti%/%cfTotalTpl%: %cfTplLabel%
 
         ; Find best matching live control (that hasn't been claimed yet)
-        bestLiveIdx := 0
-        bestScore := 0
-        bestYDist := 999999
-
-        for li, liveCtrl in liveControls {
-            ; Skip already-claimed controls
-            if (cfClaimed[li])
-                continue
-
-            ; Extract live control properties to plain variables
-            cfLiveType := liveCtrl.type
-            cfLiveLabel := liveCtrl.label
-            cfLiveY := liveCtrl.y
-            cfLiveParentLabel := liveCtrl.parentLabel
-
-            ; Must be same type (checklist matches checklist)
-            if (cfLiveType != cfTplType)
-                continue
-
-            score := 0
-
-            ; Label match (highest priority)
-            if (cfTplLabel != "" && cfLiveLabel = cfTplLabel) {
-                score := 100
-            }
-            else if (cfTplLabel != "" && cfLiveLabel != "" && InStr(cfLiveLabel, cfTplLabel)) {
-                score := 70
-            }
-            else if (cfTplLabel != "" && cfLiveLabel != "" && InStr(cfTplLabel, cfLiveLabel)) {
-                score := 60
-            }
-
-            ; Y-position proximity bonus (if labels don't match, use position)
-            if (score = 0 && cfTplLabel = "" && cfLiveLabel = "") {
-                yDiff := Abs(cfLiveY - cfTplY)
-                if (yDiff < 20)
-                    score := 50
-                else if (yDiff < 50)
-                    score := 30
-            }
-
-            ; For radios, also check group label
-            if (cfTplType = "radio" && cfTplGroupLabel != "" && cfLiveParentLabel = cfTplGroupLabel) {
-                score += 20
-            }
-
-            ; When scores tie, prefer the one closest in Y position
-            yDist := Abs(cfLiveY - cfTplY)
-            if (score > bestScore || (score = bestScore && score > 0 && yDist < bestYDist)) {
-                bestScore := score
-                bestLiveIdx := li
-                bestYDist := yDist
-            }
-        }
+        cfMatch := CF_FindBestMatch(tplCtrl, liveControls, cfClaimed)
+        bestLiveIdx := cfMatch.idx
+        bestScore := cfMatch.score
 
         if (bestLiveIdx = 0 || bestScore < 30) {
             totalNotFound++
@@ -3782,6 +3701,8 @@ CF_ApplyTemplate(templatePath) {
     if (CF_AutoSave && totalApplied > 0) {
         ; Check if Esc/right-click was pressed at any point during apply
         if (cfAutoSaveCancelled || NB_ApplyCancelled || GetKeyState("Escape", "P")) {
+            if (NB_BoosterGuiVisible = 1)
+                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
             ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
             SetTimer, CF_ClearToolTip, -3000
             return
@@ -3791,6 +3712,8 @@ CF_ApplyTemplate(templatePath) {
         Sleep, %CF_AutoSaveDelay%
         ; Re-check cancel after delay
         if (NB_ApplyCancelled || GetKeyState("Escape", "P")) {
+            if (NB_BoosterGuiVisible = 1)
+                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
             ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
             SetTimer, CF_ClearToolTip, -3000
             return
@@ -3813,6 +3736,81 @@ CF_ApplyTemplate(templatePath) {
     ; Re-assert AlwaysOnTop on the panel — WinActivate on CPFS dialog strips it
     if (NB_BoosterGuiVisible = 1)
         WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
+}
+
+
+;============================================================================================
+; CF - TEMPLATE-TO-LIVE CONTROL MATCHING
+;
+; Pure scoring logic, extracted from CF_ApplyTemplate so it is unit-testable.
+; tplCtrl: parsed template control (type/label/y/group_label fields).
+; liveControls: array from CF_EnumFormControls (type/label/y/parentLabel).
+; claimed: object mapping live indices already matched this apply.
+; Returns {idx, score}; idx = 0 when nothing scored. Caller applies the
+; score >= 30 acceptance threshold.
+;============================================================================================
+
+CF_FindBestMatch(tplCtrl, liveControls, claimed) {
+    cfTplType := tplCtrl.type
+    cfTplLabel := tplCtrl.label
+    cfTplY := tplCtrl.y
+    cfTplGroupLabel := tplCtrl.group_label
+
+    bestLiveIdx := 0
+    bestScore := 0
+    bestYDist := 999999
+
+    for li, liveCtrl in liveControls {
+        ; Skip already-claimed controls
+        if (claimed[li])
+            continue
+
+        cfLiveType := liveCtrl.type
+        cfLiveLabel := liveCtrl.label
+        cfLiveY := liveCtrl.y
+        cfLiveParentLabel := liveCtrl.parentLabel
+
+        ; Must be same type (checklist matches checklist)
+        if (cfLiveType != cfTplType)
+            continue
+
+        score := 0
+
+        ; Label match (highest priority)
+        if (cfTplLabel != "" && cfLiveLabel = cfTplLabel) {
+            score := 100
+        }
+        else if (cfTplLabel != "" && cfLiveLabel != "" && InStr(cfLiveLabel, cfTplLabel)) {
+            score := 70
+        }
+        else if (cfTplLabel != "" && cfLiveLabel != "" && InStr(cfTplLabel, cfLiveLabel)) {
+            score := 60
+        }
+
+        ; Y-position proximity bonus (if labels don't match, use position)
+        if (score = 0 && cfTplLabel = "" && cfLiveLabel = "") {
+            yDiff := Abs(cfLiveY - cfTplY)
+            if (yDiff < 20)
+                score := 50
+            else if (yDiff < 50)
+                score := 30
+        }
+
+        ; For radios, also check group label
+        if (cfTplType = "radio" && cfTplGroupLabel != "" && cfLiveParentLabel = cfTplGroupLabel) {
+            score += 20
+        }
+
+        ; When scores tie, prefer the one closest in Y position
+        yDist := Abs(cfLiveY - cfTplY)
+        if (score > bestScore || (score = bestScore && score > 0 && yDist < bestYDist)) {
+            bestScore := score
+            bestLiveIdx := li
+            bestYDist := yDist
+        }
+    }
+
+    return {idx: bestLiveIdx, score: bestScore}
 }
 
 
@@ -3870,35 +3868,22 @@ CF_ParseControls(jsonContent) {
     if (!cPos)
         return controls
 
-    ; Find opening [
-    arrStart := InStr(jsonContent, "[",, cPos)
+    ; Find opening [ / matching ] (string-aware: labels may contain {}[])
+    arrStart := NB_JsonFind(jsonContent, "[", cPos + StrLen("""controls"""))
     if (!arrStart)
         return controls
 
-    ; Find matching ] using depth counting
-    depth := 1
-    scanPos := arrStart + 1
-    arrEnd := 0
-    while (scanPos <= StrLen(jsonContent) && depth > 0) {
-        ch := SubStr(jsonContent, scanPos, 1)
-        if (ch = "[")
-            depth++
-        else if (ch = "]")
-            depth--
-        if (depth = 0)
-            arrEnd := scanPos
-        scanPos++
-    }
+    arrEnd := NB_JsonMatch(jsonContent, arrStart, "[", "]")
     if (!arrEnd)
         return controls
 
     ; Find each control object
     itemPos := arrStart
     while (true) {
-        itemPos := InStr(jsonContent, "{",, itemPos + 1)
+        itemPos := NB_JsonFind(jsonContent, "{", itemPos + 1)
         if (!itemPos || itemPos > arrEnd)
             break
-        itemEnd := InStr(jsonContent, "}",, itemPos)
+        itemEnd := NB_JsonMatch(jsonContent, itemPos, "{", "}")
         if (!itemEnd)
             break
         itemStr := SubStr(jsonContent, itemPos, itemEnd - itemPos + 1)
@@ -3910,14 +3895,14 @@ CF_ParseControls(jsonContent) {
 
         label := ""
         if (RegExMatch(itemStr, """label"":\s*""((?:[^""\\]|\\.)*)""", m))
-            label := m1
+            label := NB_UnescJson(m1)
 
         checked := InStr(itemStr, """checked"": true") || InStr(itemStr, """checked"":true") ? true : false
         selected := InStr(itemStr, """selected"": true") || InStr(itemStr, """selected"":true") ? true : false
 
         value := ""
         if (RegExMatch(itemStr, """value"":\s*""((?:[^""\\]|\\.)*)""", m))
-            value := m1
+            value := NB_UnescJson(m1)
 
         valueIdx := -1
         if (RegExMatch(itemStr, """valueIdx"":\s*(-?\d+)", m))
@@ -3929,7 +3914,7 @@ CF_ParseControls(jsonContent) {
 
         group_label := ""
         if (RegExMatch(itemStr, """group_label"":\s*""((?:[^""\\]|\\.)*)""", m))
-            group_label := m1
+            group_label := NB_UnescJson(m1)
 
         checklistIdx := -1
         if (RegExMatch(itemStr, """checklistIdx"":\s*(-?\d+)", m))
@@ -4283,13 +4268,5 @@ return
 
 ;############################################################################################
 ;################### END CP FLOWSHEETS BOOSTER ###############################################
-
-    if (NB_SignWasVisible = 1)
-    {
-        Gui, 80:Show, NA
-        WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
-        NB_BoosterGuiVisible := 1
-    }
-return
 
 #If  ; Restore default hotkey context

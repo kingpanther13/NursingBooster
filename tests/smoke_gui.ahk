@@ -1,0 +1,200 @@
+; ===========================================================================
+; smoke_gui.ahk - GUI smoke test for the real module on a live desktop.
+;
+; Runs on the windows-latest runner (interactive desktop). Initializes the
+; module for real (NB_Enabled=1, temp onedrivelocal), then asserts the
+; focus/z-order contracts that broke historically:
+;   - the panel toggles visible WITHOUT stealing activation (Show NA fix)
+;   - F-key press hides the panel fast; it restores ~6s later, again
+;     without stealing activation
+;   - Ctrl+Shift+B is registered and toggles the panel
+;   - the Gui 85 drop-up appears next to a window titled "fxnbar",
+;     follows it when it moves, is left alone while its list is open
+;     (CB_GETDROPPEDSTATE guard), and disappears when the bar dies
+;
+; Output: PASS/FAIL lines on stdout; exit code = number of failures.
+; Run with: AutoHotkeyU64.exe /ErrorStdOut smoke_gui.ahk
+; ===========================================================================
+#NoEnv
+#SingleInstance force
+SetBatchLines, -1
+SetTitleMatchMode, 2
+
+global SmokeFails := 0
+
+; --- Host stubs, then real module init ---
+NB_Enabled := 1
+onedrivelocal := A_Temp . "\nb_smoke_" . A_TickCount
+FileCreateDir, %onedrivelocal%
+
+gosub NB_ModuleInit
+
+; --- 1. Panel exists but is hidden after init ---
+DetectHiddenWindows, On
+SmokeAssert(WinExist("NursingBoosterPanel") != 0, "panel window created by init")
+DetectHiddenWindows, Off
+SmokeAssert(!WinExist("NursingBoosterPanel"), "panel starts hidden")
+
+; --- 2. A focus-holder window to detect activation stealing ---
+Gui, 2:Add, Text,, focus holder
+Gui, 2:Show, x60 y60 w220 h90, NBSmokeFocusHolder
+WinActivate, NBSmokeFocusHolder
+WinWaitActive, NBSmokeFocusHolder,, 3
+SmokeAssert(WinActive("NBSmokeFocusHolder") != 0, "focus holder active")
+
+; --- 3. Toggle panel on: visible, still no activation steal ---
+gosub NB_TogglePanel
+Sleep, 400
+SmokeAssert(WinExist("NursingBoosterPanel") != 0, "panel visible after toggle")
+SmokeAssert(NB_BoosterGuiVisible = 1, "NB_BoosterGuiVisible set")
+SmokeAssert(WinActive("NBSmokeFocusHolder") != 0, "toggle did NOT steal activation (Show NA)")
+
+; --- 4. Sign-dialog auto-hide. (F-key injection CANNOT be tested here: the
+;        module's #If-scoped hotkeys install the keyboard hook, and the hook
+;        excludes injected input (LLKHF_INJECTED) from the physical state, so
+;        a Send'd F1 never reads as physically down. The same 30ms poll also
+;        hides on a CPRS Sign window - drive that path with a stub Sign Note
+;        window from a CPRSChart.exe-named process.) ---
+signStub := A_Temp . "\CPRSChart.exe"
+SmokeAssert(FileExist(signStub) != "", "CPRSChart.exe stub runner present")
+Run, "%signStub%" /ErrorStdOut "%A_ScriptDir%\smoke_sign_stub.ahk"
+WinWait, Sign Note ahk_exe CPRSChart.exe,, 5
+SmokeAssert(!ErrorLevel, "stub Sign Note window appeared")
+hidden := false
+start := A_TickCount
+while (A_TickCount - start < 1500)
+{
+    if (NB_BoosterGuiVisible = 0)
+    {
+        hidden := true
+        break
+    }
+    Sleep, 50
+}
+SmokeAssert(hidden, "panel hidden while Sign window open (took " . (A_TickCount - start) . "ms)")
+SmokeAssert(NB_SignWasVisible = 1, "restore state armed")
+
+; --- 5. Close the sign window; auto-restore ~6s later, no activation steal ---
+WinClose, Sign Note ahk_exe CPRSChart.exe
+Process, WaitClose, CPRSChart.exe, 5
+WinActivate, NBSmokeFocusHolder
+Sleep, 6600
+SmokeAssert(NB_BoosterGuiVisible = 1, "panel auto-restored after ~6s")
+SmokeAssert(WinActive("NBSmokeFocusHolder") != 0, "restore did NOT steal activation")
+
+; --- 6. Ctrl+Shift+B registered: hide, then re-show via the hotkey ---
+gosub NB_TogglePanel   ; hide
+Sleep, 200
+SmokeAssert(NB_BoosterGuiVisible = 0, "panel hidden before hotkey test")
+Send, ^+b
+Sleep, 500
+SmokeAssert(NB_BoosterGuiVisible = 1, "Ctrl+Shift+B re-shows the panel")
+
+; --- 7. Mini drop-up bar appears next to a window titled fxnbar ---
+Gui, 3:Add, Text,, fake function bar
+Gui, 3:+AlwaysOnTop -Caption +ToolWindow
+Gui, 3:Show, x100 y600 w300 h21, fxnbar
+found := SmokeWaitExist("NB_MiniBar", 3000)
+SmokeAssert(found, "mini bar appears next to fxnbar")
+WinGetPos, mbX, mbY,,, NB_MiniBar
+SmokeAssert(Abs(mbX - 402) <= 8, "mini bar docked at bar's right edge (x=" . mbX . ")")
+
+; --- 8. Mini bar follows the bar when it moves ---
+WinMove, fxnbar,, 150, 600
+moved := SmokeWaitX("NB_MiniBar", 452, 8, 2500)
+SmokeAssert(moved, "mini bar follows the bar (moved to x~452)")
+
+; --- 9. Open drop-up list; the follow timer must leave it alone ---
+hDDL := NB_MiniDDLHwnd
+SmokeAssert(hDDL != 0, "drop-up control hwnd captured")
+SendMessage, 0x014F, 1, 0,, ahk_id %hDDL%   ; CB_SHOWDROPDOWN open
+Sleep, 200
+SendMessage, 0x0157, 0, 0,, ahk_id %hDDL%   ; CB_GETDROPPEDSTATE
+SmokeAssert(ErrorLevel = 1, "drop-up list opened")
+WinMove, fxnbar,, 200, 600
+Sleep, 1400                                  ; several 500ms follow ticks
+SendMessage, 0x0157, 0, 0,, ahk_id %hDDL%
+SmokeAssert(ErrorLevel = 1, "list still open - follow timer left it alone")
+WinGetPos, mbX2,,,, NB_MiniBar
+SmokeAssert(Abs(mbX2 - 452) <= 8, "mini bar did not move while list open (x=" . mbX2 . ")")
+SendMessage, 0x014F, 0, 0,, ahk_id %hDDL%   ; close the list
+moved2 := SmokeWaitX("NB_MiniBar", 502, 8, 2500)
+SmokeAssert(moved2, "mini bar catches up after the list closes (x~502)")
+
+; --- 10. Bar destroyed -> mini bar goes away ---
+Gui, 3:Destroy
+gone := SmokeWaitGone("NB_MiniBar", 2500)
+SmokeAssert(gone, "mini bar removed when fxnbar dies")
+
+; --- 11. Disable guard: ^+b stays registered until the host unhooks it,
+;         so NB_TogglePanel itself must refuse to SHOW while disabled ---
+gosub NB_TogglePanel   ; hide (hiding is allowed even when disabled)
+Sleep, 200
+SmokeAssert(NB_BoosterGuiVisible = 0, "panel hidden before disable-guard test")
+NB_Enabled := 0
+Send, ^+b
+Sleep, 400
+SmokeAssert(NB_BoosterGuiVisible = 0, "^+b does NOT re-show the panel while disabled")
+NB_Enabled := 1
+
+; --- Summary ---
+if (SmokeFails > 0)
+{
+    FileAppend, % "FAIL: " . SmokeFails . " smoke assertion(s) failed`n", **
+    ExitApp, %SmokeFails%
+}
+FileAppend, % "All GUI smoke assertions passed`n", *
+ExitApp, 0
+
+; ---------------------------------------------------------------------------
+SmokeAssert(cond, msg)
+{
+    global SmokeFails
+    if (cond)
+        FileAppend, % "PASS: " . msg . "`n", *
+    else
+    {
+        SmokeFails += 1
+        FileAppend, % "FAIL: " . msg . "`n", *
+    }
+}
+
+SmokeWaitExist(title, timeoutMs)
+{
+    start := A_TickCount
+    while (A_TickCount - start < timeoutMs)
+    {
+        if WinExist(title)
+            return true
+        Sleep, 100
+    }
+    return false
+}
+
+SmokeWaitGone(title, timeoutMs)
+{
+    start := A_TickCount
+    while (A_TickCount - start < timeoutMs)
+    {
+        if !WinExist(title)
+            return true
+        Sleep, 100
+    }
+    return false
+}
+
+SmokeWaitX(title, wantX, tol, timeoutMs)
+{
+    start := A_TickCount
+    while (A_TickCount - start < timeoutMs)
+    {
+        WinGetPos, x,,,, %title%
+        if (x != "" && Abs(x - wantX) <= tol)
+            return true
+        Sleep, 100
+    }
+    return false
+}
+
+; --- The real module (label never auto-runs; init called above via gosub) ---
+#Include %A_ScriptDir%\..\nursingbooster_module.ahk

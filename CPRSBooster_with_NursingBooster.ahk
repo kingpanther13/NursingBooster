@@ -962,8 +962,14 @@ if (NB_Enabled) {
     nbModulePath := onedrivelocal . "\nursingbooster_module.ahk"
     if (!FileExist(nbModulePath)) {
         gosub NB_FetchModuleIfNeeded
-        Reload
-        Sleep 1000
+        ; Only reload if the fetch actually produced the module — an
+        ; unconditional Reload here loops forever when the download fails
+        ; (offline / blocked GitHub) since the file is still missing after
+        ; every restart. The 30 s background check below retries instead.
+        if (FileExist(nbModulePath)) {
+            Reload
+            Sleep 1000
+        }
     }
 }
 
@@ -1005,6 +1011,17 @@ NB_FetchModuleIfNeeded:
 
     ; Compare with channel cache. If different, update channel cache.
     FileRead, newContent, %nbTempPath%
+
+    ; Sanity check: never install something that isn't the module (captive
+    ; portal / error page). A corrupt file here gets #Include'd and would
+    ; break the whole host script on the next reload.
+    if (!InStr(newContent, "NB_ModuleInit")) {
+        FileDelete, %nbTempPath%
+        if (FileExist(nbChannelCache))
+            FileCopy, %nbChannelCache%, %nbActivePath%, 1
+        return
+    }
+
     cachedContent := ""
     if (FileExist(nbChannelCache))
         FileRead, cachedContent, %nbChannelCache%
@@ -1035,6 +1052,12 @@ NB_BackgroundUpdateCheck:
         ToolTip, NursingBooster updated — reloading...
         Sleep 1500
         Reload
+    } else if (!FileExist(onedrivelocal . "\nursingbooster_module.ahk")) {
+        ; Enabled but the module never downloaded (offline / GitHub blocked)
+        ; and there is no cached copy — say so instead of silently doing nothing
+        ToolTip, NursingBooster is enabled but could not be downloaded - check network`, will retry on next restart
+        Sleep 4000
+        ToolTip
     }
 return
 
@@ -8271,8 +8294,16 @@ gosub, refreshdata  ;----need to refresh the working variables
 ; --- NursingBooster: handle enable/channel changes ---
 if (nbNeedsReload) {
     if (NB_Enabled && !nbPrevEnabled) {
-        ; Enabling for the first time — need reload to parse #Include
+        ; Enabling for the first time — need reload to parse #Include.
+        ; The reload stays unconditional even on a failed download: it is what
+        ; re-enters auto-execute and schedules NB_BackgroundUpdateCheck, which
+        ; retries the fetch. But tell the user instead of failing silently.
         gosub NB_FetchModuleIfNeeded
+        if (!FileExist(onedrivelocal . "\nursingbooster_module.ahk")) {
+            ToolTip, NursingBooster download failed - will keep retrying in the background
+            Sleep 2500
+            ToolTip
+        }
         Reload
         Sleep 1000
     } else if (!NB_Enabled && nbPrevEnabled) {
@@ -8283,8 +8314,23 @@ if (nbNeedsReload) {
         }
         if (IsLabel("NB_CheckCPRS"))
             SetTimer, NB_CheckCPRS, Off
-        if (IsLabel("NB_CheckGui14Dropdown"))
+        if (IsLabel("NB_CheckFKeyHide"))
+            SetTimer, NB_CheckFKeyHide, Off
+        ; Cancel a pending post-sign restore: if it fired after disable, the
+        ; AlwaysOnTop panel would reappear with no hotkey/poll left to hide it
+        if (IsLabel("NB_RestorePanelAfterFKey")) {
+            SetTimer, NB_RestorePanelAfterFKey, Off
+            NB_SignWasVisible := 0
+        }
+        ; Unhook the global panel toggle registered by NB_ModuleInit
+        if (IsLabel("NB_TogglePanel"))
+            Hotkey, ^+b, Off, UseErrorLevel
+        if (IsLabel("NB_CheckGui14Dropdown")) {
             SetTimer, NB_CheckGui14Dropdown, Off
+            ; Remove the NB drop-up from the function bar too
+            Gui, 85:Destroy
+            NB_MiniBarBuilt := false
+        }
         if (IsLabel("NB_ClearToolTip")) {
             ToolTip, NursingBooster disabled
             SetTimer, NB_ClearToolTip, -2000

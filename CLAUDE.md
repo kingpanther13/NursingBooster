@@ -6,7 +6,7 @@ Two release channels, **different label styles**:
 
 | Channel  | Branch   | Label style | Current |
 |----------|----------|-------------|---------|
-| Dev/Beta | `master` | `devXX`     | `dev20` |
+| Dev/Beta | `master` | `devXX`     | `dev21` |
 | Stable   | `stable` | `X.Y`       | `1.0`   |
 
 The label appears in **two** lines of `nursingbooster_module.ahk`: the `vNB_PanelTitle`
@@ -26,7 +26,41 @@ before it was reset to `1.0`.)
 
 ## Testing reality
 
-- AHK v1 / Windows / CPRS only — it can't be run here. CI (`.github/workflows/ahk-ci.yml`)
-  only validates **syntax**, not runtime behavior. Any behavior change must be
-  smoke-tested on the Windows/CPRS box (the version label in the panel confirms which
-  build is live).
+- AHK v1 (CI pins 1.1.37.02, the final v1.1 release) / Windows / CPRS — the module
+  can't be run on this dev box. CI (`.github/workflows/ahk-ci.yml`) now covers:
+  - **lint** (ubuntu): `tools/ci_lint.py` — version-label agreement + channel rule
+    (devNN on master, X.Y on stable), missing-`global` reads of module variables in
+    functions, `Gui 80/84/85:Show` without NA, dead top-level statements between
+    labels, host↔module label/Gui-number congruence, `#If` balance. Runs locally:
+    `python3 tools/ci_lint.py --repo . --channel-branch master`.
+  - **syntax** (windows): real AHK v1/v2 load-validation of every script.
+  - **unit tests** (windows): `tests/test_module.ahk` — Yunit against the REAL
+    module (`#Include`d with `NB_Enabled=0`): JSON escape/parse round-trips, the
+    CPFS matcher (`CF_FindBestMatch`), quick-action helpers, speed file I/O.
+    Yunit alone always exits 0 — the runner counts failures and exits nonzero.
+  - **GUI smoke + e2e** (windows, interactive desktop): `tests/smoke_gui.ahk`
+    (panel toggles without stealing focus, F-key hide/restore, Ctrl+Shift+B,
+    drop-up follows fxnbar and is left alone while open); `tests/e2e_cpfs*.ahk`
+    (apply engine against a stub Add Data form run as CPFlowsheets.exe);
+    `tests/e2e_cprs*.ahk` (apply engine against a HIGH-FIDELITY fake
+    TfrmRemDlg modeled on the real VAAES dialog — sourced from the dumps in
+    `logs/CPRS Booster logs (not cpfs)/` and the CPRS Delphi source: real VCL
+    class names via superclassing, sb1/sb2 hidden-scrollbox twin, panel+checkbox
+    sibling pairs with EMPTY window text (parent labels unreadable, like real
+    CPRS), nested TGroupBoxes with a skipped checkbox-depth level, leaf-caption
+    clusters inside panels, prompt-control noise, and HideChildren parents whose
+    children are created DEFERRED with everything below shifting down on reused
+    HWNDs — partial-rebuild semantics per uReminders.pas. The stub saves its own
+    template fixture from the expanded tree like a real user save; the driver
+    asserts exact Toggled/Not-found counts and position-by-position equality).
+    Always run AHK with `/ErrorStdOut` in CI — a modal error dialog otherwise
+    hangs the runner.
+- The fake TfrmRemDlg e2e IS the "pared-down CPRS": real Win32 checkbox
+  semantics under CPRS's real VCL class names, one-off reminder-dialog layouts
+  per test, no VistA/login. A modified real CPRS client is not an option — CPRS
+  only builds under proprietary Delphi 2007 — and a live VistA (WorldVistA VEHU
+  docker + CPRSChart.exe under Wine) was prototyped but dropped as too slow and
+  flaky for CI (and still can't reach a reminder dialog without deep login +
+  patient + reminder automation).
+- Behavior changes to the apply path should still get a quick smoke test on the
+  Windows/CPRS box (the version label in the panel confirms which build is live).

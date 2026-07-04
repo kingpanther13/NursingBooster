@@ -1,0 +1,90 @@
+; ===========================================================================
+; demo_cprs_apply.ahk - WATCHABLE apply against the fake CPRS dialog.
+;
+; NOT part of automated CI (nothing runs it there; it is only syntax-checked).
+; It is the human-facing counterpart of e2e_cprs.ahk: it drives the SAME real
+; module (NB_ApplyTemplate) against the SAME stub, but slowly and with on-
+; screen narration, and it NEVER closes the dialog or asserts - so you can
+; watch each checkbox toggle and each deferred child appear, then inspect the
+; result yourself.
+;
+; Launched by run_cprs_local.ps1 -Watch. The stub must already be running
+; (as CPRSChart.exe, with NB_E2E_VISUAL=1 for readable captions).
+;
+; What you are watching, and how it maps to real CPRS:
+;   - the module finds the dialog by class TfrmRemDlg and picks the VISIBLE
+;     TScrollBox (there are two; one is hidden - CPRS's sb1/sb2 double buffer)
+;   - it walks the saved template top-to-bottom and checks exactly the saved
+;     boxes via BM_SETCHECK + WM_COMMAND (never unchecks)
+;   - when it checks a "HideChildren" parent, the stub creates that parent's
+;     children a beat later (deferred, like CPRS's posted UM_RESYNCREM) and
+;     the module re-enumerates and continues into them
+; ===========================================================================
+#NoEnv
+#SingleInstance force
+SetBatchLines, -1
+SetTitleMatchMode, 2
+
+; --- Module globals normally set by NB_ModuleInit (init stays inert) ---
+; NB_Enabled := 1 so the module's #If-scoped inspector hotkeys (Ctrl+Shift+I
+; control inspector, Ctrl+Shift+D dialog dump) are live for the viewer; we
+; still never call NB_ModuleInit, so no panel/timers start on their own.
+NB_Enabled := 1
+onedrivelocal := A_Temp . "\nb_demo_cprs_" . A_TickCount
+NB_TemplateDir := onedrivelocal
+NB_LogDir := onedrivelocal . "\Logs"
+FileCreateDir, %NB_TemplateDir%
+FileCreateDir, %NB_LogDir%
+NB_AppTitle := "Nursing Booster"
+NB_ApplySpeed := 0
+; Slow enough to watch each toggle. Override the default 0/0 timing.
+NB_LeafSpeed := 550
+NB_SpeedOverride := 1
+NB_DebugLogging := 0
+NB_BoosterGuiVisible := 0
+NB_PanelHwnd := 0
+NB_ApplyCancelled := false
+
+MockDir := A_Temp . "\nb_e2e_mock"
+
+WinWait, ahk_class TfrmRemDlg,, 30
+if (ErrorLevel) {
+    MsgBox, 48, Demo, The fake CPRS dialog never appeared.`nStart the stub first (run_cprs_local.ps1 -Watch does this for you).
+    ExitApp, 1
+}
+; Wait for the stub to finish building + advertise its fixture
+ready := 0
+Loop, 60 {
+    IniRead, ready, %MockDir%\expect.ini, expect, ready, 0
+    if (ready = 1)
+        break
+    Sleep, 250
+}
+if (ready != 1) {
+    MsgBox, 48, Demo, The fake dialog never finished building (no fixture written).`nTry again, or run the automated mode to see the error.
+    ExitApp, 1
+}
+
+dlgHwnd := NB_FindActiveDialogWindow()
+WinActivate, ahk_id %dlgHwnd%
+
+MsgBox, 4160, NursingBooster demo, This is the FAKE CPRS reminder dialog (class TfrmRemDlg).`n`nIt reproduces the real window structure: two scrollboxes (one hidden), nested groupboxes, panel+checkbox pairs, and deferred children. Captions are shown here only so you can read along - in the real thing and in the automated test they are blank.`n`nClick OK, then watch: the module will check exactly the saved boxes, top to bottom. Deferred sections appear a moment after their parent is checked.`n`nUse the module's inspector (Ctrl+Shift+I) hovering any control to compare its class against a real CPRS dump.
+
+tplPath := MockDir . "\MockNeg.json"
+ToolTip, Applying saved template through the REAL NB_ApplyTemplate...
+NB_ApplyTemplate(tplPath)
+ToolTip
+
+after := NB_EnumDescendantCheckboxes(NB_FindVisibleScrollBox(dlgHwnd))
+checked := 0
+for i, cb in after
+    checked += cb.checked ? 1 : 0
+total := after.Length()
+
+MsgBox, 4160, Demo complete, Apply finished.`n`nThe dialog now shows %checked% checked boxes out of %total% (deferred children included). Nothing was unchecked.`n`nThe dialog stays open so you can inspect it. Compare its control tree to a real CPRS dump in:`n  logs\CPRS Booster logs (not cpfs)\dialog_dump_*.txt`n`nClose the dialog window (or this box) when done.
+
+; Leave the dialog up; exit the driver only (stub keeps the window alive).
+ExitApp, 0
+
+; --- The real module under test ---
+#Include %A_ScriptDir%\..\nursingbooster_module.ahk

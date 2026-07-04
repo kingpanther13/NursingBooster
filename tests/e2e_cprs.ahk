@@ -1,0 +1,382 @@
+; ===========================================================================
+; e2e_cprs.ahk - end-to-end test of the reminder-dialog engine against the
+; high-fidelity fake CPRS dialog (e2e_cprs_stub.ahk running as CPRSChart.exe).
+;
+; The stub generates the dialog AND the template fixture (MockNeg.json) the
+; way a real user save would - one item per checkbox of the fully-expanded
+; dialog in Y-order - plus expect.ini with the exact counts. This driver
+; runs the real module against it and asserts, like the real VAAES flow:
+;   - detection by class, visible-scrollbox pick (a hidden empty TScrollBox
+;     sibling exists, like CPRS's sb1/sb2 double buffer)
+;   - parent checkboxes are UNREADABLE (empty labels - real CPRS renders
+;     text on non-windowed TLabels); only leaf checkboxes carry text
+;   - source_dialogue and source_version checks pass silently (title match;
+;     "Version 3.2" greppable from the TRichEdit like the real note text)
+;   - the flat-sequential walk toggles EXACTLY the template-checked items,
+;     riding through deferred child creation (HideChildren parents), with
+;     Toggled == checked-count and Not-found == 0
+;   - post-apply, position-by-position: live state/class/depth equals the
+;     template (apply reproduces the save), including the depth histogram
+;     with its skipped level (no depth-3 checkboxes - display-only empty
+;     Box elements create groupbox levels without checkboxes)
+;
+; Output: PASS/FAIL lines on stdout; exit code = failures.
+; ===========================================================================
+#NoEnv
+#SingleInstance force
+SetBatchLines, -1
+SetTitleMatchMode, 2
+
+global E2eFails := 0
+
+; --- Module globals normally set by NB_ModuleInit (init stays inert) ---
+NB_Enabled := 0
+onedrivelocal := A_Temp . "\nb_e2e_cprs_" . A_TickCount
+NB_TemplateDir := onedrivelocal
+NB_LogDir := onedrivelocal . "\Logs"
+FileCreateDir, %NB_TemplateDir%
+FileCreateDir, %NB_LogDir%
+NB_AppTitle := "Nursing Booster"
+NB_ApplySpeed := 0
+NB_LeafSpeed := 400          ; > the stub's 150ms deferred-rebuild watcher, like real CPRS's posted rebuild
+NB_SpeedOverride := 1
+NB_DebugLogging := 1
+NB_BoosterGuiVisible := 0
+NB_PanelHwnd := 0
+NB_ApplyCancelled := false
+
+MockDir := A_Temp . "\nb_e2e_mock"
+
+; --- Wait for the stub dialog AND its generated fixture ---
+WinWait, ahk_class TfrmRemDlg,, 20
+if (ErrorLevel) {
+    FileAppend, % "FAIL: fake TfrmRemDlg never appeared`n", **
+    ExitApp, 1
+}
+ready := 0
+Loop, 40
+{
+    IniRead, ready, %MockDir%\expect.ini, expect, ready, 0
+    if (ready = 1)
+        break
+    Sleep, 250
+}
+if (ready != 1) {
+    FileAppend, % "FAIL: stub never wrote expect.ini`n", **
+    ExitApp, 1
+}
+IniRead, expTotal, %MockDir%\expect.ini, expect, total, -1
+IniRead, expCollapsed, %MockDir%\expect.ini, expect, collapsed, -1
+IniRead, expToggled, %MockDir%\expect.ini, expect, toggled, -1
+IniRead, expNotFound, %MockDir%\expect.ini, expect, notfound, -1
+
+dlgHwnd := NB_FindActiveDialogWindow()
+E2eAssert(dlgHwnd != 0, "NB_FindActiveDialogWindow finds the dialog by class")
+WinGetTitle, dlgTitle, ahk_id %dlgHwnd%
+
+; The stub writes ready=1 from its auto-execute thread BEFORE it has pumped
+; a single message, so on a loaded runner the visible TScrollBox can lag its
+; creation call and not yet be a findable direct child when the driver races
+; in cross-process. NB_ApplyTemplate never hits this because it runs
+; NB_WaitForStableCheckboxCount before it picks the scrollbox; give the
+; driver's pre-apply pick the same stabilization - wait until the scrollbox
+; is findable AND enumerates its known collapsed count. On timeout this
+; returns 0 / a wrong scrollbox so the assertions below FAIL loudly instead
+; of every downstream enumeration silently running against handle 0.
+scrollBox := E2eWaitForScrollBox(dlgHwnd, expCollapsed)
+E2eAssert(scrollBox != 0, "visible TScrollBox found despite hidden sb1 sibling")
+WinGet, sbStyle, Style, ahk_id %scrollBox%
+E2eAssert(sbStyle & 0x10000000, "picked scrollbox is the VISIBLE one")
+
+; --- Version text is readable the way the module reads it (WM_GETTEXT) ---
+ver := NB_GetDialogVersion(dlgHwnd)
+E2eAssert(ver = "3.2", "dialog version 3.2 greppable from TRichEdit (got '" . ver . "')")
+
+; --- Pre-apply enumeration: collapsed count, unreadable parents ---
+items := E2eEnumUntilCount(scrollBox, expCollapsed)
+E2eAssert(items.Length() = expCollapsed
+    , "collapsed dialog has " . expCollapsed . " checkboxes (got " . items.Length() . ")")
+unlabeledParents := 0
+labeledLeaves := 0
+checkedPre := 0
+for i, cb in items {
+    if (cb.className = "TCPRSDialogParentCheckBox" && cb.label = "")
+        unlabeledParents++
+    if (cb.className = "TCPRSDialogCheckBox" && cb.label != "")
+        labeledLeaves++
+    checkedPre += cb.checked ? 1 : 0
+}
+; Gate on the known collapsed count so a truncated (0-item) enumeration
+; FAILS here instead of vacuously passing "0 checked".
+E2eAssert(items.Length() = expCollapsed && checkedPre = 0
+    , "nothing checked before apply (" . items.Length() . " boxes, " . checkedPre . " checked)")
+E2eAssert(unlabeledParents > 0 && labeledLeaves > 0
+    , "parents unreadable / leaves readable (" . unlabeledParents . " parents, " . labeledLeaves . " leaves)")
+; label BLEED is real-CPRS behavior: a cluster pair's parent can resolve a
+; leaf caption via its panel's windowed children (the real VAAES dump has
+; exactly one such labeled parent, 'Other:'). Assert bleed stays confined
+; to cluster parents.
+IniRead, expClusters, %MockDir%\expect.ini, expect, clusters, 0
+labeledParents := 0
+for i, cb in items {
+    if (cb.className = "TCPRSDialogParentCheckBox" && cb.label != "")
+        labeledParents++
+}
+E2eAssert(labeledParents <= expClusters
+    , "labeled parents only from cluster bleed (" . labeledParents . " <= " . expClusters . ")")
+
+; --- Apply the stub-saved template through the real engine ---
+tplPath := MockDir . "\MockNeg.json"
+NB_ApplyTemplate(tplPath)
+Sleep, 600
+
+; --- Walk trace diagnostics + exact toggle accounting ---
+dbgPath := NB_LogDir . "\walk_trace.txt"
+walkTrace := ""
+if FileExist(dbgPath) {
+    FileRead, walkTrace, %dbgPath%
+    FileAppend, % "--- apply walk trace ---`n" . walkTrace . "--- end walk trace ---`n", *
+}
+toggled := -1
+notfound := -1
+Loop, Files, %NB_LogDir%\APPLY_*.txt
+{
+    FileRead, applyLogText, %A_LoopFileFullPath%
+    if (RegExMatch(applyLogText, "Toggled: (\d+)\s+\|\s+Not found: (\d+)", tm)) {
+        toggled := tm1
+        notfound := tm2
+    }
+}
+E2eAssert(toggled = expToggled
+    , "Toggled == template checked count (" . expToggled . "), got " . toggled)
+E2eAssert(notfound = expNotFound
+    , "Not-found == " . expNotFound . " (deferred children materialized in time), got " . notfound)
+
+; --- Post-apply: position-by-position the live dialog equals the save ---
+tplFile := ""
+FileRead, tplFile, %tplPath%
+tplItems := NB_ParseFlatCheckboxes(tplFile)
+after := E2eEnumUntilCount(scrollBox, expTotal)
+E2eAssert(after.Length() = expTotal
+    , "expanded dialog has " . expTotal . " checkboxes (got " . after.Length() . ")")
+E2eAssert(tplItems.Length() = expTotal
+    , "template has " . expTotal . " items (got " . tplItems.Length() . ")")
+
+mismatches := 0
+n := after.Length() < tplItems.Length() ? after.Length() : tplItems.Length()
+Loop, %n%
+{
+    i := A_Index
+    live := after[i]
+    tpl := tplItems[i]
+    ok := (live.className = tpl.cls) && ((live.checked ? 1 : 0) = (tpl.checked ? 1 : 0))
+        && (live.depth = tpl.depth)
+    if (!ok) {
+        mismatches++
+        if (mismatches <= 5)
+            FileAppend, % "MISMATCH pos " . i . ": live cls=" . live.className
+                . " chk=" . (live.checked ? 1 : 0) . " depth=" . live.depth
+                . " | tpl cls=" . tpl.cls . " chk=" . (tpl.checked ? 1 : 0)
+                . " depth=" . tpl.depth . " lbl='" . tpl.label . "'`n", *
+    }
+}
+; Require both sides fully enumerated to expTotal so a truncated live
+; enumeration (n=0 -> zero-iteration loop) cannot vacuously report 0 mismatches.
+E2eAssert(after.Length() = expTotal && tplItems.Length() = expTotal && mismatches = 0
+    , "apply reproduces the save position-by-position (" . mismatches . " mismatches over " . n . " positions)")
+
+; --- Depth histogram: matches expectations, and depth 3 is ABSENT while
+;     depth 4 is populated (the display-only empty Box skip mechanism) ---
+hist := {}
+for i, cb in after
+    hist[cb.depth] := (hist[cb.depth] ? hist[cb.depth] : 0) + 1
+histOk := true
+Loop, 6
+{
+    d := A_Index - 1
+    IniRead, expD, %MockDir%\expect.ini, depth, d%d%, 0
+    got := hist[d] ? hist[d] : 0
+    if (got != expD) {
+        histOk := false
+        FileAppend, % "DEPTH MISMATCH d" . d . ": expected " . expD . " got " . got . "`n", *
+    }
+}
+E2eAssert(histOk, "checkbox depth histogram matches the real-dialog profile")
+E2eAssert((hist[3] ? hist[3] : 0) = 0 && (hist[4] ? hist[4] : 0) > 0
+    , "depth 3 skipped while depth 4 populated (empty display-only Box level)")
+
+; --- Cancel path: right-click cancel mid-apply must exit early AND restore
+;     the timers it paused (the dev21 fix). Uses a check-all fixture so the
+;     second walk has ~40 pending 400ms toggles; a 300ms pulse keeps setting
+;     the cancel flag (the flag is reset at walk start, after the ~2s
+;     stable-count wait, so a single one-shot could be wiped) ---
+allPath := MockDir . "\MockAll.json"
+FileRead, tplRaw, %tplPath%
+tplAll := StrReplace(tplRaw, """checked"": false", """checked"": true")
+FileDelete, %allPath%
+FileAppend, %tplAll%, %allPath%, UTF-8
+SetTimer, E2eCancelPulse, 300
+NB_ApplyTemplate(allPath)
+SetTimer, E2eCancelPulse, Off
+NB_ApplyCancelled := false
+
+logCount := 0
+Loop, Files, %NB_LogDir%\APPLY_*.txt
+    logCount++
+E2eAssert(logCount = 1, "cancelled apply exits before logging (APPLY logs=" . logCount . ")")
+
+after2 := E2eEnumUntilCount(scrollBox, expTotal)
+E2eAssert(after2.Length() = expTotal
+    , "cancel-path enumeration sees the full dialog (got " . after2.Length() . ")")
+unchecked2 := 0
+for i, cb in after2
+    unchecked2 += cb.checked ? 0 : 1
+E2eAssert(unchecked2 > 0, "cancel stopped the walk early (" . unchecked2 . " still unchecked)")
+
+; timers restored: the Gui-14 tracker must dock a mini bar to a fresh
+; fxnbar window within a few 500ms ticks
+Gui, 5:Add, Text,, fake bar
+Gui, 5:+AlwaysOnTop -Caption +ToolWindow
+Gui, 5:Show, x80 y700 w260 h21 NA, fxnbar
+miniFound := false
+miniStart := A_TickCount
+while (A_TickCount - miniStart < 3000)
+{
+    if WinExist("NB_MiniBar")
+    {
+        miniFound := true
+        break
+    }
+    Sleep, 100
+}
+E2eAssert(miniFound, "cancel path restored the timers (mini bar docked)")
+Gui, 5:Destroy
+
+; --- Cleanup + summary ---
+WinClose, ahk_id %dlgHwnd%
+Process, Close, CPRSChart.exe
+if (E2eFails > 0)
+{
+    FileAppend, % "FAIL: " . E2eFails . " CPRS e2e assertion(s) failed`n", **
+    ExitApp, %E2eFails%
+}
+FileAppend, % "All CPRS e2e assertions passed`n", *
+ExitApp, 0
+
+E2eAssert(cond, msg)
+{
+    global E2eFails
+    if (cond)
+        FileAppend, % "PASS: " . msg . "`n", *
+    else
+    {
+        E2eFails += 1
+        FileAppend, % "FAIL: " . msg . "`n", *
+    }
+}
+
+; Wait until the dialog's visible TScrollBox is findable the way the module
+; finds it AND enumerates its known checkbox count. The stub advertises
+; ready=1 before its window tree is guaranteed realized cross-process, so a
+; raw one-shot pick can return 0 (then every NB_EnumDescendantCheckboxes(0)
+; enumerates top-level windows and yields nothing). This mirrors the
+; NB_WaitForStableCheckboxCount stabilization the module runs before its own
+; enumeration. On timeout it returns the last handle seen (0 or wrong) so the
+; caller's assertions FAIL loudly rather than the test running against 0.
+E2eWaitForScrollBox(ByRef dlgHwnd, wantCount)
+{
+    sb := 0
+    startT := A_TickCount
+    ; Wall-clock ceiling (NB_WaitForStableCheckboxCount itself can burn up to
+    ; ~10s per call, so an iteration count would be an unbounded wait); healthy
+    ; runners resolve on the first pass. 90s is far past the ~25s worst case
+    ; observed and still well under the job timeout, so a genuine failure to
+    ; resolve bails and fails loudly rather than hanging.
+    while (A_TickCount - startT < 90000)
+    {
+        ; Re-resolve the dialog every iteration like NB_ApplyTemplate does,
+        ; then run the module's OWN readiness gate. Cross-process GetClassName
+        ; for the stub's freshly created superclassed windows returns empty
+        ; for a while on a loaded runner (proven: dlgHwnd and its 3 children
+        ; are all present with correct WS_VISIBLE, but GetClassName yields ""),
+        ; so NB_FindVisibleScrollBox can't match "TScrollBox" yet. The apply
+        ; path never trips on this because NB_WaitForStableCheckboxCount hammers
+        ; the deep enumeration until the class names resolve; do the same here.
+        dlgHwnd := NB_FindActiveDialogWindow()
+        if (dlgHwnd)
+        {
+            stableCount := NB_WaitForStableCheckboxCount(dlgHwnd)
+            if (stableCount = wantCount)
+            {
+                sb := NB_FindVisibleScrollBox(dlgHwnd)
+                if (sb)
+                {
+                    cur := NB_EnumDescendantCheckboxes(sb)
+                    if (cur.Length() = wantCount)
+                        return sb
+                }
+            }
+        }
+        Sleep, 200
+    }
+    E2eDiag("scrollbox-timeout", dlgHwnd)
+    return sb
+}
+
+; One-shot diagnostic: the resolved dialog handle, every top-level
+; TfrmRemDlg window, and dlgHwnd's direct children with class + WS_VISIBLE.
+; Lets a failing CI run show whether the driver is looking at the same HWND
+; the apply path resolves (the apply walk trace prints dlg=/scrollBox=).
+E2eDiag(tag, dlgHwnd)
+{
+    out := "DIAG[" . tag . "] dlgHwnd=" . E2eHex(dlgHwnd) . "`n"
+    WinGet, wlist, List, ahk_class TfrmRemDlg
+    out .= "DIAG[" . tag . "] TfrmRemDlg top-level count=" . wlist . "`n"
+    Loop, %wlist%
+    {
+        w := wlist%A_Index%
+        out .= "DIAG[" . tag . "]  top[" . A_Index . "]=" . E2eHex(w) . "`n"
+    }
+    child := DllCall("GetWindow", "Ptr", dlgHwnd, "UInt", 5, "Ptr")   ; GW_CHILD
+    while (child)
+    {
+        VarSetCapacity(buf, 256, 0)
+        DllCall("GetClassName", "Ptr", child, "Str", buf, "Int", 256)
+        style := DllCall("GetWindowLong", "Ptr", child, "Int", -16, "Int")   ; GWL_STYLE
+        out .= "DIAG[" . tag . "]  child=" . E2eHex(child) . " cls=" . buf
+            . " vis=" . ((style & 0x10000000) ? 1 : 0) . "`n"
+        child := DllCall("GetWindow", "Ptr", child, "UInt", 2, "Ptr")   ; GW_HWNDNEXT
+    }
+    FileAppend, %out%, *
+}
+
+E2eHex(n)
+{
+    return Format("0x{:x}", n)
+}
+
+; Enumerate a known-good scrollbox until it returns EXACTLY wantCount
+; checkboxes (the collapsed or expanded total). A transient truncation from
+; the stub's timer contending with our cross-process reads just retries. On
+; timeout it returns the last (short) list so the caller's exact-count
+; assertion FAILS loudly - a truncated enumeration can never pass vacuously.
+E2eEnumUntilCount(scrollBox, wantCount)
+{
+    best := ""
+    Loop, 100   ; ~10s ceiling
+    {
+        cur := NB_EnumDescendantCheckboxes(scrollBox)
+        best := cur
+        if (cur.Length() = wantCount)
+            return cur
+        Sleep, 100
+    }
+    return best
+}
+
+E2eCancelPulse:
+    NB_ApplyCancelled := true
+return
+
+; --- The real module under test ---
+#Include %A_ScriptDir%\..\nursingbooster_module.ahk
