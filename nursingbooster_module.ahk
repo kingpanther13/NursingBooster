@@ -62,6 +62,7 @@ NB_ModuleInit:
     NB_HK5_Action := ""
     NB_SettingsVisible := 0
     NB_PanelHwnd := 0
+    NB_SettingsHwnd := 0
     NB_MiniBarBuilt := false
     NB_MiniDDLHwnd := 0
     NB_MiniBarLastX := ""
@@ -103,7 +104,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev22  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev23  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -155,7 +156,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev22
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev23
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -178,7 +179,7 @@ NB_ModuleInit:
     Gui, 84:Add, Checkbox, x10 y162 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
     if (!NB_SpeedOverride)
         GuiControl, 84:Disable, NB_SpeedSlider
-    Gui, 84:+AlwaysOnTop +ToolWindow -MinimizeBox
+    Gui, 84:+AlwaysOnTop +ToolWindow -MinimizeBox +HwndNB_SettingsHwnd
     Gui, 84:Show, x400 y0 w290 h188 Hide, NB Settings
 
     ; --- NursingBooster: Start CPRS detection timer ---
@@ -540,6 +541,11 @@ NB_ToggleSettings:
         ; bottom bar while settings are open. Checkboxes/sliders work by mouse
         ; without activation.
         Gui, 84:Show, x%settingsX% y%settingsY% NA
+        ; Show NA leaves the window at its old z-position, so a stay-on-top
+        ; CPRS reminder dialog / CPFS window opened since init sits above it
+        ; in the topmost band and buries it. Re-assert topmost (moves it to
+        ; the top of that band without activating) - same as the panel does.
+        WinSet, AlwaysOnTop, On, ahk_id %NB_SettingsHwnd%
         NB_SettingsVisible := 1
     }
 return
@@ -600,6 +606,7 @@ NB_ApplyAdvancedMode:
             Gui, 84:Show, w290 h188 NA
         else
             Gui, 84:Show, w290 h65 NA
+        WinSet, AlwaysOnTop, On, ahk_id %NB_SettingsHwnd%   ; see NB_ToggleSettings
     }
 return
 

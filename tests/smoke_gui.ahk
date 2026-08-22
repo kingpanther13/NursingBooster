@@ -205,6 +205,33 @@ InputBox, smokeIn, NB Smoke Prompt, probe, , , , , , , 8
 SmokeAssert(SmokeProbeExStyle != "" && (SmokeProbeExStyle & 0x8), "armed InputBox pinned topmost (exstyle=" . SmokeProbeExStyle . ")")
 SmokeAssert(SmokeProbeActive = 1, "armed InputBox was activated")
 
+; --- 14. Settings window opens ABOVE a stay-on-top window that appeared after
+;         init. Gui 84 is shown NA (never activates), which keeps its old
+;         z-position below any later topmost window; the toggle must re-assert
+;         topmost so it lands on top (dev23 fix). ---
+Gui, 4:Add, Text,, fake stay-on-top dialog
+Gui, 4:+AlwaysOnTop +HwndSmokeTopHwnd
+Gui, 4:Show, x0 y0 w420 h320, NBSmokeTopmostDialog   ; activated -> top of the topmost band
+Sleep, 300
+gosub NB_ToggleSettings
+Sleep, 300
+SmokeAssert(NB_SettingsVisible = 1 && WinExist("ahk_id " . NB_SettingsHwnd), "settings window shown")
+WinGet, smokeSetEx, ExStyle, ahk_id %NB_SettingsHwnd%
+SmokeAssert(smokeSetEx != "" && (smokeSetEx & 0x8), "settings window is topmost (exstyle=" . smokeSetEx . ")")
+WinGet, smokeZ, List
+smokeSetIdx := 0
+smokeTopIdx := 0
+Loop, %smokeZ%
+{
+    if (smokeZ%A_Index% = NB_SettingsHwnd)
+        smokeSetIdx := A_Index
+    if (smokeZ%A_Index% = SmokeTopHwnd)
+        smokeTopIdx := A_Index
+}
+SmokeAssert(smokeSetIdx > 0 && smokeTopIdx > 0 && smokeSetIdx < smokeTopIdx, "settings window sits above the later stay-on-top window (z " . smokeSetIdx . " < " . smokeTopIdx . ")")
+gosub NB_ToggleSettings   ; hide again
+Gui, 4:Destroy
+
 ; --- Summary ---
 if (SmokeFails > 0)
 {
