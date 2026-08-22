@@ -232,6 +232,25 @@ SmokeAssert(smokeSetIdx > 0 && smokeTopIdx > 0 && smokeSetIdx < smokeTopIdx, "se
 gosub NB_ToggleSettings   ; hide again
 Gui, 4:Destroy
 
+; --- 15. Issue #8: one dropdown per section replaces the Save/Load/Del
+;         buttons; AutoSave is gone. Structural only - picking an item would
+;         open a modal prompt. ---
+GuiControlGet, hCprsMenu, 80:Hwnd, NB_CprsMenuChoice
+GuiControlGet, hCfMenu, 80:Hwnd, CF_MenuChoice
+SmokeAssert(hCprsMenu != 0 && hCfMenu != 0, "CPRS and CPFS dropdowns exist")
+SendMessage, 0x0146, 0, 0,, ahk_id %hCprsMenu%   ; CB_GETCOUNT
+SmokeAssert(ErrorLevel = 4, "CPRS dropdown has header + Save/Load/Delete (" . ErrorLevel . ")")
+SendMessage, 0x0146, 0, 0,, ahk_id %hCfMenu%
+SmokeAssert(ErrorLevel = 4, "CPFS dropdown has header + Save/Load/Delete (" . ErrorLevel . ")")
+SendMessage, 0x0147, 0, 0,, ahk_id %hCprsMenu%   ; CB_GETCURSEL
+SmokeAssert(ErrorLevel = 0, "CPRS dropdown rests on its header")
+SendMessage, 0x0147, 0, 0,, ahk_id %hCfMenu%
+SmokeAssert(ErrorLevel = 0, "CPFS dropdown rests on its header")
+GuiControlGet, hAutoSave, 80:Hwnd, CF_AutoSaveChk
+SmokeAssert(hAutoSave = "", "AutoSave checkbox no longer exists")
+GuiControlGet, hAutoAdd, 80:Hwnd, CF_AutoAddChk
+SmokeAssert(hAutoAdd != 0, "Auto-Add checkbox still present")
+
 ; --- Summary ---
 if (SmokeFails > 0)
 {

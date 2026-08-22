@@ -49,10 +49,11 @@ If AutoHotkey installed somewhere unusual, point at it:
 - **-Interactive** opens the fake dialog AND the real NursingBooster module.
   Press **Ctrl+Shift+B** to show the floating panel, then:
   1. Click checkboxes in the fake dialog.
-  2. Panel -> **Save Tpl**, name it — it scans the dialog and saves your
-     pattern (to `Documents\NursingBooster-Playground\NursingTemplates`).
-  3. Uncheck things, then **Load Tpl** -> pick it -> **Apply**, and watch it
-     re-check exactly what you saved.
+  2. Panel -> **CPRS** dropdown -> **Save**, name it — it scans the dialog
+     and saves your pattern (to
+     `Documents\NursingBooster-Playground\NursingTemplates`).
+  3. Uncheck things, then **CPRS** -> **Load** -> pick it -> **Apply**, and
+     watch it re-check exactly what you saved.
   This is the full module, driven by hand, against a stand-in dialog — the
   same code path it runs against real CPRS.
 

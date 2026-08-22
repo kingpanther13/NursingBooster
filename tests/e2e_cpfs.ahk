@@ -30,10 +30,8 @@ CF_LogDir := onedrivelocal . "\Logs"
 FileCreateDir, %CF_TemplateDir%
 FileCreateDir, %CF_LogDir%
 CF_AppTitle := "CP Flowsheets Booster"
-CF_AutoSave := 0
 CF_ChainAddData := 0
 CF_AddDataDelay := 50
-CF_AutoSaveDelay := 500
 NB_SpeedOverride := 0
 NB_ApplySpeed := 0
 NB_LeafSpeed := 0

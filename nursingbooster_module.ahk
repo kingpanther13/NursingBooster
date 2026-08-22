@@ -62,6 +62,10 @@ NB_ModuleInit:
     NB_HK5_Action := ""
     NB_SettingsVisible := 0
     NB_PanelHwnd := 0
+    NB_CprsMenuHwnd := 0
+    NB_CprsMenuChoice := 0
+    CF_MenuHwnd := 0
+    CF_MenuChoice := 0
     NB_SettingsHwnd := 0
     NB_MiniBarBuilt := false
     NB_MiniDDLHwnd := 0
@@ -72,10 +76,8 @@ NB_ModuleInit:
     CF_AppTitle := "CP Flowsheets Booster"
     CF_Detected := 0
     CF_SpyResults := []
-    CF_AutoSave := 0
     CF_ChainAddData := 0
     CF_AddDataDelay := 50
-    CF_AutoSaveDelay := 500
 
     ; Resolve paths from host's `onedrivelocal`
     NB_TemplateDir       := onedrivelocal . "\NursingTemplates"
@@ -104,29 +106,25 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev23  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev24  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
-    Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
-    Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
-    Gui, 80:Add, Button, x151 y28 w70 h26 gNB_PanelDelete, Del Tpl
-    Gui, 80:Add, Button, x224 y28 w55 h26 gNB_PanelSettings, Settings
-    Gui, 80:Add, Button, x282 y28 w50 h26 gNB_ReloadBoilerplate, Reload BP
-    Gui, 80:Add, Button, x335 y28 w47 h26 gNB_ShowBothBars, Bars
+    ; One dropdown per section instead of three buttons (issue #8). The DDL
+    ; draws its own arrow; item 1 is the section header and is re-selected
+    ; after every pick, like the bottom-bar drop-up (Gui 85).
+    Gui, 80:Add, DropDownList, x5 y30 w100 vNB_CprsMenuChoice gNB_CprsMenuAction AltSubmit +HwndNB_CprsMenuHwnd, CPRS||Save|Load|Delete
+    Gui, 80:Add, Button, x112 y28 w80 h26 gNB_PanelSettings, Settings
+    Gui, 80:Add, Button, x199 y28 w85 h26 gNB_ReloadBoilerplate, Reload BP
+    Gui, 80:Add, Button, x291 y28 w89 h26 gNB_ShowBothBars, Bars
     Gui, 80:Font, s7 c00BFFF, Segoe UI
     Gui, 80:Add, Text, x5 y58 w370 h16 Center BackgroundTrans, --- CP Flowsheets ---
     Gui, 80:Font, s8 cBlack, Segoe UI
-    Gui, 80:Add, Button, x5   y76 w60 h26 gCF_PanelSave, Save
-    Gui, 80:Add, Button, x68  y76 w60 h26 gCF_PanelLoad, Load
-    Gui, 80:Add, Button, x131 y76 w50 h26 gCF_PanelDelete, Del
-    Gui, 80:Add, Button, x184 y76 w70 h26 gCF_PanelAddData, Add Data
+    Gui, 80:Add, DropDownList, x5 y78 w100 vCF_MenuChoice gCF_MenuAction AltSubmit +HwndCF_MenuHwnd, CPFS||Save|Load|Delete
+    Gui, 80:Add, Button, x112 y76 w90 h26 gCF_PanelAddData, Add Data
     Gui, 80:Font, s6 cBlack, Segoe UI
-    Gui, 80:Add, Button, x258 y76 w30 h13 gNB_LaunchBCMA, BCMA
-    Gui, 80:Add, Button, x258 y90 w30 h13 gNB_LaunchCPFS, CPFS
-    Gui, 80:Font, s8 cBlack, Segoe UI
+    Gui, 80:Add, Button, x209 y76 w40 h13 gNB_LaunchBCMA, BCMA
+    Gui, 80:Add, Button, x209 y90 w40 h13 gNB_LaunchCPFS, CPFS
     Gui, 80:Font, s7 cRed, Segoe UI
-    Gui, 80:Add, Checkbox, x292 y76 w90 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
-    ; Advanced-only: AutoSave checkbox
-    Gui, 80:Add, Checkbox, x292 y90 w90 h14 vCF_AutoSaveChk gCF_ToggleAutoSave +HwndCF_AdvAutoSaveHwnd, AutoSave
+    Gui, 80:Add, Checkbox, x258 y82 w120 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
     Gui, 80:Font, s7 cFFD700, Segoe UI
     Gui, 80:Add, Text, x5 y106 w370 h16 Center BackgroundTrans, --- Quick Actions ---
     Gui, 80:Font, s7 cBlack, Segoe UI
@@ -156,7 +154,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev23
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev24
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -168,19 +166,16 @@ NB_ModuleInit:
     Gui, 84:Add, Text, x10 y86 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
     Gui, 84:Add, Slider, x95 y84 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
     Gui, 84:Add, Text, x230 y86 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
-    Gui, 84:Add, Text, x10 y110 w80 h16 BackgroundTrans vCF_AdvSaveDelayLbl, AutoSave Delay:
-    Gui, 84:Add, Slider, x95 y108 w130 h22 vCF_AutoSaveDelaySlider gCF_AutoSaveDelayChanged Range50-3000 TickInterval500 ToolTip, %CF_AutoSaveDelay%
-    Gui, 84:Add, Text, x230 y110 w55 h16 BackgroundTrans vCF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
     Gui, 84:Font, s8 cBlack, Segoe UI
-    Gui, 84:Add, Button, x10 y134 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
-    Gui, 84:Add, Button, x145 y134 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
+    Gui, 84:Add, Button, x10 y110 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
+    Gui, 84:Add, Button, x145 y110 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
-    Gui, 84:Add, Checkbox, x10 y162 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+    Gui, 84:Add, Checkbox, x10 y138 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
     if (!NB_SpeedOverride)
         GuiControl, 84:Disable, NB_SpeedSlider
     Gui, 84:+AlwaysOnTop +ToolWindow -MinimizeBox +HwndNB_SettingsHwnd
-    Gui, 84:Show, x400 y0 w290 h188 Hide, NB Settings
+    Gui, 84:Show, x400 y0 w290 h164 Hide, NB Settings
 
     ; --- NursingBooster: Start CPRS detection timer ---
     SetTimer, NB_CheckCPRS, 3000
@@ -350,16 +345,17 @@ return
 ; NURSING BOOSTER PANEL BUTTON HANDLERS
 ;============================================================================================
 
-NB_PanelSave:
-    gosub NB_BtnSaveCurrentState
-return
-
-NB_PanelLoad:
-    gosub NB_BtnLoadSavedTemplate
-return
-
-NB_PanelDelete:
-    gosub NB_BtnDeleteTemplate
+NB_CprsMenuAction:
+    ; AltSubmit: index of the picked item. Reset to the header FIRST so the
+    ; control never sits on "Save" while the save dialog is open.
+    GuiControlGet, NB_CprsMenuChoice, 80:, NB_CprsMenuChoice
+    GuiControl, 80:Choose, NB_CprsMenuChoice, 1
+    if (NB_CprsMenuChoice = 2)
+        gosub NB_BtnSaveCurrentState
+    else if (NB_CprsMenuChoice = 3)
+        gosub NB_BtnLoadSavedTemplate
+    else if (NB_CprsMenuChoice = 4)
+        gosub NB_BtnDeleteTemplate
 return
 
 NB_PanelDump:
@@ -585,25 +581,20 @@ return
 NB_ApplyAdvancedMode:
     ; Show or hide advanced-only controls based on NB_AdvancedMode
     showCmd := NB_AdvancedMode ? "Show" : "Hide"
-    ; Gui 80 (main panel): autosave checkbox (advanced only)
-    GuiControl, 80:%showCmd%, CF_AutoSaveChk
-    ; Gui 84 (settings): speed override, delays, dump buttons, debug logging
+    ; Gui 84 (settings): speed override, delay, dump buttons, debug logging
     GuiControl, 84:%showCmd%, NB_SpeedOverrideChk
     GuiControl, 84:%showCmd%, NB_SpeedSlider
     GuiControl, 84:%showCmd%, NB_SpeedLabel
     GuiControl, 84:%showCmd%, CF_AdvDelayLbl
     GuiControl, 84:%showCmd%, CF_AddDataDelaySlider
     GuiControl, 84:%showCmd%, CF_AddDataDelayLabel
-    GuiControl, 84:%showCmd%, CF_AdvSaveDelayLbl
-    GuiControl, 84:%showCmd%, CF_AutoSaveDelaySlider
-    GuiControl, 84:%showCmd%, CF_AutoSaveDelayLabel
     GuiControl, 84:%showCmd%, NB_AdvDumpBtn
     GuiControl, 84:%showCmd%, CF_AdvSpyBtn
     GuiControl, 84:%showCmd%, NB_DebugLogChk
     ; Resize settings panel only if visible
     if (NB_SettingsVisible) {
         if (NB_AdvancedMode)
-            Gui, 84:Show, w290 h188 NA
+            Gui, 84:Show, w290 h164 NA
         else
             Gui, 84:Show, w290 h65 NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_SettingsHwnd%   ; see NB_ToggleSettings
@@ -688,12 +679,6 @@ CF_AddDataDelayChanged:
     gosub NB_SaveSettings
 return
 
-CF_AutoSaveDelayChanged:
-    GuiControlGet, CF_AutoSaveDelay, 84:, CF_AutoSaveDelaySlider
-    GuiControl, 84:, CF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
-    gosub NB_SaveSettings
-return
-
 NB_DebugLogChanged:
     GuiControlGet, chkVal, 84:, NB_DebugLogChk
     NB_DebugLogging := chkVal
@@ -718,16 +703,15 @@ CF_PanelSpy:
     gosub CF_SpyDumpControls
 return
 
-CF_PanelSave:
-    gosub CF_BtnSaveTemplate
-return
-
-CF_PanelLoad:
-    gosub CF_BtnLoadTemplate
-return
-
-CF_PanelDelete:
-    gosub CF_BtnDeleteTemplate
+CF_MenuAction:
+    GuiControlGet, CF_MenuChoice, 80:, CF_MenuChoice
+    GuiControl, 80:Choose, CF_MenuChoice, 1
+    if (CF_MenuChoice = 2)
+        gosub CF_BtnSaveTemplate
+    else if (CF_MenuChoice = 3)
+        gosub CF_BtnLoadTemplate
+    else if (CF_MenuChoice = 4)
+        gosub CF_BtnDeleteTemplate
 return
 
 CF_PanelAddData:
@@ -738,29 +722,6 @@ CF_ToggleAutoAdd:
     Gui, 80:Submit, NoHide
     global CF_ChainAddData
     CF_ChainAddData := CF_AutoAddChk
-return
-
-CF_ToggleAutoSave:
-    Gui, 80:Submit, NoHide
-    global CF_AutoSave
-    if (CF_AutoSaveChk = 1) {
-        MsgBox, 262452, CP Flowsheets - AutoSave WARNING, WARNING: AutoSave will automatically click the SAVE button in CP Flowsheets after applying a template.`n`nThis saves the entry PERMANENTLY to the patient record.`n`nAre you sure you want to enable AutoSave?
-        IfMsgBox, Yes
-        {
-            CF_AutoSave := 1
-            ToolTip, CPFS AutoSave ENABLED - Save will be clicked automatically
-            SetTimer, NB_ClearToolTip, -3000
-        }
-        else
-        {
-            CF_AutoSave := 0
-            GuiControl, 80:, CF_AutoSaveChk, 0
-        }
-    } else {
-        CF_AutoSave := 0
-        ToolTip, CPFS AutoSave disabled
-        SetTimer, NB_ClearToolTip, -2000
-    }
 return
 
 
@@ -1099,7 +1060,7 @@ NB_SaveHotkeyConfig:
 return
 
 NB_LoadSettings:
-    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay, CF_AutoSaveDelay
+    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay
     global NB_SpeedOverride, NB_ApplySpeed, NB_LeafSpeed
     IniRead, NB_AdvancedMode, %NB_SettingsIniPath%, General, AdvancedMode, 0
     IniRead, NB_DebugLogging, %NB_SettingsIniPath%, General, DebugLogging, 0
@@ -1107,11 +1068,10 @@ NB_LoadSettings:
     IniRead, NB_ApplySpeed, %NB_SettingsIniPath%, General, ApplySpeed, 0
     IniRead, NB_LeafSpeed, %NB_SettingsIniPath%, General, LeafSpeed, 0
     IniRead, CF_AddDataDelay, %NB_SettingsIniPath%, CPFS, AddDataDelay, 50
-    IniRead, CF_AutoSaveDelay, %NB_SettingsIniPath%, CPFS, AutoSaveDelay, 500
 return
 
 NB_SaveSettings:
-    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay, CF_AutoSaveDelay
+    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay
     global NB_SpeedOverride, NB_ApplySpeed, NB_LeafSpeed
     IniWrite, %NB_AdvancedMode%, %NB_SettingsIniPath%, General, AdvancedMode
     IniWrite, %NB_DebugLogging%, %NB_SettingsIniPath%, General, DebugLogging
@@ -1119,7 +1079,6 @@ NB_SaveSettings:
     IniWrite, %NB_ApplySpeed%, %NB_SettingsIniPath%, General, ApplySpeed
     IniWrite, %NB_LeafSpeed%, %NB_SettingsIniPath%, General, LeafSpeed
     IniWrite, %CF_AddDataDelay%, %NB_SettingsIniPath%, CPFS, AddDataDelay
-    IniWrite, %CF_AutoSaveDelay%, %NB_SettingsIniPath%, CPFS, AutoSaveDelay
 return
 
 
@@ -3649,8 +3608,8 @@ return
 CF_ApplyTemplate(templatePath) {
     ; Same as NB_ApplyTemplate: NB_BoosterGuiVisible/NB_PanelHwnd must be declared
     ; or the final AlwaysOnTop re-assert reads blank locals and never fires.
-    global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride, CF_AutoSaveDelay, NB_ApplyCancelled
-    global NB_BoosterGuiVisible, NB_PanelHwnd, CF_AutoSave, NB_DebugLogging, CF_ChainAddData, CF_AddDataDelay
+    global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride, NB_ApplyCancelled
+    global NB_BoosterGuiVisible, NB_PanelHwnd, NB_DebugLogging, CF_ChainAddData, CF_AddDataDelay
 
     targetHwnd := CF_FindAddDataWindow()
     if (!targetHwnd) {
@@ -3716,7 +3675,6 @@ CF_ApplyTemplate(templatePath) {
     totalNotFound := 0
     cfNotFoundList := ""
     cfClaimed := {}  ; track which live indices are already matched
-    cfAutoSaveCancelled := false
 
     ; Register right-click hotkey to set cancel flag
     NB_ApplyCancelled := false
@@ -3732,12 +3690,6 @@ CF_ApplyTemplate(templatePath) {
             ToolTip, Template apply cancelled at control %ti%/%cfTotalTpl%.
             SetTimer, CF_ClearToolTip, -3000
             return
-        }
-        ; Check Esc to cancel auto-save throughout the apply process
-        if (CF_AutoSave && GetKeyState("Escape", "P")) {
-            cfAutoSaveCancelled := true
-            ToolTip, AutoSave cancelled - still applying template
-            SetTimer, CF_ClearToolTip, -2000
         }
         ; Extract all template control properties to plain variables (AHK v1 safe)
         cfTplType := tplCtrl.type
@@ -3825,40 +3777,14 @@ CF_ApplyTemplate(templatePath) {
         CF__LogControlStates("APPLY", cfApplyLiveControls, templatePath, cfApplyWinTitle, totalApplied, totalNotFound)
     }
 
-    if (CF_AutoSave && totalApplied > 0) {
-        ; Check if Esc/right-click was pressed at any point during apply
-        if (cfAutoSaveCancelled || NB_ApplyCancelled || GetKeyState("Escape", "P")) {
-            if (NB_BoosterGuiVisible = 1)
-                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
-            ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
-            SetTimer, CF_ClearToolTip, -3000
-            return
-        }
-        ; Wait before saving, then click Save (right-click or Esc cancels during delay)
-        ToolTip, %totalApplied% applied - saving in %CF_AutoSaveDelay% ms... (right-click or Esc to cancel)
-        Sleep, %CF_AutoSaveDelay%
-        ; Re-check cancel after delay
-        if (NB_ApplyCancelled || GetKeyState("Escape", "P")) {
-            if (NB_BoosterGuiVisible = 1)
-                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
-            ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
-            SetTimer, CF_ClearToolTip, -3000
-            return
-        }
-        CF_ClickSaveButton(targetHwnd)
-        ToolTip, %totalApplied% applied and saved
-        SetTimer, CF_ClearToolTip, -3000
-    } else if (CF_AutoSave && totalApplied = 0) {
-        ToolTip, No controls applied - nothing to save
-        SetTimer, CF_ClearToolTip, -3000
-    } else {
-        cfUnmatchedTip := "Done: " . totalApplied . " applied, " . totalNotFound . " not matched"
-        if (cfNotFoundList != "")
-            cfUnmatchedTip .= " [" . RTrim(cfNotFoundList, "`n") . "]"
-        cfUnmatchedTip .= " - review before submitting"
-        ToolTip, %cfUnmatchedTip%
-        SetTimer, CF_ClearToolTip, -8000
-    }
+    ; The user always saves in CP Flowsheets by hand - the module never clicks
+    ; Save (the old AutoSave option wrote to the patient record and was removed).
+    cfUnmatchedTip := "Done: " . totalApplied . " applied, " . totalNotFound . " not matched"
+    if (cfNotFoundList != "")
+        cfUnmatchedTip .= " [" . RTrim(cfNotFoundList, "`n") . "]"
+    cfUnmatchedTip .= " - review before submitting"
+    ToolTip, %cfUnmatchedTip%
+    SetTimer, CF_ClearToolTip, -8000
 
     ; Re-assert AlwaysOnTop on the panel — WinActivate on CPFS dialog strips it
     if (NB_BoosterGuiVisible = 1)
@@ -4170,57 +4096,6 @@ CF__FindOKCallback(hwnd, lParam) {
             CF__foundOKHwnd := hwnd
             return 0
         }
-    }
-    return 1
-}
-
-
-;============================================================================================
-; CF - FIND AND CLICK SAVE BUTTON
-;
-; Finds the "Save" TButton in CP Flowsheets and clicks it.
-; Used by AutoSave feature after template apply.
-;============================================================================================
-
-CF_ClickSaveButton(windowHwnd) {
-    global CF_AppTitle, CF__foundSaveHwnd
-    CF__foundSaveHwnd := 0
-    enumSave := RegisterCallback("CF__FindSaveCallback", "Fast")
-    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumSave, "Ptr", 0)
-
-    if (CF__foundSaveHwnd) {
-        PostMessage, 0x00F5, 0, 0,, ahk_id %CF__foundSaveHwnd%   ; BM_CLICK
-        ToolTip, AutoSave: Save clicked
-        SetTimer, CF_ClearToolTip, -2000
-    } else {
-        ToolTip, AutoSave: Save button not found - save manually
-        SetTimer, CF_ClearToolTip, -3000
-    }
-}
-
-CF__FindSaveCallback(hwnd, lParam) {
-    global CF__foundSaveHwnd
-
-    ; Skip invisible
-    cfStyle := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
-    if !(cfStyle & 0x10000000)
-        return 1
-
-    VarSetCapacity(buf, 512, 0)
-    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
-    className := buf
-
-    if !(InStr(className, "Button") || InStr(className, "TButton"))
-        return 1
-
-    ; Get button text
-    VarSetCapacity(tBuf, 256, 0)
-    DllCall("GetWindowText", "Ptr", hwnd, "Str", tBuf, "Int", 128)
-    btnText := tBuf
-
-    if (btnText = "Save" || btnText = "&Save") {
-        CF__foundSaveHwnd := hwnd
-        return 0
     }
     return 1
 }
