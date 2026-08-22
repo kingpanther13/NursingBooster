@@ -6,7 +6,7 @@ Two release channels, **different label styles**:
 
 | Channel  | Branch   | Label style | Current |
 |----------|----------|-------------|---------|
-| Dev/Beta | `master` | `devXX`     | `dev21` |
+| Dev/Beta | `master` | `devXX`     | `dev22` |
 | Stable   | `stable` | `X.Y`       | `1.0`   |
 
 The label appears in **two** lines of `nursingbooster_module.ahk`: the `vNB_PanelTitle`
@@ -31,7 +31,8 @@ before it was reset to `1.0`.)
   - **lint** (ubuntu): `tools/ci_lint.py` — version-label agreement + channel rule
     (devNN on master, X.Y on stable), missing-`global` reads of module variables in
     functions, `Gui 80/84/85:Show` without NA, dead top-level statements between
-    labels, host↔module label/Gui-number congruence, `#If` balance. Runs locally:
+    labels, host↔module label/Gui-number congruence, `#If` balance, every
+    MsgBox/InputBox kept topmost (262144 flag / `NB_ArmTopmostDialog`). Runs locally:
     `python3 tools/ci_lint.py --repo . --channel-branch master`.
   - **syntax** (windows): real AHK v1/v2 load-validation of every script.
   - **unit tests** (windows): `tests/test_module.ahk` — Yunit against the REAL

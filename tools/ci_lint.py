@@ -24,6 +24,11 @@ instead of shipping:
   6. if-balance       - every `#If <expr>` in the module is closed by a bare
                         `#If` before EOF (an open context leaks onto host
                         hotkeys included later).
+  7. dialog-topmost   - every MsgBox carries the 262144 (MB_TOPMOST) option
+                        and every InputBox is immediately preceded by
+                        NB_ArmTopmostDialog(...). CPRS reminder dialogs and
+                        CPFS are stay-on-top windows; a plain prompt opens
+                        underneath them (the hidden-save-dialog bug class).
 
 Usage:
   python3 tools/ci_lint.py [--repo DIR] [--channel-branch NAME]
@@ -275,6 +280,47 @@ def label_body_tracking(lines):
     return dead
 
 
+MSGBOX_RE = re.compile(r"^\s*MsgBox\b\s*,?\s*([^,]*)", re.IGNORECASE)
+INPUTBOX_RE = re.compile(r"^\s*InputBox\b", re.IGNORECASE)
+MB_TOPMOST = 0x40000  # MsgBox option 262144: always-on-top
+
+
+def check_dialog_topmost(lines):
+    """check 7: module prompts must not open under CPRS/CPFS stay-on-top
+    windows. MsgBox has a native flag for it (262144); InputBox does not, so
+    the module arms a timer (NB_ArmTopmostDialog) on the line right before."""
+    prev_code = ""
+    in_block_comment = False
+    for idx, raw in enumerate(lines, 1):
+        stripped = raw.strip()
+        if in_block_comment:
+            if stripped.startswith("*/"):
+                in_block_comment = False
+            continue
+        if stripped.startswith("/*"):
+            in_block_comment = True
+            continue
+        code = strip_comment_and_strings(raw).strip()
+        if not code:
+            continue
+        m = MSGBOX_RE.match(code)
+        if m:
+            opts = m.group(1).strip()
+            try:
+                val = int(opts, 0)
+            except ValueError:
+                val = None
+            if val is None or not (val & MB_TOPMOST):
+                finding("dialog-topmost", MODULE, idx,
+                        "MsgBox without the 262144 (MB_TOPMOST) option flag - "
+                        "it opens under CPRS/CPFS stay-on-top windows")
+        elif INPUTBOX_RE.match(code) and "NB_ArmTopmostDialog(" not in prev_code:
+            finding("dialog-topmost", MODULE, idx,
+                    "InputBox not immediately preceded by NB_ArmTopmostDialog(...) - "
+                    "it opens under CPRS/CPFS stay-on-top windows")
+        prev_code = code
+
+
 def check_version_labels(repo, channel_branch):
     module = repo / MODULE
     text = module.read_text(encoding="utf-8", errors="replace")
@@ -341,6 +387,9 @@ def check_module(repo):
     if if_open:
         finding("if-balance", MODULE, len(lines),
                 "#If <expr> context still open at EOF - add a bare #If to close it")
+
+    # ---- check 7: prompts stay above CPRS/CPFS ------------------------------
+    check_dialog_topmost(lines)
 
     return lines
 

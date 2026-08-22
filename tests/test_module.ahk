@@ -24,7 +24,9 @@ onedrivelocal := A_Temp . "\nb_unit_" . A_TickCount
 ;     inside class methods (function-local label scope), so the file I/O
 ;     happens here in the auto-execute section; HKRoundTripTests asserts
 ;     the captured results. Hostile characters exercise the EscJson/
-;     UnescJson persistence path this PR changed. ---
+;     UnescJson persistence path. The label assertion now checks that load
+;     DERIVES the label from action1 and ignores the stored label1 (issue
+;     #12), so the expected value is the template name inside the action. ---
 NB_HotkeyConfigPath := A_Temp . "\nb_hkrt_" . A_TickCount . ".json"
 NB_HK1_Label := "say ""hi"" C:\dir\done"
 NB_HK1_Action := "nb_template:Neg ""special"" \ case"
@@ -37,7 +39,7 @@ NB_HK4_Action := ""
 NB_HK5_Label := "Quick 5"
 NB_HK5_Action := ""
 gosub NB_SaveHotkeyConfig
-HKRT_WantLabel1 := NB_HK1_Label
+HKRT_WantLabel1 := "Neg ""special"" \ case"
 HKRT_WantAction1 := NB_HK1_Action
 HKRT_WantAction2 := NB_HK2_Action
 NB_HK1_Label := "clobbered"
@@ -48,6 +50,15 @@ HKRT_GotLabel1 := NB_HK1_Label
 HKRT_GotAction1 := NB_HK1_Action
 HKRT_GotAction2 := NB_HK2_Action
 FileDelete, %NB_HotkeyConfigPath%
+
+; --- A hidden 68px button (same geometry/font as the panel's quick-action
+;     buttons) for the width-measure / truncate helper tests. ---
+Gui, 9:Font, s7, Segoe UI
+Gui, 9:Add, Button, x0 y0 w68 h24 vFIT_Btn, x
+Gui, 9:Show, x0 y0 w80 h30 Hide, NBUnitFitProbe
+GuiControlGet, FIT_hBtn, 9:Hwnd, FIT_Btn
+SendMessage, 0x31, 0, 0,, ahk_id %FIT_hBtn%   ; WM_GETFONT
+FIT_hFont := ErrorLevel
 
 #Include %A_ScriptDir%\..\tools\Yunit\Yunit.ahk
 #Include %A_ScriptDir%\..\tools\Yunit\Stdout.ahk
@@ -63,8 +74,8 @@ class YunitFailCount
 }
 
 Yunit.Use(YunitStdOut, YunitFailCount).Test(EscJsonTests, FlatParseTests
-    , CFParseTests, HKTests, HKRoundTripTests, SanitizeTests, SpeedFileTests
-    , MatcherTests)
+    , CFParseTests, HKTests, FitTests, HKRoundTripTests, SanitizeTests
+    , SpeedFileTests, MatcherTests)
 
 if (YunitFailCount.Fails > 0)
 {
@@ -211,20 +222,14 @@ class CFParseTests
 ; ===========================================================================
 class HKTests
 {
-    CleanStripsPipes()
+    LabelFromAction()
     {
-        Yunit.Assert(NB_CleanHKLabel("My|Lab|el", "Quick 1") = "MyLabel", "pipes stripped")
-    }
-
-    CleanEmptyFallsBack()
-    {
-        Yunit.Assert(NB_CleanHKLabel("", "Quick 2") = "Quick 2", "empty -> fallback")
-        Yunit.Assert(NB_CleanHKLabel("|||", "Quick 3") = "Quick 3", "pipes-only -> fallback")
-    }
-
-    CleanTrims()
-    {
-        Yunit.Assert(NB_CleanHKLabel("  Neuro WNL  ", "x") = "Neuro WNL", "trimmed")
+        Yunit.Assert(NB_HKLabelFromAction("nb_template:Negative Assessment", "Quick 1") = "Negative Assessment", "NB name")
+        Yunit.Assert(NB_HKLabelFromAction("cf_template:Vitals", "Quick 2") = "Vitals", "CF name")
+        Yunit.Assert(NB_HKLabelFromAction("", "Quick 3") = "Quick 3", "empty -> fallback")
+        Yunit.Assert(NB_HKLabelFromAction("garbage", "Quick 4") = "Quick 4", "garbage -> fallback")
+        Yunit.Assert(NB_HKLabelFromAction("nb_template:  A|B  ", "x") = "AB", "pipes stripped, trimmed")
+        Yunit.Assert(NB_HKLabelFromAction("nb_template:|", "Quick 5") = "Quick 5", "pipe-only name -> fallback")
     }
 
     ParseActionChoices()
@@ -234,6 +239,46 @@ class HKTests
         Yunit.Assert(NB_HKParseActionChoice("-- None --") = "", "none -> empty")
         Yunit.Assert(NB_HKParseActionChoice("") = "", "empty -> empty")
         Yunit.Assert(NB_HKParseActionChoice("garbage") = "", "garbage -> empty")
+    }
+}
+
+; ===========================================================================
+; Button-label fitting helpers (measure/truncate against a real 68px button)
+; ===========================================================================
+class FitTests
+{
+    WidthGrowsWithText()
+    {
+        global FIT_hBtn, FIT_hFont
+        wShort := NB_TextWidthPx(FIT_hBtn, FIT_hFont, "Vitals")
+        wLong := NB_TextWidthPx(FIT_hBtn, FIT_hFont, "Neurological Assessment Negative")
+        Yunit.Assert(wShort > 0, "short width positive: " . wShort)
+        Yunit.Assert(wLong > wShort, "longer text measures wider")
+    }
+
+    TruncateFitsAndMarksEllipsis()
+    {
+        global FIT_hBtn, FIT_hFont
+        ell := A_IsUnicode ? Chr(0x2026) : "..."
+        name := "Neurological Assessment Negative Findings"
+        got := NB_TruncateToWidthPx(FIT_hBtn, FIT_hFont, name, 58)
+        Yunit.Assert(got != name, "long name was trimmed")
+        Yunit.Assert(SubStr(got, 1 - StrLen(ell)) = ell, "ends with ellipsis: '" . got . "'")
+        Yunit.Assert(NB_TextWidthPx(FIT_hBtn, FIT_hFont, got) <= 58, "trimmed text fits 58px")
+        Yunit.Assert(StrLen(got) > StrLen(ell), "kept some of the name")
+    }
+
+    ShortTextUnchanged()
+    {
+        global FIT_hBtn, FIT_hFont
+        Yunit.Assert(NB_TruncateToWidthPx(FIT_hBtn, FIT_hFont, "Vitals", 58) = "Vitals", "short text untouched")
+    }
+
+    NothingFitsGivesEllipsis()
+    {
+        global FIT_hBtn, FIT_hFont
+        ell := A_IsUnicode ? Chr(0x2026) : "..."
+        Yunit.Assert(NB_TruncateToWidthPx(FIT_hBtn, FIT_hFont, "Vitals", 1) = ell, "1px -> ellipsis only")
     }
 }
 

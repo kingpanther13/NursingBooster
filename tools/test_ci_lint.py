@@ -117,6 +117,14 @@ def main():
     case("panel-show timer never turned Off", "host-congruence", lambda t: sub(
         t, HOST, "SetTimer, NB_RestorePanelAfterFKey, Off", "; seed: teardown removed"))
 
+    # 7a. MsgBox without the topmost flag
+    case("MsgBox without MB_TOPMOST flag", "dialog-topmost", lambda t: sub(
+        t, MODULE, "MsgBox, 262192,", "MsgBox, 48,"))
+
+    # 7b. InputBox whose arming call was removed
+    case("InputBox without NB_ArmTopmostDialog", "dialog-topmost", lambda t: sub(
+        t, MODULE, '    NB_ArmTopmostDialog("Save Template")\n', ""))
+
     # 6. unbalanced #If context at EOF
     def m_ifbal(tree):
         p = tree / MODULE

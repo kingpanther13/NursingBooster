@@ -11,6 +11,8 @@
 ;   - the Gui 85 drop-up appears next to a window titled "fxnbar",
 ;     follows it when it moves, is left alone while its list is open
 ;     (CB_GETDROPPEDSTATE guard), and disappears when the bar dies
+;   - quick-action button labels come from the selected template's name and
+;     are shrunk/trimmed to fit the 68px buttons
 ;
 ; Output: PASS/FAIL lines on stdout; exit code = number of failures.
 ; Run with: AutoHotkeyU64.exe /ErrorStdOut smoke_gui.ahk
@@ -136,6 +138,31 @@ Send, ^+b
 Sleep, 400
 SmokeAssert(NB_BoosterGuiVisible = 0, "^+b does NOT re-show the panel while disabled")
 NB_Enabled := 1
+
+; --- 12. Quick-action button labels derive from the action and fit the
+;         68px buttons: long names are trimmed with an ellipsis, short names
+;         shown verbatim, empty slots fall back to "Quick N" ---
+NB_HK1_Action := "nb_template:Neurological Assessment Negative Findings"
+NB_HK1_Label := NB_HKLabelFromAction(NB_HK1_Action, "Quick 1")
+NB_HK2_Action := "cf_template:Vitals"
+NB_HK2_Label := NB_HKLabelFromAction(NB_HK2_Action, "Quick 2")
+NB_HK3_Action := ""
+NB_HK3_Label := NB_HKLabelFromAction(NB_HK3_Action, "Quick 3")
+NB_ApplyHKButtonLabels()
+ell := A_IsUnicode ? Chr(0x2026) : "..."
+GuiControlGet, hkText1, 80:, NB_HK1_Btn
+GuiControlGet, hkText2, 80:, NB_HK2_Btn
+GuiControlGet, hkText3, 80:, NB_HK3_Btn
+GuiControlGet, hkBtn1, 80:Hwnd, NB_HK1_Btn
+SendMessage, 0x31, 0, 0,, ahk_id %hkBtn1%   ; WM_GETFONT
+hkFont1 := ErrorLevel
+VarSetCapacity(hkRc, 16, 0)
+DllCall("GetClientRect", "Ptr", hkBtn1, "Ptr", &hkRc)
+hkBtnW := NumGet(hkRc, 8, "Int")
+SmokeAssert(hkText1 != NB_HK1_Label && SubStr(hkText1, 1 - StrLen(ell)) = ell, "long quick label trimmed with ellipsis ('" . hkText1 . "')")
+SmokeAssert(NB_TextWidthPx(hkBtn1, hkFont1, hkText1) < hkBtnW, "trimmed quick label fits inside the " . hkBtnW . "px button")
+SmokeAssert(hkText2 = "Vitals", "short quick label shown verbatim")
+SmokeAssert(hkText3 = "Quick 3", "empty slot falls back to Quick 3")
 
 ; --- Summary ---
 if (SmokeFails > 0)
