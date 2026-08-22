@@ -24,6 +24,13 @@ instead of shipping:
   6. if-balance       - every `#If <expr>` in the module is closed by a bare
                         `#If` before EOF (an open context leaks onto host
                         hotkeys included later).
+  7. dialog-topmost   - every MsgBox carries the 262144 (MB_TOPMOST) option
+                        and every InputBox is immediately preceded by
+                        NB_ArmTopmostDialog(<title>) whose title renders to
+                        the InputBox's own title (the timer raises the dialog
+                        by title). CPRS reminder dialogs and CPFS are
+                        stay-on-top windows; a plain prompt opens underneath
+                        them (the hidden-save-dialog bug class).
 
 Usage:
   python3 tools/ci_lint.py [--repo DIR] [--channel-branch NAME]
@@ -88,6 +95,48 @@ def strip_comment_and_strings(line):
     return "".join(out)
 
 
+def strip_comment(line):
+    """Remove a ; comment (not inside quotes) but KEEP string contents - for
+    checks that need to read a literal argument on the line."""
+    in_str = False
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if in_str:
+            if ch == '"':
+                if i + 1 < len(line) and line[i + 1] == '"':
+                    i += 2
+                    continue
+                in_str = False
+            i += 1
+            continue
+        if ch == '"':
+            in_str = True
+            i += 1
+            continue
+        if ch == ";" and (i == 0 or line[i - 1] in " \t"):
+            return line[:i]
+        i += 1
+    return line
+
+
+def iter_code_lines(lines):
+    """Yield (lineno, raw, code) for every source line outside /* */ block
+    comments, where code is the line with ; comments and string contents
+    stripped (see strip_comment_and_strings). Callers strip/rstrip as needed."""
+    in_block_comment = False
+    for idx, raw in enumerate(lines, 1):
+        stripped = raw.strip()
+        if in_block_comment:
+            if stripped.startswith("*/"):
+                in_block_comment = False
+            continue
+        if stripped.startswith("/*"):
+            in_block_comment = True
+            continue
+        yield idx, raw, strip_comment_and_strings(raw)
+
+
 LABEL_RE = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9_]*):\s*(?:;.*)?$")
 HOTKEY_RE = re.compile(r"^\S+::")
 FUNC_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\(([^)]*)\)\s*\{\s*(?:;.*)?$")
@@ -128,21 +177,10 @@ def segment_module(lines):
     ctx = "none"          # none | label | hotkey | function
     cur_func = None
     brace_depth = 0       # inside function bodies
-    in_block_comment = False
     if_context_open = False
 
-    for idx, raw in enumerate(lines, 1):
-        stripped = raw.strip()
-
-        if in_block_comment:
-            if stripped.startswith("*/"):
-                in_block_comment = False
-            continue
-        if stripped.startswith("/*"):
-            in_block_comment = True
-            continue
-
-        code = strip_comment_and_strings(raw).rstrip()
+    for idx, raw, code in iter_code_lines(lines):
+        code = code.rstrip()
         scode = code.strip()
 
         if ctx == "function":
@@ -223,17 +261,8 @@ def label_body_tracking(lines):
     ctx = "none"
     depth = 0
     prev_code = ""
-    in_block_comment = False
-    for idx, raw in enumerate(lines, 1):
-        stripped = raw.strip()
-        if in_block_comment:
-            if stripped.startswith("*/"):
-                in_block_comment = False
-            continue
-        if stripped.startswith("/*"):
-            in_block_comment = True
-            continue
-        code = strip_comment_and_strings(raw).strip()
+    for idx, raw, code in iter_code_lines(lines):
+        code = code.strip()
         if not code:
             continue
         if LABEL_RE.match(code) or HOTKEY_RE.match(code):
@@ -273,6 +302,94 @@ def label_body_tracking(lines):
             dead.append((idx, code))
         prev_code = code
     return dead
+
+
+MSGBOX_RE = re.compile(r"^\s*MsgBox\b\s*,?\s*([^,]*)", re.IGNORECASE)
+INPUTBOX_RE = re.compile(r"^\s*InputBox\b", re.IGNORECASE)
+# InputBox, OutputVar, Title, ... - the title is the second parameter (raw text,
+# legacy %Var% derefs allowed).
+INPUTBOX_TITLE_RE = re.compile(r"^\s*InputBox\s*,[^,]*,\s*([^,]*?)\s*(?:,|$)", re.IGNORECASE)
+ARM_CALL_RE = re.compile(r"NB_ArmTopmostDialog\((.*)\)\s*$")
+MB_TOPMOST = 0x40000  # MsgBox option 262144: always-on-top
+
+
+def ahk_concat_to_legacy(expr):
+    """Render a concatenation expression of string literals and variable
+    names ("A" . Var . "B") as the legacy text AHK would produce (A%Var%B).
+    Returns None for anything else (function calls, operators...)."""
+    out = []
+    i, n = 0, len(expr)
+    while i < n:
+        ch = expr[i]
+        if ch.isspace() or ch == ".":
+            i += 1
+            continue
+        if ch == '"':
+            j = i + 1
+            buf = []
+            while j < n:
+                if expr[j] == '"':
+                    if j + 1 < n and expr[j + 1] == '"':   # "" = escaped quote
+                        buf.append('"')
+                        j += 2
+                        continue
+                    break
+                buf.append(expr[j])
+                j += 1
+            if j >= n:
+                return None   # unterminated string
+            out.append("".join(buf))
+            i = j + 1
+            continue
+        m = re.match(r"[A-Za-z_][A-Za-z0-9_]*", expr[i:])
+        if m:
+            out.append("%" + m.group(0) + "%")
+            i += len(m.group(0))
+            continue
+        return None
+    return "".join(out)
+
+
+def check_dialog_topmost(lines):
+    """check 7: module prompts must not open under CPRS/CPFS stay-on-top
+    windows. MsgBox has a native flag for it (262144); InputBox does not, so
+    the module arms a timer (NB_ArmTopmostDialog) on the line right before.
+    The timer raises the dialog BY TITLE, so the armed title must render to
+    the InputBox's own title - a mismatched pair leaves the prompt buried."""
+    prev_raw = ""
+    for idx, raw, code in iter_code_lines(lines):
+        code = code.strip()
+        if not code:
+            continue
+        m = MSGBOX_RE.match(code)
+        if m:
+            opts = m.group(1).strip()
+            try:
+                val = int(opts, 0)
+            except ValueError:
+                val = None
+            if val is None or not (val & MB_TOPMOST):
+                finding("dialog-topmost", MODULE, idx,
+                        "MsgBox without the 262144 (MB_TOPMOST) option flag - "
+                        "it opens under CPRS/CPFS stay-on-top windows")
+        elif INPUTBOX_RE.match(code):
+            # look back on the comment-stripped previous code line: a trailing
+            # ; comment must neither hide a real call nor count as one
+            am = ARM_CALL_RE.search(strip_comment(prev_raw).strip())
+            if not am:
+                finding("dialog-topmost", MODULE, idx,
+                        "InputBox not immediately preceded by NB_ArmTopmostDialog(...) - "
+                        "it opens under CPRS/CPFS stay-on-top windows")
+            else:
+                armed = ahk_concat_to_legacy(am.group(1))
+                tm = INPUTBOX_TITLE_RE.match(raw)
+                title = tm.group(1).strip() if tm else ""
+                if armed is None or armed != title:
+                    finding("dialog-topmost", MODULE, idx,
+                            f"InputBox title '{title}' does not match the armed title "
+                            f"{am.group(1).strip()} (renders to '{armed}') - the raise "
+                            "timer matches by title, so this prompt stays buried")
+        prev_raw = raw
 
 
 def check_version_labels(repo, channel_branch):
@@ -342,6 +459,9 @@ def check_module(repo):
         finding("if-balance", MODULE, len(lines),
                 "#If <expr> context still open at EOF - add a bare #If to close it")
 
+    # ---- check 7: prompts stay above CPRS/CPFS ------------------------------
+    check_dialog_topmost(lines)
+
     return lines
 
 
@@ -390,18 +510,7 @@ def check_host_congruence(repo, module_lines):
                     "disable path - it can re-show the panel after NB is disabled")
 
     host_lines = host.read_text(encoding="utf-8", errors="replace").splitlines()
-    in_block_comment = False
-    for idx, raw in enumerate(host_lines, 1):
-        stripped = raw.strip()
-        if in_block_comment:
-            if stripped.startswith("*/"):
-                in_block_comment = False
-            continue
-        if stripped.startswith("/*"):
-            in_block_comment = True
-            continue
-        code = strip_comment_and_strings(raw)
-
+    for idx, raw, code in iter_code_lines(host_lines):
         # NB_* labels the host expects the module to provide
         for m in re.finditer(
                 r"(?:Gosub\s*,?\s*|SetTimer\s*,\s*|IsLabel\(\")\s*(NB_[A-Za-z0-9_]+)",

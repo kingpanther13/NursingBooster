@@ -117,6 +117,37 @@ def main():
     case("panel-show timer never turned Off", "host-congruence", lambda t: sub(
         t, HOST, "SetTimer, NB_RestorePanelAfterFKey, Off", "; seed: teardown removed"))
 
+    # 7a. MsgBox without the topmost flag
+    case("MsgBox without MB_TOPMOST flag", "dialog-topmost", lambda t: sub(
+        t, MODULE, "MsgBox, 262192,", "MsgBox, 48,"))
+
+    # 7b. InputBox whose arming call was removed
+    case("InputBox without NB_ArmTopmostDialog", "dialog-topmost", lambda t: sub(
+        t, MODULE, '    NB_ArmTopmostDialog("Save Template")\n', ""))
+
+    # 7c. arming call present but its title does not match the InputBox title
+    #     (literal form) - the raise timer matches by title, so this is a
+    #     silently buried prompt
+    case("InputBox armed with a mismatched title", "dialog-topmost", lambda t: sub(
+        t, MODULE, 'NB_ArmTopmostDialog("Save Template")',
+        'NB_ArmTopmostDialog("Save Templates")'))
+
+    # 7d. same mismatch in the expression form (Var . "literal")
+    case("InputBox armed with a mismatched expression title", "dialog-topmost", lambda t: sub(
+        t, MODULE, 'NB_ArmTopmostDialog(CF_AppTitle . " - Save Template")',
+        'NB_ArmTopmostDialog(CF_AppTitle . " - Save Templates")'))
+
+    # 7e. the arming call only MENTIONED in a trailing comment of the previous
+    #     code line must not count as a call
+    case("InputBox preceded only by a commented arm mention", "dialog-topmost", lambda t: sub(
+        t, MODULE, '    NB_ArmTopmostDialog("Save Template")\n',
+        '    ToolTip, Scanning  ; NB_ArmTopmostDialog("Save Template")\n'))
+
+    # 7f. a real arming call with a trailing comment is still recognised
+    case("arm call with trailing comment stays clean", None, lambda t: sub(
+        t, MODULE, 'NB_ArmTopmostDialog("Save Template")',
+        'NB_ArmTopmostDialog("Save Template")  ; pin the prompt'), expect_clean=True)
+
     # 6. unbalanced #If context at EOF
     def m_ifbal(tree):
         p = tree / MODULE

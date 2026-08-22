@@ -51,7 +51,7 @@ That's it. NursingBooster will automatically check for updates 30 seconds after 
 
 - **Template Apply** — Save and replay checkbox states for CPRS reminder dialogs (e.g. VAAES Shift Assessment with 292 checkboxes applied in seconds)
 - **CP Flowsheets** — Save and apply observation templates for CP Flowsheets
-- **Quick Actions** — Configurable buttons for frequently used templates
+- **Quick Actions** — Configurable buttons for frequently used templates, labeled with the template's own name
 - **Auto-Add for CPFS** — Optionally clicks "Add Data" before applying CP Flowsheets templates
 - **Right-click to cancel** — Right-click during template apply to stop immediately
 - **Auto-hide during sign** — Panel hides when F-keys are pressed and restores after 6 seconds

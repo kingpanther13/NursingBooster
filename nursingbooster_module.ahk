@@ -66,6 +66,8 @@ NB_ModuleInit:
     NB_MiniDDLHwnd := 0
     NB_MiniBarLastX := ""
     NB_MiniBarLastY := ""
+    NB_TopmostDialogTitle := ""
+    NB_TopmostDialogDeadline := 0
     CF_AppTitle := "CP Flowsheets Booster"
     CF_Detected := 0
     CF_SpyResults := []
@@ -101,7 +103,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev21  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev22  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
     Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
@@ -137,6 +139,7 @@ NB_ModuleInit:
     Gui, 80:Add, Text, x5 y151 w375 h16 Center BackgroundTrans vNB_PanelStatus, Ready | CPRS: Not detected | CPFS: Not detected
     Gui, 80:+AlwaysOnTop -Caption +ToolWindow +HwndNB_PanelHwnd +E0x08000000  ; WS_EX_NOACTIVATE — panel never steals focus from CPRS
     Gui, 80:Show, x0 y0 w385 h172 Hide, NursingBoosterPanel
+    NB_ApplyHKButtonLabels()
     NB_BoosterGuiVisible := 0
     NB_SettingsVisible := 0
 
@@ -152,7 +155,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev21
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev22
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -652,14 +655,14 @@ return
 NB_SaveTplSpeed:
     GuiControlGet, selectedTpl, 84:, NB_SettingsTplDDL
     if (selectedTpl = "") {
-        MsgBox, 48, %NB_AppTitle%, Select a template first.
+        MsgBox, 262192, %NB_AppTitle%, Select a template first.
         return
     }
     GuiControlGet, newSpeed, 84:, NB_TplSpeedSlider
     GuiControlGet, newLeaf, 84:, NB_TplLeafSlider
     tplPath := NB_SettingsTplPathMap[selectedTpl]
     if (tplPath = "") {
-        MsgBox, 48, %NB_AppTitle%, Template path not found.
+        MsgBox, 262192, %NB_AppTitle%, Template path not found.
         return
     }
     displayName := RegExReplace(selectedTpl, "\s*\[(NB|CF)\]$", "")
@@ -734,7 +737,7 @@ CF_ToggleAutoSave:
     Gui, 80:Submit, NoHide
     global CF_AutoSave
     if (CF_AutoSaveChk = 1) {
-        MsgBox, 308, CP Flowsheets - AutoSave WARNING, WARNING: AutoSave will automatically click the SAVE button in CP Flowsheets after applying a template.`n`nThis saves the entry PERMANENTLY to the patient record.`n`nAre you sure you want to enable AutoSave?
+        MsgBox, 262452, CP Flowsheets - AutoSave WARNING, WARNING: AutoSave will automatically click the SAVE button in CP Flowsheets after applying a template.`n`nThis saves the entry PERMANENTLY to the patient record.`n`nAre you sure you want to enable AutoSave?
         IfMsgBox, Yes
         {
             CF_AutoSave := 1
@@ -759,23 +762,23 @@ return
 ;============================================================================================
 
 NB_HK1_Run:
-    NB_RunHotkeyAction(NB_HK1_Action, "Quick 1")
+    NB_RunHotkeyAction(NB_HK1_Action, NB_HK1_Label)
 return
 
 NB_HK2_Run:
-    NB_RunHotkeyAction(NB_HK2_Action, "Quick 2")
+    NB_RunHotkeyAction(NB_HK2_Action, NB_HK2_Label)
 return
 
 NB_HK3_Run:
-    NB_RunHotkeyAction(NB_HK3_Action, "Quick 3")
+    NB_RunHotkeyAction(NB_HK3_Action, NB_HK3_Label)
 return
 
 NB_HK4_Run:
-    NB_RunHotkeyAction(NB_HK4_Action, "Quick 4")
+    NB_RunHotkeyAction(NB_HK4_Action, NB_HK4_Label)
 return
 
 NB_HK5_Run:
-    NB_RunHotkeyAction(NB_HK5_Action, "Quick 5")
+    NB_RunHotkeyAction(NB_HK5_Action, NB_HK5_Label)
 return
 
 NB_RunHotkeyAction(action, slotName) {
@@ -803,7 +806,7 @@ NB_RunHotkeyAction(action, slotName) {
             }
             CF_ApplyTemplate(templatePath)
         } else {
-            MsgBox, 48, %NB_AppTitle%, CPFS template "%m1%" not found.`n`nSave a template with that name using CPFS Save first.
+            MsgBox, 262192, %NB_AppTitle%, CPFS template "%m1%" not found.`n`nSave a template with that name using CPFS Save first.
         }
     }
     else {
@@ -843,41 +846,38 @@ NB_HK_Setup:
     Gui, 83:Color, F8F8F8
     Gui, 83:Font, s9 Bold, Segoe UI
     Gui, 83:Add, Text, x10 y10 w380, Quick Action Button Setup
-    Gui, 83:Font, s8 Norm, Segoe UI
+    Gui, 83:Font, s7 Norm c606060, Segoe UI
+    Gui, 83:Add, Text, x10 y28 w380 h14, Buttons show the selected template's name, shrunk or trimmed to fit.
+    Gui, 83:Font, s8 Norm cDefault, Segoe UI
 
     ; Slot 1
-    Gui, 83:Add, Text, x10 y40 w50, Slot 1:
-    Gui, 83:Add, Edit, x65 y38 w100 h22 vNB_HKSetup_L1, %NB_HK1_Label%
-    Gui, 83:Add, DropDownList, x170 y38 w220 vNB_HKSetup_A1, %actionList%
+    Gui, 83:Add, Text, x10 y48 w50, Slot 1:
+    Gui, 83:Add, DropDownList, x65 y46 w325 vNB_HKSetup_A1, %actionList%
     NB_HKSetupSelectAction("NB_HKSetup_A1", NB_HK1_Action)
 
     ; Slot 2
-    Gui, 83:Add, Text, x10 y68 w50, Slot 2:
-    Gui, 83:Add, Edit, x65 y66 w100 h22 vNB_HKSetup_L2, %NB_HK2_Label%
-    Gui, 83:Add, DropDownList, x170 y66 w220 vNB_HKSetup_A2, %actionList%
+    Gui, 83:Add, Text, x10 y76 w50, Slot 2:
+    Gui, 83:Add, DropDownList, x65 y74 w325 vNB_HKSetup_A2, %actionList%
     NB_HKSetupSelectAction("NB_HKSetup_A2", NB_HK2_Action)
 
     ; Slot 3
-    Gui, 83:Add, Text, x10 y96 w50, Slot 3:
-    Gui, 83:Add, Edit, x65 y94 w100 h22 vNB_HKSetup_L3, %NB_HK3_Label%
-    Gui, 83:Add, DropDownList, x170 y94 w220 vNB_HKSetup_A3, %actionList%
+    Gui, 83:Add, Text, x10 y104 w50, Slot 3:
+    Gui, 83:Add, DropDownList, x65 y102 w325 vNB_HKSetup_A3, %actionList%
     NB_HKSetupSelectAction("NB_HKSetup_A3", NB_HK3_Action)
 
     ; Slot 4
-    Gui, 83:Add, Text, x10 y124 w50, Slot 4:
-    Gui, 83:Add, Edit, x65 y122 w100 h22 vNB_HKSetup_L4, %NB_HK4_Label%
-    Gui, 83:Add, DropDownList, x170 y122 w220 vNB_HKSetup_A4, %actionList%
+    Gui, 83:Add, Text, x10 y132 w50, Slot 4:
+    Gui, 83:Add, DropDownList, x65 y130 w325 vNB_HKSetup_A4, %actionList%
     NB_HKSetupSelectAction("NB_HKSetup_A4", NB_HK4_Action)
 
     ; Slot 5
-    Gui, 83:Add, Text, x10 y152 w50, Slot 5:
-    Gui, 83:Add, Edit, x65 y150 w100 h22 vNB_HKSetup_L5, %NB_HK5_Label%
-    Gui, 83:Add, DropDownList, x170 y150 w220 vNB_HKSetup_A5, %actionList%
+    Gui, 83:Add, Text, x10 y160 w50, Slot 5:
+    Gui, 83:Add, DropDownList, x65 y158 w325 vNB_HKSetup_A5, %actionList%
     NB_HKSetupSelectAction("NB_HKSetup_A5", NB_HK5_Action)
 
-    Gui, 83:Add, Button, x110 y185 w90 h28 gNB_HKSetup_Save Default, Save
-    Gui, 83:Add, Button, x210 y185 w90 h28 gNB_HKSetup_Cancel, Cancel
-    Gui, 83:Show, w400 h225, Quick Action Setup
+    Gui, 83:Add, Button, x110 y195 w90 h28 gNB_HKSetup_Save Default, Save
+    Gui, 83:Add, Button, x210 y195 w90 h28 gNB_HKSetup_Cancel, Cancel
+    Gui, 83:Show, w400 h235, Quick Action Setup
 return
 
 NB_HKSetupSelectAction(ctrlName, currentAction) {
@@ -897,26 +897,21 @@ NB_HKSetup_Save:
     global NB_HK5_Label, NB_HK5_Action
 
     ; Convert display text back to action strings.
-    ; Labels feed a |-delimited DropDownList — strip | (breaks item indexing)
-    ; and default empty labels (an empty item creates a stray || which the DDL
-    ; treats as a default-selection marker).
-    NB_HK1_Label := NB_CleanHKLabel(NB_HKSetup_L1, "Quick 1")
+    ; Labels are derived from the chosen action (issue #12) - no custom text
+    ; that goes stale when the action changes.
     NB_HK1_Action := NB_HKParseActionChoice(NB_HKSetup_A1)
-    NB_HK2_Label := NB_CleanHKLabel(NB_HKSetup_L2, "Quick 2")
+    NB_HK1_Label := NB_HKLabelFromAction(NB_HK1_Action, "Quick 1")
     NB_HK2_Action := NB_HKParseActionChoice(NB_HKSetup_A2)
-    NB_HK3_Label := NB_CleanHKLabel(NB_HKSetup_L3, "Quick 3")
+    NB_HK2_Label := NB_HKLabelFromAction(NB_HK2_Action, "Quick 2")
     NB_HK3_Action := NB_HKParseActionChoice(NB_HKSetup_A3)
-    NB_HK4_Label := NB_CleanHKLabel(NB_HKSetup_L4, "Quick 4")
+    NB_HK3_Label := NB_HKLabelFromAction(NB_HK3_Action, "Quick 3")
     NB_HK4_Action := NB_HKParseActionChoice(NB_HKSetup_A4)
-    NB_HK5_Label := NB_CleanHKLabel(NB_HKSetup_L5, "Quick 5")
+    NB_HK4_Label := NB_HKLabelFromAction(NB_HK4_Action, "Quick 4")
     NB_HK5_Action := NB_HKParseActionChoice(NB_HKSetup_A5)
+    NB_HK5_Label := NB_HKLabelFromAction(NB_HK5_Action, "Quick 5")
 
-    ; Update button labels on panel
-    GuiControl, 80:, NB_HK1_Btn, %NB_HK1_Label%
-    GuiControl, 80:, NB_HK2_Btn, %NB_HK2_Label%
-    GuiControl, 80:, NB_HK3_Btn, %NB_HK3_Label%
-    GuiControl, 80:, NB_HK4_Btn, %NB_HK4_Label%
-    GuiControl, 80:, NB_HK5_Btn, %NB_HK5_Label%
+    ; Update button labels on panel (fit to the 68px buttons)
+    NB_ApplyHKButtonLabels()
 
     ; Rebuild dropdown on bottom bar to reflect new quick action labels
     NB_RebuildDropdown()
@@ -932,9 +927,100 @@ NB_HKSetup_Cancel:
     Gui, 83:Destroy
 return
 
-NB_CleanHKLabel(label, fallback) {
-    label := Trim(StrReplace(label, "|", ""))
-    return label != "" ? label : fallback
+NB_HKLabelFromAction(action, fallback) {
+    ; Button label = the saved item's own name (issue #12). Pipes cannot occur
+    ; in a template filename, but strip them anyway - labels feed the
+    ; |-delimited drop-up list, and an empty label would create a stray ||.
+    name := ""
+    if (RegExMatch(action, "^(?:nb|cf)_template:(.+)$", m))
+        name := Trim(StrReplace(m1, "|", ""))
+    return (name != "") ? name : fallback
+}
+
+NB_ApplyHKButtonLabels() {
+    ; Push the five quick-action labels onto the panel buttons, fitted.
+    global NB_HK1_Label, NB_HK2_Label, NB_HK3_Label, NB_HK4_Label, NB_HK5_Label
+    NB_FitHKButtonText("NB_HK1_Btn", NB_HK1_Label)
+    NB_FitHKButtonText("NB_HK2_Btn", NB_HK2_Label)
+    NB_FitHKButtonText("NB_HK3_Btn", NB_HK3_Label)
+    NB_FitHKButtonText("NB_HK4_Btn", NB_HK4_Label)
+    NB_FitHKButtonText("NB_HK5_Btn", NB_HK5_Label)
+    ; NB_FitHKButtonText retargets fonts via Gui 80:Font, which also moves the
+    ; Gui's default font for any later Add - put back the panel's base font
+    ; (the one in effect when the build finished).
+    Gui, 80:Font, s8 cWhite, Segoe UI
+}
+
+NB_FitHKButtonText(ctrlVar, text) {
+    ; Set a Gui 80 button's text so it fits: try the normal s7 font, then
+    ; shrink to s6, and if the name is still wider than the button trim it to
+    ; the longest prefix + ellipsis that fits (issue #12). Returns the text
+    ; shown - "" when the control can't be resolved (nothing is changed), or
+    ; the untrimmed text when the button/font can't be measured (set as-is).
+    GuiControlGet, hBtn, 80:Hwnd, %ctrlVar%
+    if (!hBtn)
+        return ""
+    ; Physical pixels on both sides of the comparison: GetClientRect for the
+    ; button (GuiControlGet Pos would hand back DPI-unscaled logical units)
+    ; and GetTextExtentPoint32 for the text.
+    VarSetCapacity(rc, 16, 0)
+    rcOk := DllCall("GetClientRect", "Ptr", hBtn, "Ptr", &rc)
+    usable := NumGet(rc, 8, "Int") - Round(10 * A_ScreenDPI / 96)   ; minus border + text padding
+    if (!rcOk || usable <= 0) {
+        GuiControl, 80:, %ctrlVar%, %text%
+        return text
+    }
+    hFont := 0
+    Loop, 2 {
+        fontSize := (A_Index = 1) ? 7 : 6
+        Gui, 80:Font, s%fontSize% cBlack, Segoe UI
+        GuiControl, 80:Font, %ctrlVar%
+        SendMessage, 0x31, 0, 0,, ahk_id %hBtn%   ; WM_GETFONT
+        hFont := ErrorLevel
+        if hFont is not integer
+            hFont := 0
+        if (!hFont) {
+            GuiControl, 80:, %ctrlVar%, %text%
+            return text
+        }
+        if (NB_TextWidthPx(hBtn, hFont, text) <= usable) {
+            GuiControl, 80:, %ctrlVar%, %text%
+            return text
+        }
+    }
+    shown := NB_TruncateToWidthPx(hBtn, hFont, text, usable)
+    GuiControl, 80:, %ctrlVar%, %shown%
+    return shown
+}
+
+NB_TextWidthPx(hWnd, hFont, text) {
+    ; Pixel width of `text` drawn with hFont in hWnd's DC (GetTextExtentPoint32).
+    hDC := DllCall("GetDC", "Ptr", hWnd, "Ptr")
+    if (!hDC)
+        return 0
+    hOld := DllCall("SelectObject", "Ptr", hDC, "Ptr", hFont, "Ptr")
+    VarSetCapacity(sz, 8, 0)
+    DllCall("GetTextExtentPoint32", "Ptr", hDC, "Str", text, "Int", StrLen(text), "Ptr", &sz)
+    w := NumGet(sz, 0, "Int")
+    DllCall("SelectObject", "Ptr", hDC, "Ptr", hOld)
+    DllCall("ReleaseDC", "Ptr", hWnd, "Ptr", hDC)
+    return w
+}
+
+NB_TruncateToWidthPx(hWnd, hFont, text, maxW) {
+    ; Longest prefix of `text` + ellipsis that measures <= maxW px; the text
+    ; itself when it already fits; just the ellipsis when nothing else fits.
+    if (NB_TextWidthPx(hWnd, hFont, text) <= maxW)
+        return text
+    ell := A_IsUnicode ? Chr(0x2026) : "..."
+    keep := StrLen(text) - 1
+    while (keep > 0) {
+        cand := RTrim(SubStr(text, 1, keep)) . ell
+        if (NB_TextWidthPx(hWnd, hFont, cand) <= maxW)
+            return cand
+        keep -= 1
+    }
+    return ell
 }
 
 NB_HKParseActionChoice(displayText) {
@@ -965,28 +1051,26 @@ NB_LoadHotkeyConfig:
     if (hkJson = "")
         return
 
-    ; Parse each slot with regex (guard against empty labels — they break dropdown indexing).
-    ; Values were escaped with NB_EscJson on save, so unescape on the way in.
-    if (RegExMatch(hkJson, """label1"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK1_Label := NB_UnescJson(m1)
+    ; Parse each slot's action with regex. Values were escaped with NB_EscJson
+    ; on save, so unescape on the way in.
     if (RegExMatch(hkJson, """action1"":\s*""((?:[^""\\]|\\.)*)""", m))
         NB_HK1_Action := NB_UnescJson(m1)
-    if (RegExMatch(hkJson, """label2"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK2_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action2"":\s*""((?:[^""\\]|\\.)*)""", m))
         NB_HK2_Action := NB_UnescJson(m1)
-    if (RegExMatch(hkJson, """label3"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK3_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action3"":\s*""((?:[^""\\]|\\.)*)""", m))
         NB_HK3_Action := NB_UnescJson(m1)
-    if (RegExMatch(hkJson, """label4"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK4_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action4"":\s*""((?:[^""\\]|\\.)*)""", m))
         NB_HK4_Action := NB_UnescJson(m1)
-    if (RegExMatch(hkJson, """label5"":\s*""((?:[^""\\]|\\.)*)""", m) && m1 != "")
-        NB_HK5_Label := NB_UnescJson(m1)
     if (RegExMatch(hkJson, """action5"":\s*""((?:[^""\\]|\\.)*)""", m))
         NB_HK5_Action := NB_UnescJson(m1)
+
+    ; Labels are derived from the actions (issue #12); the labelN fields in the
+    ; file are written for readability/older readers but never read back.
+    NB_HK1_Label := NB_HKLabelFromAction(NB_HK1_Action, "Quick 1")
+    NB_HK2_Label := NB_HKLabelFromAction(NB_HK2_Action, "Quick 2")
+    NB_HK3_Label := NB_HKLabelFromAction(NB_HK3_Action, "Quick 3")
+    NB_HK4_Label := NB_HKLabelFromAction(NB_HK4_Action, "Quick 4")
+    NB_HK5_Label := NB_HKLabelFromAction(NB_HK5_Action, "Quick 5")
 return
 
 NB_SaveHotkeyConfig:
@@ -1212,7 +1296,7 @@ NB_ApplyNamedTemplate(templateName) {
         Sleep, 200
         NB_ApplyTemplate(templatePath)
     } else {
-        MsgBox, 64, %NB_AppTitle%, No '%templateName%' template saved yet.`n`nTo create one:`n1. Open the reminder dialogue in CPRS`n2. Manually check all the boxes the way you want them`n3. Select 'Save Template' from the Nursing Booster dropdown`n4. Name it exactly: %templateName%`n`nNext time you select this option it replays your selections.`nYou always review in CPRS before clicking Finish.
+        MsgBox, 262208, %NB_AppTitle%, No '%templateName%' template saved yet.`n`nTo create one:`n1. Open the reminder dialogue in CPRS`n2. Manually check all the boxes the way you want them`n3. Select 'Save Template' from the Nursing Booster dropdown`n4. Name it exactly: %templateName%`n`nNext time you select this option it replays your selections.`nYou always review in CPRS before clicking Finish.
     }
 }
 
@@ -1228,10 +1312,11 @@ NB_ApplyNamedTemplate(templateName) {
 NB_BtnSaveCurrentState:
     dlgHwnd := NB_FindActiveDialogWindow()
     if (!dlgHwnd) {
-        MsgBox, 48, %NB_AppTitle%, Open a template or reminder dialogue in CPRS first.
+        MsgBox, 262192, %NB_AppTitle%, Open a template or reminder dialogue in CPRS first.
         return
     }
 
+    NB_ArmTopmostDialog("Save Template")
     InputBox, templateName, Save Template, Template name:`n`nUse a descriptive name like 'Negative Assessment' or 'Skin WNL'.`nNaming it the same as a toolbar option links it to that option.
     if (ErrorLevel || templateName = "")
         return
@@ -1241,14 +1326,14 @@ NB_BtnSaveCurrentState:
 
     scrollBox := NB_FindVisibleScrollBox(dlgHwnd)
     if (!scrollBox) {
-        MsgBox, 48, %NB_AppTitle%, Could not find dialog scroll area.
+        MsgBox, 262192, %NB_AppTitle%, Could not find dialog scroll area.
         return
     }
 
     ; Enumerate ALL checkboxes in the entire scroll box (flat, Y-sorted)
     allItems := NB_EnumDescendantCheckboxes(scrollBox)
     if (allItems.Length() = 0) {
-        MsgBox, 48, %NB_AppTitle%, No checkboxes found in dialog.
+        MsgBox, 262192, %NB_AppTitle%, No checkboxes found in dialog.
         return
     }
 
@@ -1323,7 +1408,7 @@ NB_ApplyTemplate(templatePath) {
 
     FileRead, content, %templatePath%
     if (ErrorLevel) {
-        MsgBox, 48, %NB_AppTitle%, Failed to read template: %templatePath%
+        MsgBox, 262192, %NB_AppTitle%, Failed to read template: %templatePath%
         return
     }
 
@@ -1371,7 +1456,7 @@ NB_ApplyTemplate(templatePath) {
     ; Parse flat checkbox list from template
     tplItems := NB_ParseFlatCheckboxes(content)
     if (tplItems.Length() = 0) {
-        MsgBox, 48, %NB_AppTitle%, Template has no checkboxes.
+        MsgBox, 262192, %NB_AppTitle%, Template has no checkboxes.
         return
     }
 
@@ -1393,7 +1478,7 @@ NB_ApplyTemplate(templatePath) {
 
     scrollBox := NB_FindVisibleScrollBox(dlgHwnd)
     if (!scrollBox) {
-        MsgBox, 48, %NB_AppTitle%, Could not find dialog scroll area.
+        MsgBox, 262192, %NB_AppTitle%, Could not find dialog scroll area.
         return
     }
 
@@ -1881,7 +1966,7 @@ NB__FindOKCallback(hwnd, lParam) {
 NB_BtnLoadSavedTemplate:
     dlgHwnd := NB_FindActiveDialogWindow()
     if (!dlgHwnd) {
-        MsgBox, 48, %NB_AppTitle%, Open a template or reminder dialogue in CPRS first then load a template.
+        MsgBox, 262192, %NB_AppTitle%, Open a template or reminder dialogue in CPRS first then load a template.
         return
     }
     NB_templates := []
@@ -1890,7 +1975,7 @@ NB_BtnLoadSavedTemplate:
         NB_templates.Push(A_LoopFileFullPath)
     }
     if (NB_templates.Length() = 0) {
-        MsgBox, 64, %NB_AppTitle%, No saved templates found.`n`nTo create one:`n1. Open a reminder dialogue in CPRS`n2. Check the boxes the way you want`n3. Select 'Save Template' from the Nursing Booster dropdown
+        MsgBox, 262208, %NB_AppTitle%, No saved templates found.`n`nTo create one:`n1. Open a reminder dialogue in CPRS`n2. Check the boxes the way you want`n3. Select 'Save Template' from the Nursing Booster dropdown
         return
     }
 
@@ -1914,7 +1999,7 @@ return
 NB_DoLoadTemplate:
     Gui, 81:Submit
     if (NB_LoadSelection = "") {
-        MsgBox, 48, %NB_AppTitle%, Select a template.
+        MsgBox, 262192, %NB_AppTitle%, Select a template.
         return
     }
     Gui, 81:Destroy
@@ -1941,26 +2026,27 @@ NB_BtnDeleteTemplate:
         NB_delTemplates.Push(A_LoopFileName)
     }
     if (NB_delTemplates.Length() = 0) {
-        MsgBox, 64, %NB_AppTitle%, No saved templates to delete.
+        MsgBox, 262208, %NB_AppTitle%, No saved templates to delete.
         return
     }
     list := ""
     for i, f in NB_delTemplates
         list .= i . ": " . StrReplace(f, ".json", "") . "`n"
+    NB_ArmTopmostDialog("Delete Template")
     InputBox, deleteIdx, Delete Template, Enter the number of the template to delete:`n`n%list%,, 300, 400
     if (ErrorLevel || deleteIdx = "")
         return
     if deleteIdx is not integer
     {
-        MsgBox, 48, %NB_AppTitle%, Enter a number.
+        MsgBox, 262192, %NB_AppTitle%, Enter a number.
         return
     }
     if (deleteIdx < 1 || deleteIdx > NB_delTemplates.Length()) {
-        MsgBox, 48, %NB_AppTitle%, Invalid selection.
+        MsgBox, 262192, %NB_AppTitle%, Invalid selection.
         return
     }
     delName := StrReplace(NB_delTemplates[deleteIdx], ".json", "")
-    MsgBox, 36, %NB_AppTitle%, Delete template "%delName%"?
+    MsgBox, 262180, %NB_AppTitle%, Delete template "%delName%"?
     IfMsgBox, Yes
     {
         delPath := NB_TemplateDir . "\" . NB_delTemplates[deleteIdx]
@@ -2220,7 +2306,7 @@ NB_WriteTemplateLeafSpeed(filePath, speed) {
 NB_DumpDialogControls:
     dlgHwnd := NB_FindActiveDialogWindow()
     if (!dlgHwnd) {
-        MsgBox, 48, %NB_AppTitle%, Open a reminder dialogue in CPRS first.
+        MsgBox, 262192, %NB_AppTitle%, Open a reminder dialogue in CPRS first.
         return
     }
     FormatTime, nowStamp,, yyyyMMddHHmmss
@@ -2265,7 +2351,7 @@ NB_DumpDialogControls:
     dumpFooter := "`n=== Summary ===`nTotal controls: " . NB__dumpCount . "`nCheckboxes: " . NB__dumpCBCount . "`n"
     FileAppend, %dumpFooter%, %dumpPath%, UTF-8
 
-    MsgBox, 64, %NB_AppTitle%, Dump written to:`n%dumpPath%`n`n%NB__dumpCount% controls and %NB__dumpCBCount% checkboxes.
+    MsgBox, 262208, %NB_AppTitle%, Dump written to:`n%dumpPath%`n`n%NB__dumpCount% controls and %NB__dumpCBCount% checkboxes.
 return
 
 NB__DumpCallback(hwnd, lParam) {
@@ -2332,6 +2418,39 @@ NB__DumpCallback(hwnd, lParam) {
 
 NB_ClearToolTip:
     ToolTip
+return
+
+; InputBox has no always-on-top option, and CPRS reminder dialogs / CPFS are
+; stay-on-top windows that bury a plain dialog (issue #13). Arm this right
+; before an InputBox: a short poll finds the dialog (class #32770 in our own
+; process), pins it topmost and activates it, then switches itself off. The
+; poll is a repeating timer rather than a loop so it never blocks the thread
+; that is about to create the dialog. If no matching dialog shows up within
+; 5 s the timer gives up (noted in the walk trace when Debug Logging is on)
+; and the prompt stays a plain dialog - the pre-fix behavior, never a hang.
+; MsgBox covers the same case with its native 262144 (MB_TOPMOST) option
+; flag - every MsgBox in this module carries it: 262192 = 48+262144 (! OK),
+; 262208 = 64+262144 (i OK), 262180 = 36+262144 (? Yes/No),
+; 262452 = 308+262144 (! Yes/No, default No).
+NB_ArmTopmostDialog(title) {
+    global NB_TopmostDialogTitle, NB_TopmostDialogDeadline
+    NB_TopmostDialogTitle := title
+    NB_TopmostDialogDeadline := A_TickCount + 5000
+    SetTimer, NB_RaiseTopmostDialog, 30
+}
+
+NB_RaiseTopmostDialog:
+    SetTitleMatchMode, 1   ; thread-local: prefix match regardless of the host's mode
+    nbTopPid := DllCall("GetCurrentProcessId")
+    if (WinExist(NB_TopmostDialogTitle . " ahk_class #32770 ahk_pid " . nbTopPid)) {
+        SetTimer, NB_RaiseTopmostDialog, Off
+        WinSet, AlwaysOnTop, On
+        WinActivate
+    } else if (A_TickCount > NB_TopmostDialogDeadline) {
+        SetTimer, NB_RaiseTopmostDialog, Off
+        if (NB_DebugLogging)
+            NB__ApplyDebug("[topmost] no dialog titled '" . NB_TopmostDialogTitle . "' appeared within 5s - left unpinned")
+    }
 return
 
 NB_SanitizeFilename(name) {
@@ -2530,7 +2649,7 @@ CF_ClickAddDataButton() {
     global CF_AppTitle, CF__foundGridToolbarHwnd, CF__debugToolbarInfo
     mainHwnd := CF_FindCPFlowsheetsWindow()
     if (!mainHwnd) {
-        MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.
+        MsgBox, 262192, %CF_AppTitle%, CP Flowsheets not detected.
         return
     }
 
@@ -2542,7 +2661,7 @@ CF_ClickAddDataButton() {
     DllCall("EnumChildWindows", "Ptr", mainHwnd, "Ptr", enumTB, "Ptr", 0)
 
     if (!CF__foundGridToolbarHwnd) {
-        MsgBox, 48, %CF_AppTitle%, Could not find the grid toolbar in CP Flowsheets.`n`nDebug:`n%CF__debugToolbarInfo%
+        MsgBox, 262192, %CF_AppTitle%, Could not find the grid toolbar in CP Flowsheets.`n`nDebug:`n%CF__debugToolbarInfo%
         return
     }
 
@@ -2758,7 +2877,7 @@ CF_SpyDumpControls:
         ; Fallback: try the active window (user might have it focused)
         targetHwnd := WinExist("A")
         if (!targetHwnd) {
-            MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected. Open CP Flowsheets first.`n`nAlternatively focus the target window and try again.
+            MsgBox, 262192, %CF_AppTitle%, CP Flowsheets not detected. Open CP Flowsheets first.`n`nAlternatively focus the target window and try again.
             return
         }
     }
@@ -2801,7 +2920,7 @@ CF_SpyDumpControls:
     ToolTip, Spy dump: %CF__spyCount% controls (%CF__spyCBCount% CB / %CF__spyRadioCount% Radio / %CF__spyComboCount% Combo)`nSaved to: %dumpPath%
     SetTimer, CF_ClearToolTip, -5000
 
-    MsgBox, 64, %CF_AppTitle%, Control dump complete!`n`n%CF__spyCount% total controls found:`n- %CF__spyCBCount% checkboxes`n- %CF__spyRadioCount% radio buttons`n- %CF__spyComboCount% dropdowns`n`nSaved to:`n%dumpPath%
+    MsgBox, 262208, %CF_AppTitle%, Control dump complete!`n`n%CF__spyCount% total controls found:`n- %CF__spyCBCount% checkboxes`n- %CF__spyRadioCount% radio buttons`n- %CF__spyComboCount% dropdowns`n`nSaved to:`n%dumpPath%
 return
 
 CF__SpyCallback(hwnd, lParam) {
@@ -3364,10 +3483,11 @@ CF_BtnSaveTemplate:
         targetHwnd := CF_FindCPFlowsheetsWindow()
     }
     if (!targetHwnd) {
-        MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.`nOpen CP Flowsheets and navigate to the Add Data screen first.
+        MsgBox, 262192, %CF_AppTitle%, CP Flowsheets not detected.`nOpen CP Flowsheets and navigate to the Add Data screen first.
         return
     }
 
+    NB_ArmTopmostDialog(CF_AppTitle . " - Save Template")
     InputBox, cfTemplateName, %CF_AppTitle% - Save Template, Template name:`n`nUse a descriptive name like 'ICU Default' or 'Vitals Baseline'.
     if (ErrorLevel || cfTemplateName = "")
         return
@@ -3376,7 +3496,7 @@ CF_BtnSaveTemplate:
 
     controls := CF_EnumFormControls(targetHwnd)
     if (controls.Length() = 0) {
-        MsgBox, 48, %CF_AppTitle%, No checkboxes, radio buttons, or dropdowns found in this window.`n`nTry running CPFS Spy to see what controls are available.
+        MsgBox, 262192, %CF_AppTitle%, No checkboxes, radio buttons, or dropdowns found in this window.`n`nTry running CPFS Spy to see what controls are available.
         return
     }
 
@@ -3456,7 +3576,7 @@ CF_BtnLoadTemplate:
     if (!targetHwnd)
         targetHwnd := CF_FindCPFlowsheetsWindow()
     if (!targetHwnd) {
-        MsgBox, 48, %CF_AppTitle%, CP Flowsheets not detected.`nOpen CP Flowsheets first.
+        MsgBox, 262192, %CF_AppTitle%, CP Flowsheets not detected.`nOpen CP Flowsheets first.
         return
     }
 
@@ -3471,7 +3591,7 @@ CF_BtnLoadTemplate:
     }
 
     if (cfLoadPaths.Length() = 0) {
-        MsgBox, 64, %CF_AppTitle%, No saved CP Flowsheets templates found.`n`nTo create one:`n1. Open the Add Data screen in CP Flowsheets`n2. Set up your checkboxes, radios, and dropdowns`n3. Click 'CPFS Save'
+        MsgBox, 262208, %CF_AppTitle%, No saved CP Flowsheets templates found.`n`nTo create one:`n1. Open the Add Data screen in CP Flowsheets`n2. Set up your checkboxes, radios, and dropdowns`n3. Click 'CPFS Save'
         return
     }
 
@@ -3490,7 +3610,7 @@ CF_DoLoadTemplate:
     Gui, 82:Submit
     Gui, 82:Destroy
     if (CF_LoadSelection = "") {
-        MsgBox, 48, %CF_AppTitle%, Select a template first.
+        MsgBox, 262192, %CF_AppTitle%, Select a template first.
         return
     }
     templatePath := CF_TemplateDir . "\" . CF_SanitizeFilename(CF_LoadSelection) . ".json"
@@ -3505,7 +3625,7 @@ CF_DoLoadTemplate:
                     break
             }
             if (!addDataHwnd) {
-                MsgBox, 48, %CF_AppTitle%, Add Data screen did not open. Try clicking Add Data manually first.
+                MsgBox, 262192, %CF_AppTitle%, Add Data screen did not open. Try clicking Add Data manually first.
                 return
             }
             ; Extra delay for controls to fully load
@@ -3527,20 +3647,20 @@ CF_ApplyTemplate(templatePath) {
 
     targetHwnd := CF_FindAddDataWindow()
     if (!targetHwnd) {
-        MsgBox, 48, %CF_AppTitle%, Not on the Add Data screen.`nClick Add Data first`, or check Auto-Add on the Booster panel.
+        MsgBox, 262192, %CF_AppTitle%, Not on the Add Data screen.`nClick Add Data first`, or check Auto-Add on the Booster panel.
         return
     }
 
     FileRead, content, %templatePath%
     if (ErrorLevel) {
-        MsgBox, 48, %CF_AppTitle%, Failed to read template: %templatePath%
+        MsgBox, 262192, %CF_AppTitle%, Failed to read template: %templatePath%
         return
     }
 
     ; Parse controls from JSON
     templateControls := CF_ParseControls(content)
     if (templateControls.Length() = 0) {
-        MsgBox, 48, %CF_AppTitle%, Template has no controls.
+        MsgBox, 262192, %CF_AppTitle%, Template has no controls.
         return
     }
 
@@ -3575,7 +3695,7 @@ CF_ApplyTemplate(templatePath) {
     }
 
     if (liveControls.Length() = 0) {
-        MsgBox, 48, %CF_AppTitle%, No controls found in the current window.
+        MsgBox, 262192, %CF_AppTitle%, No controls found in the current window.
         ; the WinActivate above stripped the panel's topmost — restore it
         ; on this and every other exit below (same thesis as the NB cancel fix)
         if (NB_BoosterGuiVisible = 1)
@@ -3831,22 +3951,23 @@ CF_BtnDeleteTemplate:
     }
 
     if (cfDelPaths.Length() = 0) {
-        MsgBox, 64, %CF_AppTitle%, No CP Flowsheets templates to delete.
+        MsgBox, 262208, %CF_AppTitle%, No CP Flowsheets templates to delete.
         return
     }
 
+    NB_ArmTopmostDialog(CF_AppTitle . " - Delete Template")
     InputBox, cfDelChoice, %CF_AppTitle% - Delete Template, Enter the number of the template to delete:`n`n%cfDelList%,, 350, 300
     if (ErrorLevel || cfDelChoice = "")
         return
 
     cfDelIdx := cfDelChoice + 0
     if (cfDelIdx < 1 || cfDelIdx > cfDelPaths.Length()) {
-        MsgBox, 48, %CF_AppTitle%, Invalid selection.
+        MsgBox, 262192, %CF_AppTitle%, Invalid selection.
         return
     }
 
     SplitPath, % cfDelPaths[cfDelIdx],,,,cfDelName
-    MsgBox, 36, %CF_AppTitle%, Delete template "%cfDelName%"?
+    MsgBox, 262180, %CF_AppTitle%, Delete template "%cfDelName%"?
     IfMsgBox, Yes
     {
         FileDelete, % cfDelPaths[cfDelIdx]
@@ -4262,7 +4383,7 @@ return
     info .= "Window Class: " . wClsBuf . "`n"
     info .= "Window Title: " . wTxtBuf
 
-    MsgBox, 64, Control Inspector, %info%
+    MsgBox, 262208, Control Inspector, %info%
 return
 
 
