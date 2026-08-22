@@ -26,9 +26,11 @@ instead of shipping:
                         hotkeys included later).
   7. dialog-topmost   - every MsgBox carries the 262144 (MB_TOPMOST) option
                         and every InputBox is immediately preceded by
-                        NB_ArmTopmostDialog(...). CPRS reminder dialogs and
-                        CPFS are stay-on-top windows; a plain prompt opens
-                        underneath them (the hidden-save-dialog bug class).
+                        NB_ArmTopmostDialog(<title>) whose title renders to
+                        the InputBox's own title (the timer raises the dialog
+                        by title). CPRS reminder dialogs and CPFS are
+                        stay-on-top windows; a plain prompt opens underneath
+                        them (the hidden-save-dialog bug class).
 
 Usage:
   python3 tools/ci_lint.py [--repo DIR] [--channel-branch NAME]
@@ -282,14 +284,57 @@ def label_body_tracking(lines):
 
 MSGBOX_RE = re.compile(r"^\s*MsgBox\b\s*,?\s*([^,]*)", re.IGNORECASE)
 INPUTBOX_RE = re.compile(r"^\s*InputBox\b", re.IGNORECASE)
+# InputBox, OutputVar, Title, ... - the title is the second parameter (raw text,
+# legacy %Var% derefs allowed).
+INPUTBOX_TITLE_RE = re.compile(r"^\s*InputBox\s*,[^,]*,\s*([^,]*?)\s*(?:,|$)", re.IGNORECASE)
+ARM_CALL_RE = re.compile(r"NB_ArmTopmostDialog\((.*)\)\s*$")
 MB_TOPMOST = 0x40000  # MsgBox option 262144: always-on-top
+
+
+def ahk_concat_to_legacy(expr):
+    """Render a concatenation expression of string literals and variable
+    names ("A" . Var . "B") as the legacy text AHK would produce (A%Var%B).
+    Returns None for anything else (function calls, operators...)."""
+    out = []
+    i, n = 0, len(expr)
+    while i < n:
+        ch = expr[i]
+        if ch.isspace() or ch == ".":
+            i += 1
+            continue
+        if ch == '"':
+            j = i + 1
+            buf = []
+            while j < n:
+                if expr[j] == '"':
+                    if j + 1 < n and expr[j + 1] == '"':   # "" = escaped quote
+                        buf.append('"')
+                        j += 2
+                        continue
+                    break
+                buf.append(expr[j])
+                j += 1
+            if j >= n:
+                return None   # unterminated string
+            out.append("".join(buf))
+            i = j + 1
+            continue
+        m = re.match(r"[A-Za-z_][A-Za-z0-9_]*", expr[i:])
+        if m:
+            out.append("%" + m.group(0) + "%")
+            i += len(m.group(0))
+            continue
+        return None
+    return "".join(out)
 
 
 def check_dialog_topmost(lines):
     """check 7: module prompts must not open under CPRS/CPFS stay-on-top
     windows. MsgBox has a native flag for it (262144); InputBox does not, so
-    the module arms a timer (NB_ArmTopmostDialog) on the line right before."""
-    prev_code = ""
+    the module arms a timer (NB_ArmTopmostDialog) on the line right before.
+    The timer raises the dialog BY TITLE, so the armed title must render to
+    the InputBox's own title - a mismatched pair leaves the prompt buried."""
+    prev_raw = ""
     in_block_comment = False
     for idx, raw in enumerate(lines, 1):
         stripped = raw.strip()
@@ -314,11 +359,22 @@ def check_dialog_topmost(lines):
                 finding("dialog-topmost", MODULE, idx,
                         "MsgBox without the 262144 (MB_TOPMOST) option flag - "
                         "it opens under CPRS/CPFS stay-on-top windows")
-        elif INPUTBOX_RE.match(code) and "NB_ArmTopmostDialog(" not in prev_code:
-            finding("dialog-topmost", MODULE, idx,
-                    "InputBox not immediately preceded by NB_ArmTopmostDialog(...) - "
-                    "it opens under CPRS/CPFS stay-on-top windows")
-        prev_code = code
+        elif INPUTBOX_RE.match(code):
+            am = ARM_CALL_RE.search(prev_raw.strip())
+            if not am:
+                finding("dialog-topmost", MODULE, idx,
+                        "InputBox not immediately preceded by NB_ArmTopmostDialog(...) - "
+                        "it opens under CPRS/CPFS stay-on-top windows")
+            else:
+                armed = ahk_concat_to_legacy(am.group(1))
+                tm = INPUTBOX_TITLE_RE.match(raw)
+                title = tm.group(1).strip() if tm else ""
+                if armed is None or armed != title:
+                    finding("dialog-topmost", MODULE, idx,
+                            f"InputBox title '{title}' does not match the armed title "
+                            f"{am.group(1).strip()} (renders to '{armed}') - the raise "
+                            "timer matches by title, so this prompt stays buried")
+        prev_raw = raw
 
 
 def check_version_labels(repo, channel_branch):

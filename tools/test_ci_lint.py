@@ -125,6 +125,18 @@ def main():
     case("InputBox without NB_ArmTopmostDialog", "dialog-topmost", lambda t: sub(
         t, MODULE, '    NB_ArmTopmostDialog("Save Template")\n', ""))
 
+    # 7c. arming call present but its title does not match the InputBox title
+    #     (literal form) - the raise timer matches by title, so this is a
+    #     silently buried prompt
+    case("InputBox armed with a mismatched title", "dialog-topmost", lambda t: sub(
+        t, MODULE, 'NB_ArmTopmostDialog("Save Template")',
+        'NB_ArmTopmostDialog("Save Templates")'))
+
+    # 7d. same mismatch in the expression form (Var . "literal")
+    case("InputBox armed with a mismatched expression title", "dialog-topmost", lambda t: sub(
+        t, MODULE, 'NB_ArmTopmostDialog(CF_AppTitle . " - Save Template")',
+        'NB_ArmTopmostDialog(CF_AppTitle . " - Save Templates")'))
+
     # 6. unbalanced #If context at EOF
     def m_ifbal(tree):
         p = tree / MODULE
