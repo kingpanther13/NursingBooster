@@ -48,6 +48,8 @@ NB_ModuleInit:
     NB_AdvancedMode := 0
     NB_SpeedOverride := 0
     NB_SettingsTplPathMap := {}
+    NB_LoadPathMap := {}
+    CF_LoadPathMap := {}
     NB_DebugLogging := 0
     NB_CPRSDetected := 0
     NB_HK1_Label := "Quick 1"
@@ -62,6 +64,8 @@ NB_ModuleInit:
     NB_HK5_Action := ""
     NB_SettingsVisible := 0
     NB_PanelHwnd := 0
+    NB_CprsMenuChoice := 0
+    CF_MenuChoice := 0
     NB_SettingsHwnd := 0
     NB_MiniBarBuilt := false
     NB_MiniDDLHwnd := 0
@@ -72,10 +76,8 @@ NB_ModuleInit:
     CF_AppTitle := "CP Flowsheets Booster"
     CF_Detected := 0
     CF_SpyResults := []
-    CF_AutoSave := 0
     CF_ChainAddData := 0
     CF_AddDataDelay := 50
-    CF_AutoSaveDelay := 500
 
     ; Resolve paths from host's `onedrivelocal`
     NB_TemplateDir       := onedrivelocal . "\NursingTemplates"
@@ -104,29 +106,26 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev23  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev24  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
-    Gui, 80:Add, Button, x5   y28 w70 h26 gNB_PanelSave, Save Tpl
-    Gui, 80:Add, Button, x78  y28 w70 h26 gNB_PanelLoad, Load Tpl
-    Gui, 80:Add, Button, x151 y28 w70 h26 gNB_PanelDelete, Del Tpl
-    Gui, 80:Add, Button, x224 y28 w55 h26 gNB_PanelSettings, Settings
-    Gui, 80:Add, Button, x282 y28 w50 h26 gNB_ReloadBoilerplate, Reload BP
-    Gui, 80:Add, Button, x335 y28 w47 h26 gNB_ShowBothBars, Bars
+    ; One dropdown per section instead of three buttons (issue #8). The DDL
+    ; draws its own arrow; item 1 is the section header and is re-selected
+    ; BEFORE the action runs (the bottom-bar drop-up does the same) - see
+    ; NB_CprsMenuAction.
+    Gui, 80:Add, DropDownList, x5 y30 w100 vNB_CprsMenuChoice gNB_CprsMenuAction AltSubmit, CPRS||Save|Load|Delete
+    Gui, 80:Add, Button, x112 y28 w80 h26 gNB_PanelSettings, Settings
+    Gui, 80:Add, Button, x199 y28 w85 h26 gNB_ReloadBoilerplate, Reload BP
+    Gui, 80:Add, Button, x291 y28 w89 h26 gNB_ShowBothBars, Bars
     Gui, 80:Font, s7 c00BFFF, Segoe UI
     Gui, 80:Add, Text, x5 y58 w370 h16 Center BackgroundTrans, --- CP Flowsheets ---
     Gui, 80:Font, s8 cBlack, Segoe UI
-    Gui, 80:Add, Button, x5   y76 w60 h26 gCF_PanelSave, Save
-    Gui, 80:Add, Button, x68  y76 w60 h26 gCF_PanelLoad, Load
-    Gui, 80:Add, Button, x131 y76 w50 h26 gCF_PanelDelete, Del
-    Gui, 80:Add, Button, x184 y76 w70 h26 gCF_PanelAddData, Add Data
+    Gui, 80:Add, DropDownList, x5 y78 w100 vCF_MenuChoice gCF_MenuAction AltSubmit, CPFS||Save|Load|Delete
+    Gui, 80:Add, Button, x112 y76 w90 h26 gCF_PanelAddData, Add Data
     Gui, 80:Font, s6 cBlack, Segoe UI
-    Gui, 80:Add, Button, x258 y76 w30 h13 gNB_LaunchBCMA, BCMA
-    Gui, 80:Add, Button, x258 y90 w30 h13 gNB_LaunchCPFS, CPFS
-    Gui, 80:Font, s8 cBlack, Segoe UI
+    Gui, 80:Add, Button, x209 y76 w40 h13 gNB_LaunchBCMA, BCMA
+    Gui, 80:Add, Button, x209 y90 w40 h13 gNB_LaunchCPFS, CPFS
     Gui, 80:Font, s7 cRed, Segoe UI
-    Gui, 80:Add, Checkbox, x292 y76 w90 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
-    ; Advanced-only: AutoSave checkbox
-    Gui, 80:Add, Checkbox, x292 y90 w90 h14 vCF_AutoSaveChk gCF_ToggleAutoSave +HwndCF_AdvAutoSaveHwnd, AutoSave
+    Gui, 80:Add, Checkbox, x258 y82 w120 h14 vCF_AutoAddChk gCF_ToggleAutoAdd, Auto-Add
     Gui, 80:Font, s7 cFFD700, Segoe UI
     Gui, 80:Add, Text, x5 y106 w370 h16 Center BackgroundTrans, --- Quick Actions ---
     Gui, 80:Font, s7 cBlack, Segoe UI
@@ -156,7 +155,7 @@ NB_ModuleInit:
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev23
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev24
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -168,19 +167,22 @@ NB_ModuleInit:
     Gui, 84:Add, Text, x10 y86 w80 h16 BackgroundTrans vCF_AdvDelayLbl, Add Data Delay:
     Gui, 84:Add, Slider, x95 y84 w130 h22 vCF_AddDataDelaySlider gCF_AddDataDelayChanged Range50-2000 TickInterval250 ToolTip, %CF_AddDataDelay%
     Gui, 84:Add, Text, x230 y86 w55 h16 BackgroundTrans vCF_AddDataDelayLabel, %CF_AddDataDelay% ms
-    Gui, 84:Add, Text, x10 y110 w80 h16 BackgroundTrans vCF_AdvSaveDelayLbl, AutoSave Delay:
-    Gui, 84:Add, Slider, x95 y108 w130 h22 vCF_AutoSaveDelaySlider gCF_AutoSaveDelayChanged Range50-3000 TickInterval500 ToolTip, %CF_AutoSaveDelay%
-    Gui, 84:Add, Text, x230 y110 w55 h16 BackgroundTrans vCF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
     Gui, 84:Font, s8 cBlack, Segoe UI
-    Gui, 84:Add, Button, x10 y134 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
-    Gui, 84:Add, Button, x145 y134 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
+    Gui, 84:Add, Button, x10 y110 w130 h24 gNB_PanelDump vNB_AdvDumpBtn, NB Dialog Dump
+    Gui, 84:Add, Button, x145 y110 w130 h24 gCF_PanelSpy vCF_AdvSpyBtn, CPFS Dump
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbDbgChkOpt := NB_DebugLogging ? "Checked" : ""
-    Gui, 84:Add, Checkbox, x10 y162 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
+    Gui, 84:Add, Checkbox, x10 y138 w200 h18 vNB_DebugLogChk gNB_DebugLogChanged %nbDbgChkOpt% BackgroundTrans, Debug Logging (NB + CPFS)
     if (!NB_SpeedOverride)
         GuiControl, 84:Disable, NB_SpeedSlider
     Gui, 84:+AlwaysOnTop +ToolWindow -MinimizeBox +HwndNB_SettingsHwnd
-    Gui, 84:Show, x400 y0 w290 h188 Hide, NB Settings
+    ; h164 = bottom of the last advanced control (Debug Logging, y138 h18) +
+    ; padding; NB_ApplyAdvancedMode's expanded height must match.
+    Gui, 84:Show, x400 y0 w290 h164 Hide, NB Settings
+    ; Apply the persisted Advanced Mode now (hides the advanced controls and
+    ; sizes the window) - otherwise the first open showed everything with
+    ; the Advanced Mode box unticked.
+    gosub NB_ApplyAdvancedMode
 
     ; --- NursingBooster: Start CPRS detection timer ---
     SetTimer, NB_CheckCPRS, 3000
@@ -227,7 +229,7 @@ NB_CheckGui14Dropdown:
             Gui, 85:Destroy
             Gui, 85:Color, F0F0F0
             Gui, 85:Font, s8 cBlack, Verdana
-            NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
+            NB_MenuList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save (CPRS)|Load (CPRS)|Delete (CPRS)|Toggle Panel|Settings"
             Gui, 85:Add, DropdownList, gNB_DropdownAction y0 w140 -Tabstop altsubmit vNB_DropdownChoice HwndNB_MiniDDLHwnd, %NB_MenuList%
             Gui, 85:+AlwaysOnTop -Caption +ToolWindow +Owner +E0x08000000  ; WS_EX_NOACTIVATE
             Gui, 85:Show, x%nbMiniX% y%nbMiniY% h21 NA, NB_MiniBar
@@ -276,11 +278,11 @@ return
 
 NB_DropdownAction:
     Gui, 85:Submit, NoHide
+    ; Snap back to the header BEFORE dispatching (same as the panel dropdowns)
+    ; so the bar never reads "Save" while a modal prompt is open.
+    GuiControl, 85:Choose, NB_DropdownChoice, 1
     if (NB_DropdownChoice = 1)  ; "Nursing Booster" header - do nothing
-    {
-        GuiControl, 85:Choose, NB_DropdownChoice, 1
         return
-    }
     else if (NB_DropdownChoice >= 2 && NB_DropdownChoice <= 6)  ; Quick Actions 1-5
     {
         hkIdx := NB_DropdownChoice - 1
@@ -295,23 +297,21 @@ NB_DropdownAction:
         else if (hkIdx = 5)
             NB_RunHotkeyAction(NB_HK5_Action, NB_HK5_Label)
     }
-    else if (NB_DropdownChoice = 7)   ; Save Template
+    else if (NB_DropdownChoice = 7)   ; Save (CPRS)
         gosub NB_BtnSaveCurrentState
-    else if (NB_DropdownChoice = 8)   ; Load Template
+    else if (NB_DropdownChoice = 8)   ; Load (CPRS)
         gosub NB_BtnLoadSavedTemplate
-    else if (NB_DropdownChoice = 9)   ; Delete Template
+    else if (NB_DropdownChoice = 9)   ; Delete (CPRS)
         gosub NB_BtnDeleteTemplate
     else if (NB_DropdownChoice = 10)  ; Toggle Panel
         gosub NB_TogglePanel
     else if (NB_DropdownChoice = 11)  ; Settings
         gosub NB_ToggleSettings
-    ; Reset dropdown back to header
-    GuiControl, 85:Choose, NB_DropdownChoice, 1
 return
 
 NB_RebuildDropdown() {
     global NB_HK1_Label, NB_HK2_Label, NB_HK3_Label, NB_HK4_Label, NB_HK5_Label
-    newList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save Template|Load Template|Delete Template|Toggle Panel|Settings"
+    newList := "Nursing Booster||" . NB_HK1_Label . "|" . NB_HK2_Label . "|" . NB_HK3_Label . "|" . NB_HK4_Label . "|" . NB_HK5_Label . "|Save (CPRS)|Load (CPRS)|Delete (CPRS)|Toggle Panel|Settings"
     GuiControl, 85:, NB_DropdownChoice, |%newList%
     GuiControl, 85:Choose, NB_DropdownChoice, 1
 }
@@ -350,16 +350,28 @@ return
 ; NURSING BOOSTER PANEL BUTTON HANDLERS
 ;============================================================================================
 
-NB_PanelSave:
-    gosub NB_BtnSaveCurrentState
-return
-
-NB_PanelLoad:
-    gosub NB_BtnLoadSavedTemplate
-return
-
-NB_PanelDelete:
-    gosub NB_BtnDeleteTemplate
+NB_CprsMenuAction:
+    ; AltSubmit: index of the picked item (1 = header). Reset to the header
+    ; FIRST so the control never sits on "Save" while the save dialog is open.
+    GuiControlGet, NB_CprsMenuChoice, 80:, NB_CprsMenuChoice
+    if (ErrorLevel) {
+        ToolTip, Could not read the CPRS menu - nothing ran
+        SetTimer, NB_ClearToolTip, -3000
+        return
+    }
+    GuiControl, 80:Choose, NB_CprsMenuChoice, 1
+    if (NB_CprsMenuChoice = 1)          ; header - nothing to do
+        return
+    if (NB_CprsMenuChoice = 2)          ; Save
+        gosub NB_BtnSaveCurrentState
+    else if (NB_CprsMenuChoice = 3)     ; Load
+        gosub NB_BtnLoadSavedTemplate
+    else if (NB_CprsMenuChoice = 4)     ; Delete
+        gosub NB_BtnDeleteTemplate
+    else {
+        ToolTip, Unknown CPRS menu item (%NB_CprsMenuChoice%) - nothing ran
+        SetTimer, NB_ClearToolTip, -3000
+    }
 return
 
 NB_PanelDump:
@@ -585,28 +597,25 @@ return
 NB_ApplyAdvancedMode:
     ; Show or hide advanced-only controls based on NB_AdvancedMode
     showCmd := NB_AdvancedMode ? "Show" : "Hide"
-    ; Gui 80 (main panel): autosave checkbox (advanced only)
-    GuiControl, 80:%showCmd%, CF_AutoSaveChk
-    ; Gui 84 (settings): speed override, delays, dump buttons, debug logging
+    ; Gui 84 (settings): speed override, delay, dump buttons, debug logging
     GuiControl, 84:%showCmd%, NB_SpeedOverrideChk
     GuiControl, 84:%showCmd%, NB_SpeedSlider
     GuiControl, 84:%showCmd%, NB_SpeedLabel
     GuiControl, 84:%showCmd%, CF_AdvDelayLbl
     GuiControl, 84:%showCmd%, CF_AddDataDelaySlider
     GuiControl, 84:%showCmd%, CF_AddDataDelayLabel
-    GuiControl, 84:%showCmd%, CF_AdvSaveDelayLbl
-    GuiControl, 84:%showCmd%, CF_AutoSaveDelaySlider
-    GuiControl, 84:%showCmd%, CF_AutoSaveDelayLabel
     GuiControl, 84:%showCmd%, NB_AdvDumpBtn
     GuiControl, 84:%showCmd%, CF_AdvSpyBtn
     GuiControl, 84:%showCmd%, NB_DebugLogChk
-    ; Resize settings panel only if visible
+    ; Resize to the mode: NA while visible (never activate), Hide otherwise -
+    ; that sets the size without showing the window, so the first open after
+    ; init is already the right shape.
+    nbAdvH := NB_AdvancedMode ? 164 : 65   ; 164 must match the init height
     if (NB_SettingsVisible) {
-        if (NB_AdvancedMode)
-            Gui, 84:Show, w290 h188 NA
-        else
-            Gui, 84:Show, w290 h65 NA
+        Gui, 84:Show, w290 h%nbAdvH% NA
         WinSet, AlwaysOnTop, On, ahk_id %NB_SettingsHwnd%   ; see NB_ToggleSettings
+    } else {
+        Gui, 84:Show, w290 h%nbAdvH% Hide
     }
 return
 
@@ -662,14 +671,14 @@ return
 NB_SaveTplSpeed:
     GuiControlGet, selectedTpl, 84:, NB_SettingsTplDDL
     if (selectedTpl = "") {
-        MsgBox, 262192, %NB_AppTitle%, Select a template first.
+        MsgBox, 262192, %NB_AppTitle%, Select one from the list first.
         return
     }
     GuiControlGet, newSpeed, 84:, NB_TplSpeedSlider
     GuiControlGet, newLeaf, 84:, NB_TplLeafSlider
     tplPath := NB_SettingsTplPathMap[selectedTpl]
     if (tplPath = "") {
-        MsgBox, 262192, %NB_AppTitle%, Template path not found.
+        MsgBox, 262192, %NB_AppTitle%, Saved file path not found.
         return
     }
     displayName := RegExReplace(selectedTpl, "\s*\[(NB|CF)\]$", "")
@@ -685,12 +694,6 @@ return
 CF_AddDataDelayChanged:
     GuiControlGet, CF_AddDataDelay, 84:, CF_AddDataDelaySlider
     GuiControl, 84:, CF_AddDataDelayLabel, %CF_AddDataDelay% ms
-    gosub NB_SaveSettings
-return
-
-CF_AutoSaveDelayChanged:
-    GuiControlGet, CF_AutoSaveDelay, 84:, CF_AutoSaveDelaySlider
-    GuiControl, 84:, CF_AutoSaveDelayLabel, %CF_AutoSaveDelay% ms
     gosub NB_SaveSettings
 return
 
@@ -718,16 +721,28 @@ CF_PanelSpy:
     gosub CF_SpyDumpControls
 return
 
-CF_PanelSave:
-    gosub CF_BtnSaveTemplate
-return
-
-CF_PanelLoad:
-    gosub CF_BtnLoadTemplate
-return
-
-CF_PanelDelete:
-    gosub CF_BtnDeleteTemplate
+CF_MenuAction:
+    ; Same shape as NB_CprsMenuAction: AltSubmit index, header re-selected
+    ; BEFORE the action runs - see the note there.
+    GuiControlGet, CF_MenuChoice, 80:, CF_MenuChoice
+    if (ErrorLevel) {
+        ToolTip, Could not read the CPFS menu - nothing ran
+        SetTimer, CF_ClearToolTip, -3000
+        return
+    }
+    GuiControl, 80:Choose, CF_MenuChoice, 1
+    if (CF_MenuChoice = 1)              ; header - nothing to do
+        return
+    if (CF_MenuChoice = 2)              ; Save
+        gosub CF_BtnSaveTemplate
+    else if (CF_MenuChoice = 3)         ; Load
+        gosub CF_BtnLoadTemplate
+    else if (CF_MenuChoice = 4)         ; Delete
+        gosub CF_BtnDeleteTemplate
+    else {
+        ToolTip, Unknown CPFS menu item (%CF_MenuChoice%) - nothing ran
+        SetTimer, CF_ClearToolTip, -3000
+    }
 return
 
 CF_PanelAddData:
@@ -738,29 +753,6 @@ CF_ToggleAutoAdd:
     Gui, 80:Submit, NoHide
     global CF_ChainAddData
     CF_ChainAddData := CF_AutoAddChk
-return
-
-CF_ToggleAutoSave:
-    Gui, 80:Submit, NoHide
-    global CF_AutoSave
-    if (CF_AutoSaveChk = 1) {
-        MsgBox, 262452, CP Flowsheets - AutoSave WARNING, WARNING: AutoSave will automatically click the SAVE button in CP Flowsheets after applying a template.`n`nThis saves the entry PERMANENTLY to the patient record.`n`nAre you sure you want to enable AutoSave?
-        IfMsgBox, Yes
-        {
-            CF_AutoSave := 1
-            ToolTip, CPFS AutoSave ENABLED - Save will be clicked automatically
-            SetTimer, NB_ClearToolTip, -3000
-        }
-        else
-        {
-            CF_AutoSave := 0
-            GuiControl, 80:, CF_AutoSaveChk, 0
-        }
-    } else {
-        CF_AutoSave := 0
-        ToolTip, CPFS AutoSave disabled
-        SetTimer, NB_ClearToolTip, -2000
-    }
 return
 
 
@@ -813,7 +805,7 @@ NB_RunHotkeyAction(action, slotName) {
             }
             CF_ApplyTemplate(templatePath)
         } else {
-            MsgBox, 262192, %NB_AppTitle%, CPFS template "%m1%" not found.`n`nSave a template with that name using CPFS Save first.
+            MsgBox, 262192, %NB_AppTitle%, Nothing saved for CP Flowsheets under the name "%m1%".`n`nSave one with that name from the CPFS dropdown first.
         }
     }
     else {
@@ -837,15 +829,17 @@ NB_HK_Setup:
     ; NB templates
     Loop, Files, %NB_TemplateDir%\*.json
     {
+        if (!NB_IsTemplateFile(A_LoopFileName))
+            continue
         fname := StrReplace(A_LoopFileName, ".json", "")
-        actionList .= "NB Template: " . fname . "|"
+        actionList .= "CPRS: " . fname . "|"
     }
 
     ; CF templates
     Loop, Files, %CF_TemplateDir%\*.json
     {
         fname := StrReplace(A_LoopFileName, ".json", "")
-        actionList .= "CPFS Template: " . fname . "|"
+        actionList .= "CPFS: " . fname . "|"
     }
 
     Gui, 83:Destroy
@@ -854,7 +848,7 @@ NB_HK_Setup:
     Gui, 83:Font, s9 Bold, Segoe UI
     Gui, 83:Add, Text, x10 y10 w380, Quick Action Button Setup
     Gui, 83:Font, s7 Norm c606060, Segoe UI
-    Gui, 83:Add, Text, x10 y28 w380 h14, Buttons show the selected template's name, shrunk or trimmed to fit.
+    Gui, 83:Add, Text, x10 y28 w380 h14, Buttons show the selected item's name, shrunk or trimmed to fit.
     Gui, 83:Font, s8 Norm cDefault, Segoe UI
 
     ; Slot 1
@@ -891,9 +885,9 @@ NB_HKSetupSelectAction(ctrlName, currentAction) {
     ; Convert stored action back to display text for dropdown selection
     displayText := "-- None --"
     if (RegExMatch(currentAction, "^nb_template:(.+)$", m))
-        displayText := "NB Template: " . m1
+        displayText := "CPRS: " . m1
     else if (RegExMatch(currentAction, "^cf_template:(.+)$", m))
-        displayText := "CPFS Template: " . m1
+        displayText := "CPFS: " . m1
     GuiControl, 83:ChooseString, %ctrlName%, %displayText%
 }
 
@@ -1034,9 +1028,9 @@ NB_HKParseActionChoice(displayText) {
     ; Convert dropdown display text to stored action string
     if (displayText = "-- None --" || displayText = "")
         return ""
-    if (RegExMatch(displayText, "^NB Template: (.+)$", m))
+    if (RegExMatch(displayText, "^CPRS: (.+)$", m))
         return "nb_template:" . m1
-    if (RegExMatch(displayText, "^CPFS Template: (.+)$", m))
+    if (RegExMatch(displayText, "^CPFS: (.+)$", m))
         return "cf_template:" . m1
     return ""
 }
@@ -1099,7 +1093,7 @@ NB_SaveHotkeyConfig:
 return
 
 NB_LoadSettings:
-    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay, CF_AutoSaveDelay
+    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay
     global NB_SpeedOverride, NB_ApplySpeed, NB_LeafSpeed
     IniRead, NB_AdvancedMode, %NB_SettingsIniPath%, General, AdvancedMode, 0
     IniRead, NB_DebugLogging, %NB_SettingsIniPath%, General, DebugLogging, 0
@@ -1107,19 +1101,30 @@ NB_LoadSettings:
     IniRead, NB_ApplySpeed, %NB_SettingsIniPath%, General, ApplySpeed, 0
     IniRead, NB_LeafSpeed, %NB_SettingsIniPath%, General, LeafSpeed, 0
     IniRead, CF_AddDataDelay, %NB_SettingsIniPath%, CPFS, AddDataDelay, 50
-    IniRead, CF_AutoSaveDelay, %NB_SettingsIniPath%, CPFS, AutoSaveDelay, 500
 return
 
 NB_SaveSettings:
-    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay, CF_AutoSaveDelay
+    global NB_SettingsIniPath, NB_AdvancedMode, NB_DebugLogging, CF_AddDataDelay
     global NB_SpeedOverride, NB_ApplySpeed, NB_LeafSpeed
+    nbIniFail := 0
     IniWrite, %NB_AdvancedMode%, %NB_SettingsIniPath%, General, AdvancedMode
+    nbIniFail += ErrorLevel
     IniWrite, %NB_DebugLogging%, %NB_SettingsIniPath%, General, DebugLogging
+    nbIniFail += ErrorLevel
     IniWrite, %NB_SpeedOverride%, %NB_SettingsIniPath%, General, SpeedOverride
+    nbIniFail += ErrorLevel
     IniWrite, %NB_ApplySpeed%, %NB_SettingsIniPath%, General, ApplySpeed
+    nbIniFail += ErrorLevel
     IniWrite, %NB_LeafSpeed%, %NB_SettingsIniPath%, General, LeafSpeed
+    nbIniFail += ErrorLevel
     IniWrite, %CF_AddDataDelay%, %NB_SettingsIniPath%, CPFS, AddDataDelay
-    IniWrite, %CF_AutoSaveDelay%, %NB_SettingsIniPath%, CPFS, AutoSaveDelay
+    nbIniFail += ErrorLevel
+    ; A failed write used to be silent and only showed up as "my settings
+    ; reset" after the next restart.
+    if (nbIniFail) {
+        ToolTip, Settings could not be saved to %NB_SettingsIniPath% - they will reset on restart. Check that OneDrive is signed in.
+        SetTimer, NB_ClearToolTip, -6000
+    }
 return
 
 
@@ -1303,7 +1308,7 @@ NB_ApplyNamedTemplate(templateName) {
         Sleep, 200
         NB_ApplyTemplate(templatePath)
     } else {
-        MsgBox, 262208, %NB_AppTitle%, No '%templateName%' template saved yet.`n`nTo create one:`n1. Open the reminder dialogue in CPRS`n2. Manually check all the boxes the way you want them`n3. Select 'Save Template' from the Nursing Booster dropdown`n4. Name it exactly: %templateName%`n`nNext time you select this option it replays your selections.`nYou always review in CPRS before clicking Finish.
+        MsgBox, 262208, %NB_AppTitle%, Nothing saved under the name '%templateName%' yet.`n`nTo create one:`n1. Open the reminder dialogue in CPRS`n2. Manually check all the boxes the way you want them`n3. Pick Save from the panel's CPRS dropdown`n4. Name it exactly: %templateName%`n`nNext time you select this option it replays your selections.`nYou always review in CPRS before clicking Finish.
     }
 }
 
@@ -1323,10 +1328,16 @@ NB_BtnSaveCurrentState:
         return
     }
 
-    NB_ArmTopmostDialog("Save Template")
-    InputBox, templateName, Save Template, Template name:`n`nUse a descriptive name like 'Negative Assessment' or 'Skin WNL'.`nNaming it the same as a toolbar option links it to that option.
+    NB_ArmTopmostDialog(NB_AppTitle . " - Save")
+    InputBox, templateName, %NB_AppTitle% - Save, Name:`n`nUse a descriptive name like 'Negative Assessment' or 'Skin WNL'.`nNaming it the same as a toolbar option links it to that option.
     if (ErrorLevel || templateName = "")
         return
+    ; The quick-action config lives in the same folder - a save under its
+    ; name would overwrite it and reset every quick action on next start.
+    if (!NB_IsTemplateFile(NB_SanitizeFilename(templateName) . ".json")) {
+        MsgBox, 262192, %NB_AppTitle%, That name is reserved for Nursing Booster's own configuration. Choose another name - nothing was saved.
+        return
+    }
 
     ToolTip, Scanning dialog...
     NB_WaitForStableCheckboxCount(dlgHwnd)
@@ -1378,9 +1389,19 @@ NB_BtnSaveCurrentState:
     json .= "`n}"
 
     filePath := NB_TemplateDir . "\" . NB_SanitizeFilename(templateName) . ".json"
+    ; FileOpen returns 0 on failure and a method call on a non-object is a
+    ; silent no-op in AHK v1 - check, or the "Saved" tooltip below would lie.
     f := FileOpen(filePath, "w", "UTF-8")
-    f.Write(json)
+    if (!f) {
+        MsgBox, 262192, %NB_AppTitle%, Could not save "%templateName%".`n`nCould not write:`n%filePath%`n(Windows error %A_LastError%)`n`nCheck that OneDrive is signed in and synced and that the folder is writable. Nothing was saved - your selections in CPRS are untouched.
+        return
+    }
+    nbWrote := f.Write(json)
     f.Close()
+    if (!nbWrote) {
+        MsgBox, 262192, %NB_AppTitle%, "%templateName%" was not written to:`n%filePath%`n`nDelete that file and save again - do not rely on it.
+        return
+    }
 
     ; Log using group-based view for readability
     if (NB_DebugLogging) {
@@ -1410,12 +1431,15 @@ NB_ApplyTemplate(templatePath) {
     global NB_AppTitle, NB_TemplateDir, NB_ApplySpeed, NB_LeafSpeed, NB_SpeedOverride, NB_ApplyCancelled
     global NB_BoosterGuiVisible, NB_PanelHwnd, NB_DebugLogging
     dlgHwnd := NB_FindActiveDialogWindow()
-    if (!dlgHwnd)
+    if (!dlgHwnd) {
+        ToolTip, Reminder dialogue not found - nothing was applied
+        SetTimer, NB_ClearToolTip, -3000
         return
+    }
 
     FileRead, content, %templatePath%
     if (ErrorLevel) {
-        MsgBox, 262192, %NB_AppTitle%, Failed to read template: %templatePath%
+        MsgBox, 262192, %NB_AppTitle%, Failed to read: %templatePath%
         return
     }
 
@@ -1423,11 +1447,11 @@ NB_ApplyTemplate(templatePath) {
     isV7 := InStr(content, """format"": 7") || InStr(content, """format"":7")
     isV6 := InStr(content, """format"": 6") || InStr(content, """format"":6")
     if !(isV7 || isV6) {
-        MsgBox, 262192, %NB_AppTitle%, This template must be re-saved with the updated Nursing Booster (v7).`n`n1. Open the reminder dialog in CPRS and fill it out`n2. Select 'Save Template' to create a new version
+        MsgBox, 262192, %NB_AppTitle%, This was saved by an old version and must be re-saved with the updated Nursing Booster (v7).`n`n1. Open the reminder dialog in CPRS and fill it out`n2. Pick Save from the CPRS dropdown to create a new version
         return
     }
     if (isV6 && !isV7) {
-        GuiControl, 80:, NB_PanelStatus, WARNING: Loading v6 template - re-save to upgrade to v7
+        GuiControl, 80:, NB_PanelStatus, WARNING: Loading a v6 save - re-save to upgrade to v7
         SetTimer, NB_ClearV6Warning, -5000
     }
 
@@ -1438,7 +1462,7 @@ NB_ApplyTemplate(templatePath) {
         WinGetTitle, currentDlgTitle, ahk_id %dlgHwnd%
         if (savedDlgTitle != "" && currentDlgTitle != "" && savedDlgTitle != currentDlgTitle) {
             dialogueMatched := false
-            MsgBox, 262452, %NB_AppTitle% - Dialogue Mismatch, This template was saved from:`n%savedDlgTitle%`n`nBut you are applying it to:`n%currentDlgTitle%`n`nAre you sure you want to continue?
+            MsgBox, 262452, %NB_AppTitle% - Dialogue Mismatch, This was saved from:`n%savedDlgTitle%`n`nBut you are applying it to:`n%currentDlgTitle%`n`nAre you sure you want to continue?
             IfMsgBox, No
                 return
         }
@@ -1449,12 +1473,12 @@ NB_ApplyTemplate(templatePath) {
         currentVersion := NB_GetDialogVersion(dlgHwnd)
         if (RegExMatch(content, """source_version"":\s*""([\d.]+)""", svM)) {
             if (currentVersion != "" && svM1 != "" && currentVersion != svM1) {
-                MsgBox, 262452, %NB_AppTitle% - Version Mismatch, This template was saved on version %svM1% but this dialogue is now version %currentVersion%.`n`nCheckboxes may have changed. The template may not apply correctly.`n`nAre you sure you want to continue?
+                MsgBox, 262452, %NB_AppTitle% - Version Mismatch, This was saved on version %svM1% but this dialogue is now version %currentVersion%.`n`nCheckboxes may have changed. It may not apply correctly.`n`nAre you sure you want to continue?
                 IfMsgBox, No
                     return
             }
         } else if (currentVersion != "") {
-            MsgBox, 262452, %NB_AppTitle% - Version Unknown, This template has no version info (saved before v8.2).`nThe current dialogue is version %currentVersion%.`n`nRe-save the template to enable version tracking.`nApply anyway?
+            MsgBox, 262452, %NB_AppTitle% - Version Unknown, This was saved before v8.2 and has no version info.`nThe current dialogue is version %currentVersion%.`n`nRe-save to enable version tracking.`nApply anyway?
             IfMsgBox, No
                 return
         }
@@ -1463,7 +1487,7 @@ NB_ApplyTemplate(templatePath) {
     ; Parse flat checkbox list from template
     tplItems := NB_ParseFlatCheckboxes(content)
     if (tplItems.Length() = 0) {
-        MsgBox, 262192, %NB_AppTitle%, Template has no checkboxes.
+        MsgBox, 262192, %NB_AppTitle%, The saved file has no checkboxes.
         return
     }
 
@@ -1528,7 +1552,7 @@ NB_ApplyTemplate(templatePath) {
             SetTimer, NB_CheckGui14Dropdown, 500
             if (NB_BoosterGuiVisible = 1)
                 WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
-            ToolTip, Template apply cancelled at item %tplPos%/%tplCount%.
+            ToolTip, Apply cancelled at item %tplPos%/%tplCount%.
             SetTimer, NB_ClearToolTip, -3000
             return
         }
@@ -1973,52 +1997,65 @@ NB__FindOKCallback(hwnd, lParam) {
 NB_BtnLoadSavedTemplate:
     dlgHwnd := NB_FindActiveDialogWindow()
     if (!dlgHwnd) {
-        MsgBox, 262192, %NB_AppTitle%, Open a template or reminder dialogue in CPRS first then load a template.
+        MsgBox, 262192, %NB_AppTitle%, Open a template or reminder dialogue in CPRS first, then load.
         return
     }
     NB_templates := []
     Loop, Files, %NB_TemplateDir%\*.json
     {
+        if (!NB_IsTemplateFile(A_LoopFileName))
+            continue
         NB_templates.Push(A_LoopFileFullPath)
     }
     if (NB_templates.Length() = 0) {
-        MsgBox, 262208, %NB_AppTitle%, No saved templates found.`n`nTo create one:`n1. Open a reminder dialogue in CPRS`n2. Check the boxes the way you want`n3. Select 'Save Template' from the Nursing Booster dropdown
+        MsgBox, 262208, %NB_AppTitle%, Nothing saved yet.`n`nTo create one:`n1. Open a reminder dialogue in CPRS`n2. Check the boxes the way you want`n3. Pick Save from the panel's CPRS dropdown
         return
     }
 
-    ; Build a list of template names
+    ; Build the list of names; remember each one's real path so the pick is
+    ; resolved exactly (re-sanitizing the display name is lossy).
     NB_loadList := ""
+    NB_LoadPathMap := {}
     for k, path in NB_templates {
         RegExMatch(path, ".*\\(.*)\.json$", match)
         NB_loadList .= (NB_loadList != "" ? "|" : "") . match1
+        NB_LoadPathMap[match1] := path
     }
 
     Gui, 81:Destroy
     Gui, 81:+AlwaysOnTop +ToolWindow
     Gui, 81:Font, s9, Segoe UI
-    Gui, 81:Add, Text,, Select a template to apply:
+    Gui, 81:Add, Text,, Select one to apply:
     Gui, 81:Add, ListBox, w300 h200 vNB_LoadSelection, %NB_loadList%
     Gui, 81:Add, Button, y+5 w120 gNB_DoLoadTemplate Default, Apply
     Gui, 81:Add, Button, x+5 w120 gNB_CancelLoad, Cancel
-    Gui, 81:Show,, Load Nursing Template
+    Gui, 81:Show,, %NB_AppTitle% - Load
 return
 
 NB_DoLoadTemplate:
     Gui, 81:Submit
     if (NB_LoadSelection = "") {
-        MsgBox, 262192, %NB_AppTitle%, Select a template.
+        MsgBox, 262192, %NB_AppTitle%, Select one from the list.
         return
     }
     Gui, 81:Destroy
-    templatePath := NB_TemplateDir . "\" . NB_SanitizeFilename(NB_LoadSelection) . ".json"
-    if (FileExist(templatePath)) {
-        dlgWnd := NB_FindActiveDialogWindow()
-        if (dlgWnd) {
-            WinActivate, ahk_id %dlgWnd%
-            Sleep, 200
-            NB_ApplyTemplate(templatePath)
-        }
+    templatePath := NB_LoadPathMap[NB_LoadSelection]
+    if (templatePath = "")
+        templatePath := NB_TemplateDir . "\" . NB_SanitizeFilename(NB_LoadSelection) . ".json"
+    ; Both failures used to return silently with the picker already gone -
+    ; indistinguishable from "applied but nothing changed".
+    if (!FileExist(templatePath)) {
+        MsgBox, 262192, %NB_AppTitle%, "%NB_LoadSelection%" could not be opened.`n`nExpected file:`n%templatePath%`n`nIt may have been renamed or deleted, or OneDrive may not have finished downloading it. Nothing was applied.
+        return
     }
+    dlgWnd := NB_FindActiveDialogWindow()
+    if (!dlgWnd) {
+        MsgBox, 262192, %NB_AppTitle%, The CPRS reminder dialogue is no longer open.`n`nNothing was applied. Re-open it and load again.
+        return
+    }
+    WinActivate, ahk_id %dlgWnd%
+    Sleep, 200
+    NB_ApplyTemplate(templatePath)
 return
 
 NB_CancelLoad:
@@ -2030,17 +2067,19 @@ NB_BtnDeleteTemplate:
     NB_delTemplates := []
     Loop, Files, %NB_TemplateDir%\*.json
     {
+        if (!NB_IsTemplateFile(A_LoopFileName))
+            continue
         NB_delTemplates.Push(A_LoopFileName)
     }
     if (NB_delTemplates.Length() = 0) {
-        MsgBox, 262208, %NB_AppTitle%, No saved templates to delete.
+        MsgBox, 262208, %NB_AppTitle%, Nothing saved to delete.
         return
     }
     list := ""
     for i, f in NB_delTemplates
         list .= i . ": " . StrReplace(f, ".json", "") . "`n"
-    NB_ArmTopmostDialog("Delete Template")
-    InputBox, deleteIdx, Delete Template, Enter the number of the template to delete:`n`n%list%,, 300, 400
+    NB_ArmTopmostDialog(NB_AppTitle . " - Delete")
+    InputBox, deleteIdx, %NB_AppTitle% - Delete, Enter the number to delete:`n`n%list%,, 300, 400
     if (ErrorLevel || deleteIdx = "")
         return
     if deleteIdx is not integer
@@ -2053,12 +2092,12 @@ NB_BtnDeleteTemplate:
         return
     }
     delName := StrReplace(NB_delTemplates[deleteIdx], ".json", "")
-    MsgBox, 262180, %NB_AppTitle%, Delete template "%delName%"?
+    MsgBox, 262180, %NB_AppTitle%, Delete "%delName%"?
     IfMsgBox, Yes
     {
         delPath := NB_TemplateDir . "\" . NB_delTemplates[deleteIdx]
         FileDelete, %delPath%
-        ToolTip, Template "%delName%" deleted
+        ToolTip, "%delName%" deleted
         SetTimer, NB_ClearToolTip, -2000
     }
 return
@@ -2210,6 +2249,8 @@ NB_RefreshSettingsTplList() {
     ; NB templates
     Loop, Files, %NB_TemplateDir%\*.json
     {
+        if (!NB_IsTemplateFile(A_LoopFileName))
+            continue
         name := RegExReplace(A_LoopFileName, "\.json$", "")
         displayName := name . " [NB]"
         if (list != "")
@@ -2463,6 +2504,15 @@ return
 NB_SanitizeFilename(name) {
     result := RegExReplace(Trim(name), "[<>:""/\\|?*]", "_")
     return result
+}
+
+; True for a saved-selection file in NB_TemplateDir. The quick-action config
+; (hotkey_buttons.json) lives in the same folder and must never show up in the
+; Load / Delete / quick-action / settings lists.
+NB_IsTemplateFile(fileName) {
+    global NB_HotkeyConfigPath
+    SplitPath, NB_HotkeyConfigPath, hkName
+    return (fileName != hkName)
 }
 
 ; Extract version string from TRichEdit controls in a CPRS reminder dialog.
@@ -3494,8 +3544,8 @@ CF_BtnSaveTemplate:
         return
     }
 
-    NB_ArmTopmostDialog(CF_AppTitle . " - Save Template")
-    InputBox, cfTemplateName, %CF_AppTitle% - Save Template, Template name:`n`nUse a descriptive name like 'ICU Default' or 'Vitals Baseline'.
+    NB_ArmTopmostDialog(CF_AppTitle . " - Save")
+    InputBox, cfTemplateName, %CF_AppTitle% - Save, Name:`n`nUse a descriptive name like 'ICU Default' or 'Vitals Baseline'.
     if (ErrorLevel || cfTemplateName = "")
         return
 
@@ -3558,9 +3608,18 @@ CF_BtnSaveTemplate:
     json .= "`n}"
 
     filePath := CF_TemplateDir . "\" . CF_SanitizeFilename(cfTemplateName) . ".json"
+    ; Same guard as the CPRS save: a failed FileOpen must not end in "Saved".
     f := FileOpen(filePath, "w", "UTF-8")
-    f.Write(json)
+    if (!f) {
+        MsgBox, 262192, %CF_AppTitle%, Could not save "%cfTemplateName%".`n`nCould not write:`n%filePath%`n(Windows error %A_LastError%)`n`nCheck that OneDrive is signed in and synced and that the folder is writable. Nothing was saved.
+        return
+    }
+    cfWrote := f.Write(json)
     f.Close()
+    if (!cfWrote) {
+        MsgBox, 262192, %CF_AppTitle%, "%cfTemplateName%" was not written to:`n%filePath%`n`nDelete that file and save again - do not rely on it.
+        return
+    }
 
     totalControls := controls.Length()
 
@@ -3587,18 +3646,20 @@ CF_BtnLoadTemplate:
         return
     }
 
-    ; Build template list
+    ; Build the list; remember each name's real path so the pick resolves exactly
     cfLoadList := ""
-    cfLoadPaths := []
+    CF_LoadPathMap := {}
+    cfLoadCount := 0
     Loop, Files, %CF_TemplateDir%\*.json
     {
         SplitPath, A_LoopFileFullPath,,,,nameNoExt
         cfLoadList .= nameNoExt . "|"
-        cfLoadPaths.Push(A_LoopFileFullPath)
+        CF_LoadPathMap[nameNoExt] := A_LoopFileFullPath
+        cfLoadCount += 1
     }
 
-    if (cfLoadPaths.Length() = 0) {
-        MsgBox, 262208, %CF_AppTitle%, No saved CP Flowsheets templates found.`n`nTo create one:`n1. Open the Add Data screen in CP Flowsheets`n2. Set up your checkboxes, radios, and dropdowns`n3. Click 'CPFS Save'
+    if (cfLoadCount = 0) {
+        MsgBox, 262208, %CF_AppTitle%, Nothing saved for CP Flowsheets yet.`n`nTo create one:`n1. Open the Add Data screen in CP Flowsheets`n2. Set up your checkboxes, radios, and dropdowns`n3. Pick Save from the panel's CPFS dropdown
         return
     }
 
@@ -3606,40 +3667,44 @@ CF_BtnLoadTemplate:
     Gui, 82:Destroy
     Gui, 82:+AlwaysOnTop
     Gui, 82:Font, s9, Segoe UI
-    Gui, 82:Add, Text,, Select a CP Flowsheets template to apply:
+    Gui, 82:Add, Text,, Select one to apply:
     Gui, 82:Add, ListBox, w300 h200 vCF_LoadSelection, %cfLoadList%
     Gui, 82:Add, Button, y+5 w120 Default gCF_DoLoadTemplate, Apply
     Gui, 82:Add, Button, x+5 w120 gCF_CancelLoad, Cancel
-    Gui, 82:Show,, %CF_AppTitle% - Load Template
+    Gui, 82:Show,, %CF_AppTitle% - Load
 return
 
 CF_DoLoadTemplate:
     Gui, 82:Submit
     Gui, 82:Destroy
     if (CF_LoadSelection = "") {
-        MsgBox, 262192, %CF_AppTitle%, Select a template first.
+        MsgBox, 262192, %CF_AppTitle%, Select one from the list first.
         return
     }
-    templatePath := CF_TemplateDir . "\" . CF_SanitizeFilename(CF_LoadSelection) . ".json"
-    if (FileExist(templatePath)) {
-        if (CF_ChainAddData) {
-            CF_ClickAddDataButton()
-            ; Wait for the input screen to appear
-            Loop, 20 {
-                Sleep, 250
-                addDataHwnd := CF_FindAddDataWindow()
-                if (addDataHwnd)
-                    break
-            }
-            if (!addDataHwnd) {
-                MsgBox, 262192, %CF_AppTitle%, Add Data screen did not open. Try clicking Add Data manually first.
-                return
-            }
-            ; Extra delay for controls to fully load
-            Sleep, %CF_AddDataDelay%
-        }
-        CF_ApplyTemplate(templatePath)
+    templatePath := CF_LoadPathMap[CF_LoadSelection]
+    if (templatePath = "")
+        templatePath := CF_TemplateDir . "\" . CF_SanitizeFilename(CF_LoadSelection) . ".json"
+    if (!FileExist(templatePath)) {
+        MsgBox, 262192, %CF_AppTitle%, "%CF_LoadSelection%" could not be opened.`n`nExpected file:`n%templatePath%`n`nIt may have been renamed or deleted, or OneDrive may not have finished downloading it. Nothing was applied.
+        return
     }
+    if (CF_ChainAddData) {
+        CF_ClickAddDataButton()
+        ; Wait for the input screen to appear
+        Loop, 20 {
+            Sleep, 250
+            addDataHwnd := CF_FindAddDataWindow()
+            if (addDataHwnd)
+                break
+        }
+        if (!addDataHwnd) {
+            MsgBox, 262192, %CF_AppTitle%, Add Data screen did not open. Try clicking Add Data manually first.
+            return
+        }
+        ; Extra delay for controls to fully load
+        Sleep, %CF_AddDataDelay%
+    }
+    CF_ApplyTemplate(templatePath)
 return
 
 CF_CancelLoad:
@@ -3649,8 +3714,8 @@ return
 CF_ApplyTemplate(templatePath) {
     ; Same as NB_ApplyTemplate: NB_BoosterGuiVisible/NB_PanelHwnd must be declared
     ; or the final AlwaysOnTop re-assert reads blank locals and never fires.
-    global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride, CF_AutoSaveDelay, NB_ApplyCancelled
-    global NB_BoosterGuiVisible, NB_PanelHwnd, CF_AutoSave, NB_DebugLogging, CF_ChainAddData, CF_AddDataDelay
+    global CF_AppTitle, NB_ApplySpeed, NB_SpeedOverride, NB_ApplyCancelled
+    global NB_BoosterGuiVisible, NB_PanelHwnd, NB_DebugLogging
 
     targetHwnd := CF_FindAddDataWindow()
     if (!targetHwnd) {
@@ -3660,14 +3725,14 @@ CF_ApplyTemplate(templatePath) {
 
     FileRead, content, %templatePath%
     if (ErrorLevel) {
-        MsgBox, 262192, %CF_AppTitle%, Failed to read template: %templatePath%
+        MsgBox, 262192, %CF_AppTitle%, Failed to read: %templatePath%
         return
     }
 
     ; Parse controls from JSON
     templateControls := CF_ParseControls(content)
     if (templateControls.Length() = 0) {
-        MsgBox, 262192, %CF_AppTitle%, Template has no controls.
+        MsgBox, 262192, %CF_AppTitle%, The saved file has no controls.
         return
     }
 
@@ -3716,7 +3781,6 @@ CF_ApplyTemplate(templatePath) {
     totalNotFound := 0
     cfNotFoundList := ""
     cfClaimed := {}  ; track which live indices are already matched
-    cfAutoSaveCancelled := false
 
     ; Register right-click hotkey to set cancel flag
     NB_ApplyCancelled := false
@@ -3729,15 +3793,9 @@ CF_ApplyTemplate(templatePath) {
             Hotkey, ~RButton, NB_CancelApplyHotkey, Off
             if (NB_BoosterGuiVisible = 1)
                 WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
-            ToolTip, Template apply cancelled at control %ti%/%cfTotalTpl%.
+            ToolTip, Apply cancelled at control %ti%/%cfTotalTpl%.
             SetTimer, CF_ClearToolTip, -3000
             return
-        }
-        ; Check Esc to cancel auto-save throughout the apply process
-        if (CF_AutoSave && GetKeyState("Escape", "P")) {
-            cfAutoSaveCancelled := true
-            ToolTip, AutoSave cancelled - still applying template
-            SetTimer, CF_ClearToolTip, -2000
         }
         ; Extract all template control properties to plain variables (AHK v1 safe)
         cfTplType := tplCtrl.type
@@ -3825,40 +3883,16 @@ CF_ApplyTemplate(templatePath) {
         CF__LogControlStates("APPLY", cfApplyLiveControls, templatePath, cfApplyWinTitle, totalApplied, totalNotFound)
     }
 
-    if (CF_AutoSave && totalApplied > 0) {
-        ; Check if Esc/right-click was pressed at any point during apply
-        if (cfAutoSaveCancelled || NB_ApplyCancelled || GetKeyState("Escape", "P")) {
-            if (NB_BoosterGuiVisible = 1)
-                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
-            ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
-            SetTimer, CF_ClearToolTip, -3000
-            return
-        }
-        ; Wait before saving, then click Save (right-click or Esc cancels during delay)
-        ToolTip, %totalApplied% applied - saving in %CF_AutoSaveDelay% ms... (right-click or Esc to cancel)
-        Sleep, %CF_AutoSaveDelay%
-        ; Re-check cancel after delay
-        if (NB_ApplyCancelled || GetKeyState("Escape", "P")) {
-            if (NB_BoosterGuiVisible = 1)
-                WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
-            ToolTip, AutoSave cancelled - %totalApplied% applied`, review and save manually
-            SetTimer, CF_ClearToolTip, -3000
-            return
-        }
-        CF_ClickSaveButton(targetHwnd)
-        ToolTip, %totalApplied% applied and saved
-        SetTimer, CF_ClearToolTip, -3000
-    } else if (CF_AutoSave && totalApplied = 0) {
-        ToolTip, No controls applied - nothing to save
-        SetTimer, CF_ClearToolTip, -3000
-    } else {
-        cfUnmatchedTip := "Done: " . totalApplied . " applied, " . totalNotFound . " not matched"
-        if (cfNotFoundList != "")
-            cfUnmatchedTip .= " [" . RTrim(cfNotFoundList, "`n") . "]"
-        cfUnmatchedTip .= " - review before submitting"
-        ToolTip, %cfUnmatchedTip%
-        SetTimer, CF_ClearToolTip, -8000
-    }
+    ; Standing rule: the module never clicks Save in CP Flowsheets - the user
+    ; always reviews and saves by hand (auto-clicking Save wrote to the patient
+    ; record without a final review). CF_HasDangerousButton enforces it for
+    ; popups; nothing in the apply path may press Save.
+    cfUnmatchedTip := "Done: " . totalApplied . " applied, " . totalNotFound . " not matched"
+    if (cfNotFoundList != "")
+        cfUnmatchedTip .= " [" . RTrim(cfNotFoundList, "`n") . "]"
+    cfUnmatchedTip .= " - review before submitting"
+    ToolTip, %cfUnmatchedTip%
+    SetTimer, CF_ClearToolTip, -8000
 
     ; Re-assert AlwaysOnTop on the panel — WinActivate on CPFS dialog strips it
     if (NB_BoosterGuiVisible = 1)
@@ -3958,12 +3992,12 @@ CF_BtnDeleteTemplate:
     }
 
     if (cfDelPaths.Length() = 0) {
-        MsgBox, 262208, %CF_AppTitle%, No CP Flowsheets templates to delete.
+        MsgBox, 262208, %CF_AppTitle%, Nothing saved for CP Flowsheets to delete.
         return
     }
 
-    NB_ArmTopmostDialog(CF_AppTitle . " - Delete Template")
-    InputBox, cfDelChoice, %CF_AppTitle% - Delete Template, Enter the number of the template to delete:`n`n%cfDelList%,, 350, 300
+    NB_ArmTopmostDialog(CF_AppTitle . " - Delete")
+    InputBox, cfDelChoice, %CF_AppTitle% - Delete, Enter the number to delete:`n`n%cfDelList%,, 350, 300
     if (ErrorLevel || cfDelChoice = "")
         return
 
@@ -3974,11 +4008,11 @@ CF_BtnDeleteTemplate:
     }
 
     SplitPath, % cfDelPaths[cfDelIdx],,,,cfDelName
-    MsgBox, 262180, %CF_AppTitle%, Delete template "%cfDelName%"?
+    MsgBox, 262180, %CF_AppTitle%, Delete "%cfDelName%"?
     IfMsgBox, Yes
     {
         FileDelete, % cfDelPaths[cfDelIdx]
-        ToolTip, Template "%cfDelName%" deleted
+        ToolTip, "%cfDelName%" deleted
         SetTimer, CF_ClearToolTip, -2000
     }
 return
@@ -4101,6 +4135,9 @@ CF_DismissIntermediatePopups() {
     }
 }
 
+; Enforcement point for the never-clicks-Save rule (see CF_ApplyTemplate):
+; loosening this button-text list lets the module press something that
+; writes to the patient record.
 CF_HasDangerousButton(windowHwnd) {
     global CF__hasDangerous
     CF__hasDangerous := false
@@ -4170,57 +4207,6 @@ CF__FindOKCallback(hwnd, lParam) {
             CF__foundOKHwnd := hwnd
             return 0
         }
-    }
-    return 1
-}
-
-
-;============================================================================================
-; CF - FIND AND CLICK SAVE BUTTON
-;
-; Finds the "Save" TButton in CP Flowsheets and clicks it.
-; Used by AutoSave feature after template apply.
-;============================================================================================
-
-CF_ClickSaveButton(windowHwnd) {
-    global CF_AppTitle, CF__foundSaveHwnd
-    CF__foundSaveHwnd := 0
-    enumSave := RegisterCallback("CF__FindSaveCallback", "Fast")
-    DllCall("EnumChildWindows", "Ptr", windowHwnd, "Ptr", enumSave, "Ptr", 0)
-
-    if (CF__foundSaveHwnd) {
-        PostMessage, 0x00F5, 0, 0,, ahk_id %CF__foundSaveHwnd%   ; BM_CLICK
-        ToolTip, AutoSave: Save clicked
-        SetTimer, CF_ClearToolTip, -2000
-    } else {
-        ToolTip, AutoSave: Save button not found - save manually
-        SetTimer, CF_ClearToolTip, -3000
-    }
-}
-
-CF__FindSaveCallback(hwnd, lParam) {
-    global CF__foundSaveHwnd
-
-    ; Skip invisible
-    cfStyle := DllCall("GetWindowLong", "Ptr", hwnd, "Int", -16, "UInt")
-    if !(cfStyle & 0x10000000)
-        return 1
-
-    VarSetCapacity(buf, 512, 0)
-    DllCall("GetClassName", "Ptr", hwnd, "Str", buf, "Int", 256)
-    className := buf
-
-    if !(InStr(className, "Button") || InStr(className, "TButton"))
-        return 1
-
-    ; Get button text
-    VarSetCapacity(tBuf, 256, 0)
-    DllCall("GetWindowText", "Ptr", hwnd, "Str", tBuf, "Int", 128)
-    btnText := tBuf
-
-    if (btnText = "Save" || btnText = "&Save") {
-        CF__foundSaveHwnd := hwnd
-        return 0
     }
     return 1
 }

@@ -56,6 +56,24 @@ That's it. NursingBooster will automatically check for updates 30 seconds after 
 - **Right-click to cancel** — Right-click during template apply to stop immediately
 - **Auto-hide during sign** — Panel hides when F-keys are pressed and restores after 6 seconds
 
+## Panel Layout
+
+The floating panel (Ctrl+Shift+B) has one dropdown per section instead of a row
+of Save/Load/Delete buttons:
+
+| Row | Controls |
+|-----|----------|
+| CPRS | **CPRS** dropdown (Save / Load / Delete) - **Settings** - **Reload BP** - **Bars** |
+| CP Flowsheets | **CPFS** dropdown (Save / Load / Delete) - **Add Data** - **BCMA** / **CPFS** launchers - **Auto-Add** checkbox |
+| Quick Actions | Five configurable buttons plus **...** to set them up |
+
+Picking an item runs it and the dropdown snaps back to its section name, so the
+menu never sits on an action you already ran.
+
+**NursingBooster never clicks Save in CP Flowsheets.** The old AutoSave option
+did, and it was removed as unsafe — it wrote to the patient record without a
+final review. Always review what was applied and save by hand.
+
 ## Channels
 
 | Channel | Description | Who should use it |

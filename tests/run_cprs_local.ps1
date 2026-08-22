@@ -83,7 +83,7 @@ try {
         Start-Process -FilePath $ahk  -ArgumentList "/ErrorStdOut", "`"$play`"" | Out-Null
         Write-Host ""
         Write-Host "Both are running. Press Ctrl+Shift+B to show the NursingBooster panel," -ForegroundColor Cyan
-        Write-Host "then Save Tpl / Load Tpl / Apply against the fake dialog by hand." -ForegroundColor Cyan
+        Write-Host "then use the CPRS dropdown (Save / Load) and Apply against the fake dialog by hand." -ForegroundColor Cyan
         Write-Host "Ctrl+Shift+I over any control inspects its window class." -ForegroundColor Cyan
         Write-Host "Close both windows (dialog + AutoHotkey tray icon) when you are done."
         Start-Sleep -Seconds 3   # let both processes finish loading before cleanup

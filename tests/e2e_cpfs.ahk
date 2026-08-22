@@ -30,10 +30,8 @@ CF_LogDir := onedrivelocal . "\Logs"
 FileCreateDir, %CF_TemplateDir%
 FileCreateDir, %CF_LogDir%
 CF_AppTitle := "CP Flowsheets Booster"
-CF_AutoSave := 0
 CF_ChainAddData := 0
 CF_AddDataDelay := 50
-CF_AutoSaveDelay := 500
 NB_SpeedOverride := 0
 NB_ApplySpeed := 0
 NB_LeafSpeed := 0
@@ -102,6 +100,10 @@ E2eAssert(state["Yes"] = 1, "radio Yes selected")
 E2eAssert(state["No"] = 0, "radio No deselected by group behavior")
 E2eAssert(state["Skin intact"] = 0, "already-correct box untouched")
 E2eAssert(state["__combo"] = 0, "combo untouched (skipped by design), idx=" . state["__combo"])
+; Patient-safety guard: the apply path must never press Save (the stub flips
+; its title if its Save button is clicked)
+WinGetTitle, stubTitleAfter, ahk_id %stubHwnd%
+E2eAssert(!InStr(stubTitleAfter, "SAVE CLICKED"), "apply never clicked the Save button (title: " . stubTitleAfter . ")")
 
 ; --- Summary ---
 WinClose, ahk_id %stubHwnd%

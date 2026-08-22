@@ -27,7 +27,15 @@ Gui, Add, Radio, vR2 Checked, No
 Gui, Add, Text,, Route:
 Gui, Add, DropDownList, vDD1 Choose1 w180, Oral|IV|IM
 Gui, Add, Checkbox, vCB3, Skin intact
+; A real Save button (push button, so the enumerator skips it). If anything
+; ever clicks it the window title changes and the driver fails the run -
+; the module must never press Save in CP Flowsheets.
+Gui, Add, Button, vSaveBtn gStubSaveClicked, Save
 Gui, Show, w560 h460, CPFS Stub - Add Data
+return
+
+StubSaveClicked:
+Gui, Show,, CPFS Stub - Add Data - SAVE CLICKED
 return
 
 GuiClose:
