@@ -7,8 +7,8 @@ This document describes how to integrate the NursingBooster module into CPRSBoos
 - **Gui 80** — Floating Nursing Booster panel
 - **Gui 84** — Settings panel (the module also uses Gui 81/82/83 for its load/setup dialogs and Gui 85 for the mini drop-up bar that docks next to the host's function bar)
 - **Ctrl+Shift+B hotkey** — toggles the panel
-- Save/Load/Apply/Delete templates for CPRS reminder dialogs (checkbox-heavy ones like VAAES Shift Assessment), reached from the panel's **CPRS** dropdown
-- CP Flowsheets template support (separate save/load/apply for the grid view input dialogs), reached from the panel's **CPFS** dropdown; the module never clicks Save in CP Flowsheets
+- Save / Load / Delete for CPRS reminder dialogs (checkbox-heavy ones like VAAES Shift Assessment) from the panel's **CPRS** dropdown; Load applies the saved selections to the open dialog
+- CP Flowsheets support (separate Save / Load / Delete for the grid view input dialogs) from the panel's **CPFS** dropdown; Load applies to the Add Data screen, and the module never clicks Save in CP Flowsheets
 - Quick Action buttons + dropdown
 - Settings persistence in `OneDrive\CPRSBooster\NursingTemplates\booster_settings.ini`
 - Templates stored in `OneDrive\CPRSBooster\NursingTemplates` and `OneDrive\CPRSBooster\CPFSTemplates`

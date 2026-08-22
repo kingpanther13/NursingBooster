@@ -1332,6 +1332,12 @@ NB_BtnSaveCurrentState:
     InputBox, templateName, %NB_AppTitle% - Save, Name:`n`nUse a descriptive name like 'Negative Assessment' or 'Skin WNL'.`nNaming it the same as a toolbar option links it to that option.
     if (ErrorLevel || templateName = "")
         return
+    ; The quick-action config lives in the same folder - a save under its
+    ; name would overwrite it and reset every quick action on next start.
+    if (!NB_IsTemplateFile(NB_SanitizeFilename(templateName) . ".json")) {
+        MsgBox, 262192, %NB_AppTitle%, That name is reserved for Nursing Booster's own configuration. Choose another name - nothing was saved.
+        return
+    }
 
     ToolTip, Scanning dialog...
     NB_WaitForStableCheckboxCount(dlgHwnd)
