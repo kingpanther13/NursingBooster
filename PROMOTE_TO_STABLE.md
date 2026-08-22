@@ -8,7 +8,7 @@ The two channels use **different** version labels:
 
 | Channel | Branch   | Label style | Example |
 |---------|----------|-------------|---------|
-| Dev/Beta| `master` | `devXX`     | `dev22` |
+| Dev/Beta| `master` | `devXX`     | `dev23` |
 | Stable  | `stable` | `X.Y`       | `1.0`   |
 
 The version label lives in **two** spots in `nursingbooster_module.ahk`:
