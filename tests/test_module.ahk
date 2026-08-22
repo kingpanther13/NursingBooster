@@ -60,6 +60,28 @@ GuiControlGet, FIT_hBtn, 9:Hwnd, FIT_Btn
 SendMessage, 0x31, 0, 0,, ahk_id %FIT_hBtn%   ; WM_GETFONT
 FIT_hFont := ErrorLevel
 
+; --- Settings save->load round trip (labels must be gosub'd from the
+;     auto-execute section). Asserts the surviving keys persist and that the
+;     removed AutoSaveDelay key is never written. ---
+NB_SettingsIniPath := A_Temp . "\nb_settings_" . A_TickCount . ".ini"
+NB_AdvancedMode := 1
+NB_DebugLogging := 1
+NB_SpeedOverride := 1
+NB_ApplySpeed := 250
+NB_LeafSpeed := 80
+CF_AddDataDelay := 800
+gosub NB_SaveSettings
+IniRead, INIRT_AutoSaveDelay, %NB_SettingsIniPath%, CPFS, AutoSaveDelay, __absent__
+NB_AdvancedMode := 0
+NB_DebugLogging := 0
+NB_SpeedOverride := 0
+NB_ApplySpeed := 0
+NB_LeafSpeed := 0
+CF_AddDataDelay := 50
+gosub NB_LoadSettings
+INIRT_Got := NB_AdvancedMode . "," . NB_DebugLogging . "," . NB_SpeedOverride . "," . NB_ApplySpeed . "," . NB_LeafSpeed . "," . CF_AddDataDelay
+FileDelete, %NB_SettingsIniPath%
+
 #Include %A_ScriptDir%\..\tools\Yunit\Yunit.ahk
 #Include %A_ScriptDir%\..\tools\Yunit\Stdout.ahk
 
@@ -74,8 +96,8 @@ class YunitFailCount
 }
 
 Yunit.Use(YunitStdOut, YunitFailCount).Test(EscJsonTests, FlatParseTests
-    , CFParseTests, HKTests, FitTests, HKRoundTripTests, SanitizeTests
-    , SpeedFileTests, MatcherTests)
+    , CFParseTests, HKTests, FitTests, HKRoundTripTests, SettingsRoundTripTests
+    , SanitizeTests, SpeedFileTests, MatcherTests)
 
 if (YunitFailCount.Fails > 0)
 {
@@ -234,8 +256,8 @@ class HKTests
 
     ParseActionChoices()
     {
-        Yunit.Assert(NB_HKParseActionChoice("NB Template: Neg Assessment") = "nb_template:Neg Assessment", "NB action")
-        Yunit.Assert(NB_HKParseActionChoice("CPFS Template: Vitals") = "cf_template:Vitals", "CF action")
+        Yunit.Assert(NB_HKParseActionChoice("CPRS: Neg Assessment") = "nb_template:Neg Assessment", "NB action")
+        Yunit.Assert(NB_HKParseActionChoice("CPFS: Vitals") = "cf_template:Vitals", "CF action")
         Yunit.Assert(NB_HKParseActionChoice("-- None --") = "", "none -> empty")
         Yunit.Assert(NB_HKParseActionChoice("") = "", "empty -> empty")
         Yunit.Assert(NB_HKParseActionChoice("garbage") = "", "garbage -> empty")
@@ -310,10 +332,36 @@ class HKRoundTripTests
 }
 
 ; ===========================================================================
+; Settings INI persistence round trip (I/O ran in the auto-execute section)
+; ===========================================================================
+class SettingsRoundTripTests
+{
+    SurvivingKeysRoundTrip()
+    {
+        global INIRT_Got
+        Yunit.Assert(INIRT_Got = "1,1,1,250,80,800", "settings round trip: got '" . INIRT_Got . "'")
+    }
+
+    RemovedAutoSaveKeyNeverWritten()
+    {
+        global INIRT_AutoSaveDelay
+        Yunit.Assert(INIRT_AutoSaveDelay = "__absent__", "AutoSaveDelay not written (got '" . INIRT_AutoSaveDelay . "')")
+    }
+}
+
+; ===========================================================================
 ; NB_SanitizeFilename (module behavior: illegal chars become _)
 ; ===========================================================================
 class SanitizeTests
 {
+    QuickActionConfigIsNotATemplate()
+    {
+        global NB_HotkeyConfigPath
+        SplitPath, NB_HotkeyConfigPath, hkName
+        Yunit.Assert(!NB_IsTemplateFile(hkName), "hotkey config file excluded from template lists")
+        Yunit.Assert(NB_IsTemplateFile("Skin WNL.json"), "ordinary saved file included")
+    }
+
     ReplacesIllegalChars()
     {
         Yunit.Assert(NB_SanitizeFilename("a/b:c*d?e") = "a_b_c_d_e", "illegal chars -> _")

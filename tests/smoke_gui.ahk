@@ -13,6 +13,12 @@
 ;     (CB_GETDROPPEDSTATE guard), and disappears when the bar dies
 ;   - quick-action button labels come from the selected template's name and
 ;     are shrunk/trimmed to fit the 68px buttons
+;   - an InputBox armed via NB_ArmTopmostDialog is pinned topmost while open
+;   - the Settings window opens above a later stay-on-top window
+;   - the CPRS/CPFS panel dropdowns exist, open on the no-activate panel,
+;     route every pick to its action and snap back to the header; AutoSave
+;     is gone; every panel control fits the panel
+;   - Advanced Mode is applied at init and resizes/hides on toggle
 ;
 ; Output: PASS/FAIL lines on stdout; exit code = number of failures.
 ; Run with: AutoHotkeyU64.exe /ErrorStdOut smoke_gui.ahk
@@ -233,23 +239,112 @@ gosub NB_ToggleSettings   ; hide again
 Gui, 4:Destroy
 
 ; --- 15. Issue #8: one dropdown per section replaces the Save/Load/Del
-;         buttons; AutoSave is gone. Structural only - picking an item would
-;         open a modal prompt. ---
+;         buttons; AutoSave is gone - that assertion is a patient-safety
+;         regression guard (it clicked Save in CP Flowsheets, writing to the
+;         record without a final review), not a layout check. The six picks
+;         are driven for real: with no CPRS/CPFS window and an empty save
+;         folder each lands on a distinct modal MsgBox that a one-shot probe
+;         reads and closes. ---
+if (NB_BoosterGuiVisible = 0)
+    gosub NB_TogglePanel
+Sleep, 300
+SmokeAssert(NB_BoosterGuiVisible = 1, "panel visible for the dropdown checks")
 GuiControlGet, hCprsMenu, 80:Hwnd, NB_CprsMenuChoice
+SmokeAssert(!ErrorLevel && hCprsMenu != "", "CPRS dropdown exists")
 GuiControlGet, hCfMenu, 80:Hwnd, CF_MenuChoice
-SmokeAssert(hCprsMenu != 0 && hCfMenu != 0, "CPRS and CPFS dropdowns exist")
+SmokeAssert(!ErrorLevel && hCfMenu != "", "CPFS dropdown exists")
 SendMessage, 0x0146, 0, 0,, ahk_id %hCprsMenu%   ; CB_GETCOUNT
-SmokeAssert(ErrorLevel = 4, "CPRS dropdown has header + Save/Load/Delete (" . ErrorLevel . ")")
+cprsItems := ErrorLevel
 SendMessage, 0x0146, 0, 0,, ahk_id %hCfMenu%
-SmokeAssert(ErrorLevel = 4, "CPFS dropdown has header + Save/Load/Delete (" . ErrorLevel . ")")
-SendMessage, 0x0147, 0, 0,, ahk_id %hCprsMenu%   ; CB_GETCURSEL
-SmokeAssert(ErrorLevel = 0, "CPRS dropdown rests on its header")
-SendMessage, 0x0147, 0, 0,, ahk_id %hCfMenu%
-SmokeAssert(ErrorLevel = 0, "CPFS dropdown rests on its header")
+cfItems := ErrorLevel
+SmokeAssert(cprsItems = 4, "CPRS dropdown has header + Save/Load/Delete (" . cprsItems . ")")
+SmokeAssert(cfItems = 4, "CPFS dropdown has header + Save/Load/Delete (" . cfItems . ")")
+; AltSubmit contract the handlers depend on: GuiControlGet yields the position
+GuiControl, 80:Choose, NB_CprsMenuChoice, 2
+GuiControlGet, cprsPick, 80:, NB_CprsMenuChoice
+SmokeAssert(cprsPick = 2, "AltSubmit dropdown reads back a position index ('" . cprsPick . "')")
+GuiControl, 80:Choose, NB_CprsMenuChoice, 1
+; The lists open on the no-activate panel (same contract as the Gui 85 bar)
+SendMessage, 0x014F, 1, 0,, ahk_id %hCprsMenu%   ; CB_SHOWDROPDOWN open
+Sleep, 300
+SendMessage, 0x0157, 0, 0,, ahk_id %hCprsMenu%   ; CB_GETDROPPEDSTATE
+cprsDropped := ErrorLevel
+SendMessage, 0x014F, 0, 0,, ahk_id %hCprsMenu%   ; close
+SmokeAssert(cprsDropped = 1, "CPRS dropdown list opens on the no-activate panel")
+SendMessage, 0x014F, 1, 0,, ahk_id %hCfMenu%
+Sleep, 300
+SendMessage, 0x0157, 0, 0,, ahk_id %hCfMenu%
+cfDropped := ErrorLevel
+SendMessage, 0x014F, 0, 0,, ahk_id %hCfMenu%
+SmokeAssert(cfDropped = 1, "CPFS dropdown list opens on the no-activate panel")
+; Routing: every index reaches its action (each first guard is a distinct
+; MsgBox body) and the dropdown is back on its header afterwards
+smokePicks := [ ["NB_CprsMenuChoice", "NB_CprsMenuAction", 2, hCprsMenu, "reminder dialogue in CPRS first", "CPRS pick 2 -> Save"]
+              , ["NB_CprsMenuChoice", "NB_CprsMenuAction", 3, hCprsMenu, "first, then load", "CPRS pick 3 -> Load"]
+              , ["NB_CprsMenuChoice", "NB_CprsMenuAction", 4, hCprsMenu, "Nothing saved to delete", "CPRS pick 4 -> Delete"]
+              , ["CF_MenuChoice", "CF_MenuAction", 2, hCfMenu, "navigate to the Add Data screen first", "CPFS pick 2 -> Save"]
+              , ["CF_MenuChoice", "CF_MenuAction", 3, hCfMenu, "Open CP Flowsheets first.", "CPFS pick 3 -> Load"]
+              , ["CF_MenuChoice", "CF_MenuAction", 4, hCfMenu, "Nothing saved for CP Flowsheets to delete", "CPFS pick 4 -> Delete"] ]
+for smokeI, smokeP in smokePicks
+{
+    SmokeProbeMsgText := ""
+    SmokeProbeTries := 0
+    GuiControl, 80:Choose, % smokeP[1], % smokeP[3]
+    SetTimer, SmokeProbeMsgBox, -1000
+    smokeHandler := smokeP[2]
+    Gosub, %smokeHandler%
+    smokeH := smokeP[4]
+    SendMessage, 0x0147, 0, 0,, ahk_id %smokeH%   ; CB_GETCURSEL
+    smokeSel := ErrorLevel
+    SmokeAssert(InStr(SmokeProbeMsgText, smokeP[5]) != 0, smokeP[6] . " (got '" . SubStr(SmokeProbeMsgText, 1, 70) . "')")
+    SmokeAssert(smokeSel = 0, smokeP[6] . " - dropdown snapped back to its header (" . smokeSel . ")")
+}
 GuiControlGet, hAutoSave, 80:Hwnd, CF_AutoSaveChk
-SmokeAssert(hAutoSave = "", "AutoSave checkbox no longer exists")
+SmokeAssert(ErrorLevel = 1 && hAutoSave = "", "AutoSave checkbox no longer exists")
 GuiControlGet, hAutoAdd, 80:Hwnd, CF_AutoAddChk
-SmokeAssert(hAutoAdd != 0, "Auto-Add checkbox still present")
+SmokeAssert(!ErrorLevel && hAutoAdd != "", "Auto-Add checkbox still present")
+; Every panel control ends inside the panel's client width (physical px)
+VarSetCapacity(pnRc, 16, 0)
+DllCall("GetClientRect", "Ptr", NB_PanelHwnd, "Ptr", &pnRc)
+pnW := NumGet(pnRc, 8, "Int")
+WinGet, pnCtrls, ControlListHwnd, ahk_id %NB_PanelHwnd%
+pnOverflow := ""
+Loop, Parse, pnCtrls, `n
+{
+    if (A_LoopField = "")
+        continue
+    VarSetCapacity(cRc, 16, 0)
+    DllCall("GetWindowRect", "Ptr", A_LoopField, "Ptr", &cRc)
+    VarSetCapacity(cPt, 8, 0)
+    NumPut(NumGet(cRc, 8, "Int"), cPt, 0, "Int")    ; right
+    NumPut(NumGet(cRc, 12, "Int"), cPt, 4, "Int")   ; bottom
+    DllCall("ScreenToClient", "Ptr", NB_PanelHwnd, "Ptr", &cPt)
+    if (NumGet(cPt, 0, "Int") > pnW)
+        pnOverflow .= A_LoopField . " "
+}
+SmokeAssert(pnOverflow = "", "every panel control ends inside the " . pnW . "px panel" . (pnOverflow != "" ? " (overflow: " . pnOverflow . ")" : ""))
+
+; --- 16. Advanced Mode: the persisted setting is applied at init (fresh ini
+;         -> off), so the first Settings open is the compact panel; toggling
+;         resizes the window and shows/hides the advanced controls ---
+VarSetCapacity(stRc, 16, 0)
+DllCall("GetClientRect", "Ptr", NB_SettingsHwnd, "Ptr", &stRc)
+stH0 := NumGet(stRc, 12, "Int")
+GuiControlGet, hDbgChk, 84:Hwnd, NB_DebugLogChk
+SmokeAssert(NB_AdvancedMode = 0, "fresh settings -> Advanced Mode off")
+SmokeAssert(stH0 = Round(65 * A_ScreenDPI / 96), "settings window compact after init (client h=" . stH0 . ")")
+SmokeAssert(!(DllCall("GetWindowLong", "Ptr", hDbgChk, "Int", -16, "UInt") & 0x10000000), "advanced control hidden at init")
+NB_AdvancedMode := 1
+gosub NB_ApplyAdvancedMode
+DllCall("GetClientRect", "Ptr", NB_SettingsHwnd, "Ptr", &stRc)
+stH1 := NumGet(stRc, 12, "Int")
+SmokeAssert(stH1 = Round(164 * A_ScreenDPI / 96), "advanced on -> expanded (client h=" . stH1 . ")")
+SmokeAssert((DllCall("GetWindowLong", "Ptr", hDbgChk, "Int", -16, "UInt") & 0x10000000) != 0, "advanced on -> advanced control visible")
+NB_AdvancedMode := 0
+gosub NB_ApplyAdvancedMode
+DllCall("GetClientRect", "Ptr", NB_SettingsHwnd, "Ptr", &stRc)
+stH2 := NumGet(stRc, 12, "Int")
+SmokeAssert(stH2 = Round(65 * A_ScreenDPI / 96), "advanced off -> compact again (client h=" . stH2 . ")")
 
 ; --- Summary ---
 if (SmokeFails > 0)
@@ -266,6 +361,22 @@ SmokeProbeInputBox:
     WinGet, SmokeProbeExStyle, ExStyle, NB Smoke Prompt ahk_class #32770
     SmokeProbeActive := WinActive("NB Smoke Prompt ahk_class #32770") ? 1 : 0
     WinClose, NB Smoke Prompt ahk_class #32770
+return
+
+; Fires while a module MsgBox (class #32770, our own pid) is up: capture its
+; body text and close it so the main thread continues. Re-arms itself for up
+; to ~10 s if the dialog is not up yet, so a slow runner cannot hang the job.
+SmokeProbeMsgBox:
+    SmokeProbePid := DllCall("GetCurrentProcessId")
+    if (!WinExist("ahk_class #32770 ahk_pid " . SmokeProbePid))
+    {
+        SmokeProbeTries += 1
+        if (SmokeProbeTries < 40)
+            SetTimer, SmokeProbeMsgBox, -250
+        return
+    }
+    WinGetText, SmokeProbeMsgText, ahk_class #32770 ahk_pid %SmokeProbePid%
+    WinClose, ahk_class #32770 ahk_pid %SmokeProbePid%
 return
 
 ; ---------------------------------------------------------------------------
