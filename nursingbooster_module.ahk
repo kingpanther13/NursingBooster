@@ -945,12 +945,18 @@ NB_ApplyHKButtonLabels() {
     NB_FitHKButtonText("NB_HK3_Btn", NB_HK3_Label)
     NB_FitHKButtonText("NB_HK4_Btn", NB_HK4_Label)
     NB_FitHKButtonText("NB_HK5_Btn", NB_HK5_Label)
+    ; NB_FitHKButtonText retargets fonts via Gui 80:Font, which also moves the
+    ; Gui's default font for any later Add - put back the panel's base font
+    ; (the one in effect when the build finished).
+    Gui, 80:Font, s8 cWhite, Segoe UI
 }
 
 NB_FitHKButtonText(ctrlVar, text) {
     ; Set a Gui 80 button's text so it fits: try the normal s7 font, then
     ; shrink to s6, and if the name is still wider than the button trim it to
-    ; the longest prefix + ellipsis that fits (issue #12). Returns the text shown.
+    ; the longest prefix + ellipsis that fits (issue #12). Returns the text
+    ; shown - "" when the control can't be resolved (nothing is changed), or
+    ; the untrimmed text when the button/font can't be measured (set as-is).
     GuiControlGet, hBtn, 80:Hwnd, %ctrlVar%
     if (!hBtn)
         return ""
@@ -958,8 +964,12 @@ NB_FitHKButtonText(ctrlVar, text) {
     ; button (GuiControlGet Pos would hand back DPI-unscaled logical units)
     ; and GetTextExtentPoint32 for the text.
     VarSetCapacity(rc, 16, 0)
-    DllCall("GetClientRect", "Ptr", hBtn, "Ptr", &rc)
+    rcOk := DllCall("GetClientRect", "Ptr", hBtn, "Ptr", &rc)
     usable := NumGet(rc, 8, "Int") - Round(10 * A_ScreenDPI / 96)   ; minus border + text padding
+    if (!rcOk || usable <= 0) {
+        GuiControl, 80:, %ctrlVar%, %text%
+        return text
+    }
     hFont := 0
     Loop, 2 {
         fontSize := (A_Index = 1) ? 7 : 6
@@ -967,6 +977,12 @@ NB_FitHKButtonText(ctrlVar, text) {
         GuiControl, 80:Font, %ctrlVar%
         SendMessage, 0x31, 0, 0,, ahk_id %hBtn%   ; WM_GETFONT
         hFont := ErrorLevel
+        if hFont is not integer
+            hFont := 0
+        if (!hFont) {
+            GuiControl, 80:, %ctrlVar%, %text%
+            return text
+        }
         if (NB_TextWidthPx(hBtn, hFont, text) <= usable) {
             GuiControl, 80:, %ctrlVar%, %text%
             return text
@@ -2409,8 +2425,13 @@ return
 ; before an InputBox: a short poll finds the dialog (class #32770 in our own
 ; process), pins it topmost and activates it, then switches itself off. The
 ; poll is a repeating timer rather than a loop so it never blocks the thread
-; that is about to create the dialog. MsgBox covers the same case with its
-; native 262144 (MB_TOPMOST) option flag - every MsgBox in this module carries it.
+; that is about to create the dialog. If no matching dialog shows up within
+; 5 s the timer gives up (noted in the walk trace when Debug Logging is on)
+; and the prompt stays a plain dialog - the pre-fix behavior, never a hang.
+; MsgBox covers the same case with its native 262144 (MB_TOPMOST) option
+; flag - every MsgBox in this module carries it: 262192 = 48+262144 (! OK),
+; 262208 = 64+262144 (i OK), 262180 = 36+262144 (? Yes/No),
+; 262452 = 308+262144 (! Yes/No, default No).
 NB_ArmTopmostDialog(title) {
     global NB_TopmostDialogTitle, NB_TopmostDialogDeadline
     NB_TopmostDialogTitle := title
@@ -2427,6 +2448,8 @@ NB_RaiseTopmostDialog:
         WinActivate
     } else if (A_TickCount > NB_TopmostDialogDeadline) {
         SetTimer, NB_RaiseTopmostDialog, Off
+        if (NB_DebugLogging)
+            NB__ApplyDebug("[topmost] no dialog titled '" . NB_TopmostDialogTitle . "' appeared within 5s - left unpinned")
     }
 return
 

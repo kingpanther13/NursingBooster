@@ -164,6 +164,47 @@ SmokeAssert(NB_TextWidthPx(hkBtn1, hkFont1, hkText1) < hkBtnW, "trimmed quick la
 SmokeAssert(hkText2 = "Vitals", "short quick label shown verbatim")
 SmokeAssert(hkText3 = "Quick 3", "empty slot falls back to Quick 3")
 
+; --- 12b. The middle branch: a name that is too wide at s7 but fits at s6 is
+;          shown whole (shrunk, not trimmed). Button 2 now carries the s7 font
+;          and button 1 the s6 font, so measure candidates with both and pick
+;          a prefix of the long name that sits in that band. ---
+GuiControlGet, hkBtn2, 80:Hwnd, NB_HK2_Btn
+SendMessage, 0x31, 0, 0,, ahk_id %hkBtn2%   ; WM_GETFONT (s7)
+hkFont7 := ErrorLevel
+hkFont6 := hkFont1                          ; button 1 was shrunk to s6 above
+hkUsable := hkBtnW - Round(10 * A_ScreenDPI / 96)
+hkCand := ""
+hkKeep := StrLen(NB_HK1_Label)
+while (hkKeep > 0)
+{
+    hkTry := RTrim(SubStr(NB_HK1_Label, 1, hkKeep))
+    if (NB_TextWidthPx(hkBtn1, hkFont7, hkTry) > hkUsable && NB_TextWidthPx(hkBtn1, hkFont6, hkTry) <= hkUsable)
+    {
+        hkCand := hkTry
+        break
+    }
+    hkKeep -= 1
+}
+SmokeAssert(hkCand != "", "found a name that fits only at s6 (band " . hkUsable . "px)")
+hkShown := NB_FitHKButtonText("NB_HK4_Btn", hkCand)
+GuiControlGet, hkBtn4, 80:Hwnd, NB_HK4_Btn
+SendMessage, 0x31, 0, 0,, ahk_id %hkBtn4%
+hkFont4 := ErrorLevel
+SmokeAssert(hkShown = hkCand, "s6-only name shown whole, not trimmed ('" . hkShown . "')")
+SmokeAssert(NB_TextWidthPx(hkBtn4, hkFont4, hkCand) <= hkUsable, "button 4 now wears a font that fits the name (shrunk to s6)")
+
+; --- 13. Issue #13: an InputBox armed via NB_ArmTopmostDialog is pinned
+;         topmost (WS_EX_TOPMOST) and activated by the raise timer while it is
+;         still open. Timers keep firing during InputBox, so a one-shot probe
+;         inspects the live dialog and then cancels it (8s timeout backstop). ---
+SmokeProbeExStyle := ""
+SmokeProbeActive := ""
+SetTimer, SmokeProbeInputBox, -1500
+NB_ArmTopmostDialog("NB Smoke Prompt")
+InputBox, smokeIn, NB Smoke Prompt, probe, , , , , , , 8
+SmokeAssert(SmokeProbeExStyle != "" && (SmokeProbeExStyle & 0x8), "armed InputBox pinned topmost (exstyle=" . SmokeProbeExStyle . ")")
+SmokeAssert(SmokeProbeActive = 1, "armed InputBox was activated")
+
 ; --- Summary ---
 if (SmokeFails > 0)
 {
@@ -172,6 +213,14 @@ if (SmokeFails > 0)
 }
 FileAppend, % "All GUI smoke assertions passed`n", *
 ExitApp, 0
+
+; Fires while the section-13 InputBox is open: record its ex-style and
+; activation, then cancel it so the main thread continues.
+SmokeProbeInputBox:
+    WinGet, SmokeProbeExStyle, ExStyle, NB Smoke Prompt ahk_class #32770
+    SmokeProbeActive := WinActive("NB Smoke Prompt ahk_class #32770") ? 1 : 0
+    WinClose, NB Smoke Prompt ahk_class #32770
+return
 
 ; ---------------------------------------------------------------------------
 SmokeAssert(cond, msg)

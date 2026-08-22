@@ -95,6 +95,48 @@ def strip_comment_and_strings(line):
     return "".join(out)
 
 
+def strip_comment(line):
+    """Remove a ; comment (not inside quotes) but KEEP string contents - for
+    checks that need to read a literal argument on the line."""
+    in_str = False
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if in_str:
+            if ch == '"':
+                if i + 1 < len(line) and line[i + 1] == '"':
+                    i += 2
+                    continue
+                in_str = False
+            i += 1
+            continue
+        if ch == '"':
+            in_str = True
+            i += 1
+            continue
+        if ch == ";" and (i == 0 or line[i - 1] in " \t"):
+            return line[:i]
+        i += 1
+    return line
+
+
+def iter_code_lines(lines):
+    """Yield (lineno, raw, code) for every source line outside /* */ block
+    comments, where code is the line with ; comments and string contents
+    stripped (see strip_comment_and_strings). Callers strip/rstrip as needed."""
+    in_block_comment = False
+    for idx, raw in enumerate(lines, 1):
+        stripped = raw.strip()
+        if in_block_comment:
+            if stripped.startswith("*/"):
+                in_block_comment = False
+            continue
+        if stripped.startswith("/*"):
+            in_block_comment = True
+            continue
+        yield idx, raw, strip_comment_and_strings(raw)
+
+
 LABEL_RE = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9_]*):\s*(?:;.*)?$")
 HOTKEY_RE = re.compile(r"^\S+::")
 FUNC_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\(([^)]*)\)\s*\{\s*(?:;.*)?$")
@@ -135,21 +177,10 @@ def segment_module(lines):
     ctx = "none"          # none | label | hotkey | function
     cur_func = None
     brace_depth = 0       # inside function bodies
-    in_block_comment = False
     if_context_open = False
 
-    for idx, raw in enumerate(lines, 1):
-        stripped = raw.strip()
-
-        if in_block_comment:
-            if stripped.startswith("*/"):
-                in_block_comment = False
-            continue
-        if stripped.startswith("/*"):
-            in_block_comment = True
-            continue
-
-        code = strip_comment_and_strings(raw).rstrip()
+    for idx, raw, code in iter_code_lines(lines):
+        code = code.rstrip()
         scode = code.strip()
 
         if ctx == "function":
@@ -230,17 +261,8 @@ def label_body_tracking(lines):
     ctx = "none"
     depth = 0
     prev_code = ""
-    in_block_comment = False
-    for idx, raw in enumerate(lines, 1):
-        stripped = raw.strip()
-        if in_block_comment:
-            if stripped.startswith("*/"):
-                in_block_comment = False
-            continue
-        if stripped.startswith("/*"):
-            in_block_comment = True
-            continue
-        code = strip_comment_and_strings(raw).strip()
+    for idx, raw, code in iter_code_lines(lines):
+        code = code.strip()
         if not code:
             continue
         if LABEL_RE.match(code) or HOTKEY_RE.match(code):
@@ -335,17 +357,8 @@ def check_dialog_topmost(lines):
     The timer raises the dialog BY TITLE, so the armed title must render to
     the InputBox's own title - a mismatched pair leaves the prompt buried."""
     prev_raw = ""
-    in_block_comment = False
-    for idx, raw in enumerate(lines, 1):
-        stripped = raw.strip()
-        if in_block_comment:
-            if stripped.startswith("*/"):
-                in_block_comment = False
-            continue
-        if stripped.startswith("/*"):
-            in_block_comment = True
-            continue
-        code = strip_comment_and_strings(raw).strip()
+    for idx, raw, code in iter_code_lines(lines):
+        code = code.strip()
         if not code:
             continue
         m = MSGBOX_RE.match(code)
@@ -360,7 +373,9 @@ def check_dialog_topmost(lines):
                         "MsgBox without the 262144 (MB_TOPMOST) option flag - "
                         "it opens under CPRS/CPFS stay-on-top windows")
         elif INPUTBOX_RE.match(code):
-            am = ARM_CALL_RE.search(prev_raw.strip())
+            # look back on the comment-stripped previous code line: a trailing
+            # ; comment must neither hide a real call nor count as one
+            am = ARM_CALL_RE.search(strip_comment(prev_raw).strip())
             if not am:
                 finding("dialog-topmost", MODULE, idx,
                         "InputBox not immediately preceded by NB_ArmTopmostDialog(...) - "
@@ -495,18 +510,7 @@ def check_host_congruence(repo, module_lines):
                     "disable path - it can re-show the panel after NB is disabled")
 
     host_lines = host.read_text(encoding="utf-8", errors="replace").splitlines()
-    in_block_comment = False
-    for idx, raw in enumerate(host_lines, 1):
-        stripped = raw.strip()
-        if in_block_comment:
-            if stripped.startswith("*/"):
-                in_block_comment = False
-            continue
-        if stripped.startswith("/*"):
-            in_block_comment = True
-            continue
-        code = strip_comment_and_strings(raw)
-
+    for idx, raw, code in iter_code_lines(host_lines):
         # NB_* labels the host expects the module to provide
         for m in re.finditer(
                 r"(?:Gosub\s*,?\s*|SetTimer\s*,\s*|IsLabel\(\")\s*(NB_[A-Za-z0-9_]+)",

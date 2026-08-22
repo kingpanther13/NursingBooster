@@ -137,6 +137,17 @@ def main():
         t, MODULE, 'NB_ArmTopmostDialog(CF_AppTitle . " - Save Template")',
         'NB_ArmTopmostDialog(CF_AppTitle . " - Save Templates")'))
 
+    # 7e. the arming call only MENTIONED in a trailing comment of the previous
+    #     code line must not count as a call
+    case("InputBox preceded only by a commented arm mention", "dialog-topmost", lambda t: sub(
+        t, MODULE, '    NB_ArmTopmostDialog("Save Template")\n',
+        '    ToolTip, Scanning  ; NB_ArmTopmostDialog("Save Template")\n'))
+
+    # 7f. a real arming call with a trailing comment is still recognised
+    case("arm call with trailing comment stays clean", None, lambda t: sub(
+        t, MODULE, 'NB_ArmTopmostDialog("Save Template")',
+        'NB_ArmTopmostDialog("Save Template")  ; pin the prompt'), expect_clean=True)
+
     # 6. unbalanced #If context at EOF
     def m_ifbal(tree):
         p = tree / MODULE
