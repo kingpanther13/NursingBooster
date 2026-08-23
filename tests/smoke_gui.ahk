@@ -223,6 +223,7 @@ gosub NB_ToggleSettings
 Sleep, 300
 SmokeAssert(NB_SettingsVisible = 1 && WinExist("ahk_id " . NB_SettingsHwnd), "settings window shown")
 SmokeAssert(DllCall("GetWindow", "Ptr", NB_SettingsHwnd, "UInt", 4, "Ptr") = NB_PanelHwnd, "settings window is owned by the panel (GW_OWNER)")
+SmokeAssert(WinActive("ahk_id " . SmokeTopHwnd) != 0, "settings open did NOT steal activation")
 WinGet, smokeSetEx, ExStyle, ahk_id %NB_SettingsHwnd%
 SmokeAssert(smokeSetEx != "" && (smokeSetEx & 0x8), "settings window is topmost (exstyle=" . smokeSetEx . ")")
 WinGet, smokeZ, List
