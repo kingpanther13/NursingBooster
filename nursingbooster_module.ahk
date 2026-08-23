@@ -106,7 +106,7 @@ NB_ModuleInit:
     Gui, 80:Destroy
     Gui, 80:Color, 1a1a2e
     Gui, 80:Font, s9 cWhite, Segoe UI
-    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev24  |  Ctrl+Shift+B to toggle
+    Gui, 80:Add, Text, x5 y4 w370 h20 Center BackgroundTrans vNB_PanelTitle gNB_DragPanel, Nursing Booster dev25  |  Ctrl+Shift+B to toggle
     Gui, 80:Font, s8 cBlack, Segoe UI
     ; One dropdown per section instead of three buttons (issue #8). The DDL
     ; draws its own arrow; item 1 is the section header and is re-selected
@@ -151,11 +151,17 @@ NB_ModuleInit:
 
     ; --- NursingBooster: Build Settings panel (Gui 84) ---
     Gui, 84:Destroy
+    ; Owned by the panel: an owned window always sits directly above its
+    ; owner, so wherever the (topmost, no-activate) panel is visible the
+    ; settings window lands on top of it - independent of where a CPRS
+    ; stay-on-top dialog sits in the topmost band. Must be set before the
+    ; window is created (first Add).
+    Gui, 84:+Owner80
     Gui, 84:Color, 1a1a2e
     Gui, 84:Font, s9 cWhite, Segoe UI
     Gui, 84:Add, Text, x5 y4 w280 h20 Center BackgroundTrans, Booster Settings
     Gui, 84:Font, s6 cSilver, Segoe UI
-    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev24
+    Gui, 84:Add, Text, x10 y24 w270 h12 BackgroundTrans vNB_VersionLine, dev25
     Gui, 84:Font, s7 c00FF88, Segoe UI
     nbAdvChkOpt := NB_AdvancedMode ? "Checked" : ""
     Gui, 84:Add, Checkbox, x10 y40 w200 h18 vNB_AdvancedModeChk gNB_AdvancedModeChanged %nbAdvChkOpt% BackgroundTrans, Advanced Mode
@@ -554,9 +560,14 @@ NB_ToggleSettings:
         ; without activation.
         Gui, 84:Show, x%settingsX% y%settingsY% NA
         ; Show NA leaves the window at its old z-position, so a stay-on-top
-        ; CPRS reminder dialog / CPFS window opened since init sits above it
-        ; in the topmost band and buries it. Re-assert topmost (moves it to
-        ; the top of that band without activating) - same as the panel does.
+        ; CPRS reminder dialog / CPFS window opened since init can sit above
+        ; it in the topmost band. Re-assert topmost on the owner (panel) and
+        ; on the window itself - HWND_TOPMOST on an already-topmost window is
+        ; not guaranteed to lift it, so drop and re-add the style (Off -> On)
+        ; to force a re-insert at the top of the band, without activating.
+        if (NB_BoosterGuiVisible = 1)
+            WinSet, AlwaysOnTop, On, ahk_id %NB_PanelHwnd%
+        WinSet, AlwaysOnTop, Off, ahk_id %NB_SettingsHwnd%
         WinSet, AlwaysOnTop, On, ahk_id %NB_SettingsHwnd%
         NB_SettingsVisible := 1
     }
