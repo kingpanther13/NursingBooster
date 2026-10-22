@@ -10,12 +10,14 @@ on:
       - '**.ahk'
       - '**.ahk.txt'
       - 'tools/ci_lint.py'
+      - 'tools/test_host_install.ps1'
       - '.github/workflows/ahk-ci.yml'
   pull_request:
     paths:
       - '**.ahk'
       - '**.ahk.txt'
       - 'tools/ci_lint.py'
+      - 'tools/test_host_install.ps1'
       - '.github/workflows/ahk-ci.yml'
 
 jobs:
@@ -78,6 +80,10 @@ jobs:
           $exe = Get-ChildItem -Path $ahkDir -Filter "AutoHotkey*.exe" -Recurse | Select-Object -First 1
           Write-Host "AHK v1 found at: $($exe.FullName)"
           echo "AHK1_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
+
+      - name: Load host with and without a cached module
+        shell: pwsh
+        run: ./tools/test_host_install.ps1 -AhkExe $env:AHK1_EXE
 
       # Download portable AHK v2 from GitHub releases
       - name: Install AutoHotkey v2
