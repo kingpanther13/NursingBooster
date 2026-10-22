@@ -15,6 +15,30 @@ for _, nbCase in nbCases {
         FileAppend, % "FAIL: " . nbCase.name . "`n", *
         ExitApp, 1
     }
+    ; Exercise the host's actual serializer. The BAM helper reads disk slot 83,
+    ; so an in-memory-only migration is insufficient for existing installs.
+    NB_Enabled := nbActual.enabled
+    NB_Channel := nbActual.channel
+    DisableBAM := nbActual.disableBAM
+    Code := "synthetic-test-code"
+    RN1 := "synthetic-nurse"
+    fxn := []
+    NoteFavsArray := []
+    filename := A_ScriptDir . "\preferences-test.txt"
+    gosub writingdetails
+    FileReadLine, nbDiskBAM, %filename%, 83
+    FileReadLine, nbDiskEnabled, %filename%, 84
+    FileReadLine, nbDiskChannel, %filename%, 85
+    FileReadLine, nbDiskNurse, %filename%, 3
+    if (nbDiskBAM != nbCase.bam || nbDiskEnabled != nbCase.enabled || nbDiskChannel != nbCase.channel || nbDiskNurse != RN1) {
+        FileAppend, % "FAIL: persisted " . nbCase.name . "`n", *
+        ExitApp, 1
+    }
+    nbReloaded := NB_ReadPreferences({83: nbDiskBAM, 84: nbDiskEnabled, 85: nbDiskChannel})
+    if (nbReloaded.migrated || nbReloaded.enabled != nbCase.enabled || nbReloaded.channel != nbCase.channel || nbReloaded.disableBAM != nbCase.bam) {
+        FileAppend, % "FAIL: reloaded " . nbCase.name . "`n", *
+        ExitApp, 1
+    }
     FileAppend, % "PASS: " . nbCase.name . "`n", *
 }
 ExitApp, 0

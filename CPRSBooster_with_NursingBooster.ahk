@@ -631,6 +631,11 @@ If (driveactive= 0)  ; *************we have NO working drives
 
 gosub refreshdata  ;---- this just reads LOADS ALL DATA at start of program (DRIVE CHECK IS DONE AS PART OF THIS)
 
+; Persist a recognized legacy NB layout before BstHelperV2 reads slot 83.
+; Use the existing writer after refreshdata has populated all user settings.
+if (nbPreferences.migrated)
+    gosub writeit
+
 ; Start CheckToolbars AFTER refreshdata so fxn vars are populated before
 ; the timer can build Gui 14. Prevents blank F-key labels on Reload.
 SetTimer, CheckToolbars, 1000, On
@@ -1110,8 +1115,9 @@ Return  ; End of auto-execute section
 NB_ReadPreferences(data) {
     prefs := {enabled: (data[84] = 1) ? 1 : 0
         , channel: (data[85] = "master") ? "master" : "stable"
-        , disableBAM: (data[83] = 1) ? 1 : 0}
+        , disableBAM: (data[83] = 1) ? 1 : 0, migrated: false}
     if (data[85] = "" && (data[84] = "stable" || data[84] = "master")) {
+        prefs.migrated := true
         prefs.enabled := (data[83] = 1) ? 1 : 0
         prefs.channel := data[84]
         ; The legacy NB flag was never a BAM preference. Use the base default.
