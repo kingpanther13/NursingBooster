@@ -15,7 +15,9 @@ Nursing-specific automation module for [CPRSBooster](https://github.com/mAbock/C
 ### How Updates Work
 
 - **NursingBooster module**: Updates automatically from GitHub. When a new version is published, it downloads on the next CPRSBooster startup (30-second background check). No action needed from the user.
-- **CPRSBooster base script**: Does NOT update automatically. The modified CPRSBooster script you paste in Step 2 below is a one-time change. If the official CPRSBooster releases an update, you will need to re-apply the NursingBooster modifications to the new version. We will provide updated scripts when this happens.
+- **CPRSBooster integration script**: Module updates do not update the host script you pasted in Step 2. When this repository refreshes the CPRSBooster base or fixes its integration, repeat Step 2 with the current [`CPRSBooster_with_NursingBooster.ahk`](CPRSBooster_with_NursingBooster.ahk). A CPRSBooster update may also replace that file and require you to re-apply the integration.
+
+The replacement script now incorporates the CPRSBooster production script supplied on **October 22, 2026**, including its newer BAM and helper changes. Existing NursingBooster users should also repeat Step 2 to receive this update and the fresh-install fix. Existing templates and module settings remain in place; the host migrates the older enable/channel preferences when it reads them.
 
 ## Installation
 
@@ -27,13 +29,13 @@ Install CPRSBooster as normal for your VA location (typically found under the Go
 
 1. Find the CPRSBooster icon in your Windows taskbar (usually in the hidden icons area near the clock)
 2. **Right-click** the icon and click **"Edit This Script"**
-3. A text file will open — **File > Save As** and save a backup copy somewhere safe (e.g. your Desktop)
-4. Open the file [`CPRSBooster_with_NursingBooster.ahk`](CPRSBooster_with_NursingBooster.ahk) on this GitHub page
-5. Click the **Copy** button (or select all with Ctrl+A and copy with Ctrl+C)
-6. Go back to the CPRSBooster script you opened in Step 2
-7. Select all (Ctrl+A) and paste (Ctrl+V) to replace the entire content
-8. Save the file (Ctrl+S)
-9. **Right-click** the CPRSBooster taskbar icon again and click **"Reload This Script"**
+3. A text file will open — **File > Save As** and save a backup copy somewhere safe (e.g. your Desktop). **Close that editor window after saving the backup.**
+4. Right-click the CPRSBooster icon and choose **"Edit This Script"** again. This reopens the active script so you edit it instead of the backup.
+5. Open [`CPRSBooster_with_NursingBooster.ahk`](CPRSBooster_with_NursingBooster.ahk) on this GitHub page, then click **Raw** to display only the script text.
+6. Select all of the raw script (Ctrl+A) and copy it (Ctrl+C).
+7. Return to the active CPRSBooster script editor, select all (Ctrl+A), and paste (Ctrl+V) to replace the entire content. Keep its existing filename and location.
+8. Save the file (Ctrl+S).
+9. **Right-click** the CPRSBooster taskbar icon again and click **"Reload This Script"**. On a fresh installation, this reload must succeed before NursingBooster has been downloaded; then continue to Step 3.
 
 ### Step 3: Enable NursingBooster
 
@@ -46,6 +48,8 @@ Install CPRSBooster as normal for your VA location (typically found under the Go
 7. Press **Ctrl+Shift+B** to toggle the NursingBooster panel
 
 That's it. NursingBooster will automatically check for updates 30 seconds after each startup.
+
+The module download requires access to GitHub. If it fails, CPRSBooster can still load; the script reports the download failure and checks again after startup. If the panel is unavailable, check GitHub access and restart CPRSBooster to retry.
 
 ## Features
 
@@ -91,6 +95,12 @@ You can switch channels anytime via Ctrl+H settings. The script downloads the se
 
 The panel hides immediately. No restart needed. CPRSBooster continues running normally.
 
+## Troubleshooting: "Target label does not exist" on Reload
+
+An older integration script could fail on a fresh installation at a line such as `SetTimer, NB_CheckCPRS, Off`. It referenced module timers before the module had been downloaded, so even the initial reload failed. An existing installation with a cached module could work normally with the same script.
+
+Repeat Step 2 using the current replacement script. It allows the first reload without a cached module, after which you can enable NursingBooster through Ctrl+H. Updating the module alone does not fix the old host script.
+
 ## Troubleshooting: NursingBooster Option Disappeared
 
 CPRSBooster may occasionally revert back to its regular production script (e.g. after an auto-update). When this happens, the "Enable Nursing Booster" checkbox will no longer appear in Ctrl+H settings.
@@ -111,6 +121,10 @@ If you want to remove NursingBooster entirely:
 
 ## For Developers
 
+- Host script: [`CPRSBooster_with_NursingBooster.ahk`](CPRSBooster_with_NursingBooster.ahk). Its base is the unmodified `CPRSBooster_ACTIVE_PRODUCTION_SCRIPT.ahk` supplied on 2026-10-22, SHA-256 `e1b6240dd87ee8e038602ad6ad193f0eabfffdc1ffbb95cdecadd44b8d950ea9`. Both old and new bases identify themselves as `CurVersion = 90`, so that field alone does not distinguish the snapshots. No executable is bundled or changed by this update.
+- The host expects the installed script in `CPRSBooster\Engine\` and includes the optional module from the parent `CPRSBooster\` folder. Optional module timer targets must use runtime expressions; an `IsLabel()` guard does not prevent AutoHotkey v1 from resolving a literal timer label during loading.
+- `CPRSData.txt` slots: **83 = CPRSBooster DisableBAM**, **84 = NursingBooster enabled**, **85 = channel**. The legacy NursingBooster layout is recognized by a `stable`/`master` channel in slot 84 and an empty slot 85. Its preferences are migrated in memory and written in the new layout on the next settings save. Since that legacy layout had no BAM preference, migration uses CPRSBooster's default of BAM enabled. Existing new-base BAM preferences are preserved.
+- Windows CI loads the complete host with and without a cached module, exiting before CPRS startup side effects, and exercises preference migration through the real host reader. These checks supplement module tests; they do not replace validation on a Windows CPRS installation.
 - Module source: [`nursingbooster_module.ahk`](nursingbooster_module.ahk) on this repo
 - Dev work happens on the `master` branch
 - Stable releases are on the `stable` branch

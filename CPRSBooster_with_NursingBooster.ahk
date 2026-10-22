@@ -3,8 +3,35 @@
 	
 #SingleInstance force
 
-; Register cleanup handler to close BstHelper.ahk when U64 exits
+; Register cleanup handler to close BstHelperV2.ahk when U64 exits
 OnExit("CleanupBstHelper")
+
+; ── Booster liveness heartbeat ────────────────────────────────────────────────
+; CleanupBstHelper is the ORDERLY way BAM and BstHelperV2 learn the Booster is
+; going away — but OnExit does not run when this process is force-terminated
+; (Task Manager "End Task", a crash, a hung-app kill). Nothing else ties their
+; lifetime to ours: BstHelperV2 is a separate persistent AutoHotkey process and
+; BAM is a detached pythonw.exe, so on a hard kill both survive forever — BAM
+; invisible to the user, still holding its Playwright node.exe / msedge.exe
+; children and the Edge profile lock the next BAM launch needs.
+;
+; So publish a heartbeat instead of relying only on the exit handler: touch this
+; file every 30s while alive, and delete it on the way out. BstHelperV2's
+; WatchBoosterAlive timer and BAM's owner_watchdog.py both poll it and shut
+; themselves down once it goes stale. Both are DISARMED until they see a
+; heartbeat at least once, so a Booster without this block changes nothing for
+; them — which is what keeps the hand-maintained production script safe.
+; Started here, before any other init, so a Booster that dies during startup
+; still publishes a heartbeat that can then go stale.
+; The timer uses a LABEL (`BoosterHeartbeat:`, defined down in the subroutine
+; region alongside the other timer labels like `WatchBoosterAlive` in
+; BstHelperV2.ahk) — the file's convention for all of its SetTimer calls. The
+; label sits past the auto-execute section, so it is only ever reached via the
+; timer (or the Gosub below); nothing falls through into it.
+EnvGet, bstrLocalAppData, LOCALAPPDATA
+BoosterHeartbeatFile := bstrLocalAppData . "\CPRSBooster\booster_alive.txt"
+Gosub, BoosterHeartbeat            ; publish one heartbeat immediately
+SetTimer, BoosterHeartbeat, 30000  ; then refresh every 30s
 
 /* ; testing 
 
@@ -105,6 +132,10 @@ global FaxKeeperAction := ""           ; "Add", "Edit", or "Delete"
 global FaxKeeperOldName := ""          ; Previous facility name (Edit only)
 global FaxKeeperOldNumber := ""        ; Previous fax number (Edit only)
 
+; --- Fax Number Backup (daily snapshot of master fax files on W: drive) ---
+global FaxBackupFolder := "W:\Products\XRG\FaxNumberBackups"
+global FaxBackupDoneToday := 0          ; 1 = backup already created today (resets on script restart)
+
 ; --- Fax data caching ---
 global PersonalFaxLoaded := 0          ; 1 = personal fax book already loaded this session
 global MergedDisplayEntries := []      ; Display strings for merged fax list
@@ -180,10 +211,10 @@ RT_MsgBoxTitle["Radiology"] := "Record Retriever - Imaging"
 RT_MsgBoxTitle["MedRecords"] := "Record Retriever - Medical Records"
 
 
-; Notes on: BstHelper.ahk
-; THIS INSTALLs PYTHON/PYTHON LIBRARIES; BAM (jlvauto); AMBIENT SCRIBE; AND RUNS BAM and Amb Scribe
-JBoosterPythonInstallerNETWORK := "\\v23.med.va.gov\apps\GUI\Local_Site_GUI\MIN\CPRSBOOSTER\ApplicationFiles\J-Booster\Python Installer\BstHelper.ahk"
-JBoosterPythonInstallerLocal := onedrivelocal . "\J-Booster\BstHelper.ahk"
+; Notes on: BstHelperV2.ahk
+; THIS DEPLOYS PYTHON (embeddable zip) AND RUNS BAM and Amb Scribe
+JBoosterPythonInstallerNETWORK := "\\v23.med.va.gov\apps\GUI\Local_Site_GUI\MIN\CPRSBOOSTER\ApplicationFiles\PEngine\BstHelperV2.ahk"
+JBoosterPythonInstallerLocal := onedrivelocal . "\J-Booster\BstHelperV2.ahk"
 FileDelete, %CPRSopenFile%  ; Reset the CPRS open indicator file
 ; Get the computer name
 computerName := A_ComputerName
@@ -197,9 +228,7 @@ installDoneFile := JboosterPath . "\" . computerName . "_Installation_Done.txt"
         }
 	}
 
-	; CheckToolbars timer moved to after refreshdata (line 580+) to prevent
-	; race condition where timer builds Gui 14 before fxn vars are loaded.
-	; SetTimer, CheckToolbars, 1000, On  ; MOVED — see below
+	; Start CheckToolbars after refreshdata so function-key labels are loaded.
 
 ; --- Amb Scribe Pilot Participation Logic ---
 ; Three participation flags:
@@ -223,7 +252,7 @@ nonDragonUserFile := pilotConfigRoot . "AmbientDictation\NonDragonAmbScribeUsers
 nonDragonSiteFile := pilotConfigRoot . "AmbientDictation\NonDragonAmbScribeSites.txt"
 
 
-;**********NOTE: BAM config file to control pilot users/site is in the bsthelper.ahk file
+;**********NOTE: BAM config file to control pilot users/site is in the BstHelperV2.ahk file
 
 ; Check Dragon pilot participation (user)
 FileRead, dragonUsers, %dragonUserFile%
@@ -324,6 +353,24 @@ Global hAnchorEdit
 Global ADPrompts := {}  ; ambient dictation
 Global EdgePasteAllowed := false  ; Track if "allow pasting" typed in Edge DevTools
 Global PromptText := "Please summarize the following: "  ; VA GPT prompt text 
+
+;------------------ PHI SAFETY: purge legacy CPRS parse-debug log ------------------
+; CPRS_Parse_Debug.txt (written by HandleGetPatientInfo on a parse failure) contains
+; the raw scraped CPRS window text = PHI. It must only ever exist on the developer's
+; machine. Older Booster builds wrote it ungated, so end-user Desktops may still hold
+; a historical copy. Self-heal: delete it on every launch for non-developer users.
+; Checks both the (possibly OneDrive-redirected) A_Desktop and the classic profile
+; Desktop to cover Known Folder Move differences.
+if (A_UserName != "VHAMINBOCKA") {
+	EnvGet, ParseDbgProfile, USERPROFILE
+	parseDebugTargets := [A_Desktop . "\CPRS_Parse_Debug.txt"]
+	if (ParseDbgProfile != "")
+		parseDebugTargets.Push(ParseDbgProfile . "\Desktop\CPRS_Parse_Debug.txt")
+	for parseDbgIdx, parseDebugFile in parseDebugTargets {
+		if FileExist(parseDebugFile)
+			FileDelete, %parseDebugFile%
+	}
+}
 
 ;****************AI Folder**************
 AIPath := onedrivelocal . "\AI\"
@@ -468,6 +515,9 @@ skipAltN:=1 ; start off so Alt N is mapped by AHK.
 
 global fxn:= []
 Global CPRSWindowHandle := 0  ; Store CPRS window handle once we find it with reliable title
+Global BAMFirstPositioned := 0  ; Track if BAM has been positioned at least once (reset on CPRS restart)
+Global BAMStoredPID := 0   ; Stored BAM process ID — survives WinHide so we can always find BAM
+Global BAMStoredHwnd := 0  ; Stored BAM main window handle — used when WinExist by title fails
 
 ; ----------------------------END INTIALIZE VARIABLES
 
@@ -584,6 +634,7 @@ gosub refreshdata  ;---- this just reads LOADS ALL DATA at start of program (DRI
 ; Start CheckToolbars AFTER refreshdata so fxn vars are populated before
 ; the timer can build Gui 14. Prevents blank F-key labels on Reload.
 SetTimer, CheckToolbars, 1000, On
+
 
 
 ;############################################################################################
@@ -885,12 +936,12 @@ WinGetPos , X0, Y0, Width0, Height0, CPRS ; starting positions of CPRS prior to 
 
 ;###########################################################################
 ;##############################Python-based Features Installer/Launcher###########################
-;##############################BstHelper.ahk: Python installer, library checker, BAM & Ambient Scribe launcher###########################
+;##############################BstHelperV2.ahk: Python deployer (embeddable zip), BAM & Ambient Scribe launcher###########################
 ;########################## Only runs for users who need Python (Non-Dragon Scribe OR BAM participants) ##12-15-25
 
 
 if (AnyPythonFeatureParticipant = 1) {
-	; --- Check and copy BstHelper.ahk from network
+	; --- Check and copy BstHelperV2.ahk from network
 	; MUST do this before launching because it also contains BAM and Ambient Scribe launcher logic
 	if !FileExist(JBoosterPythonInstallerLocal)
 	{
@@ -907,14 +958,14 @@ if (AnyPythonFeatureParticipant = 1) {
 	}
 
 	;############################################################################################
-	;#####################LAUNCH BstHelper.ahk (Python installer & feature launcher) #############################################################
+	;#####################LAUNCH BstHelperV2.ahk (Python deployer & feature launcher) #############################################################
 	;############################################################################################
 
 	try {
 		Run, "%AHKengine%" "%JBoosterPythonInstallerLocal%", , Hide
 	} catch e {
 		; Display error information in a message box
-		MsgBox, 16, Error Running BstHelper, % "An error occurred:`n`nError: " e.Message "`nWhat: " e.What "`nExtra: " e.Extra
+		MsgBox, 16, Error Running BstHelperV2, % "An error occurred:`n`nError: " e.Message "`nWhat: " e.What "`nExtra: " e.Extra
 	}
 }
 ;############################################################################################
@@ -939,18 +990,79 @@ if (AnyPythonFeatureParticipant = 1) {
 gosub CheckIfFaxKeeper
 if (IsFaxKeeper = 1) {
     gosub LoadFaxKeeperCollectionPath  ; Load the path to the shared pending-changes file from W: config
+    gosub BackupFaxNumberFiles        ; Daily backup of master fax files before any changes are applied
     gosub SweepFaxKeeperFile          ; Run one immediate sweep at startup
     SetTimer, SweepFaxKeeperFile, %FaxSweepInterval%
 }
 
 ;############################################################################################
+;################## BAM Signup Sweep: paths, header and startup #############################
+;############################################################################################
+; Moves VHA* usernames from the admin's OneDrive signup file into the network
+; BAMBetaUsers.txt (first) and BAMUsers.txt, so every new signup lands on the BAM BETA
+; channel, then resets the signup file to its canonical header. Admin-only, hourly,
+; silent on success. This is the FIRST and ONLY automated writer of these lists, which is
+; why the sweep verifies its own append and refuses to clear the signup file on any error.
+; Design: docs\superpowers\specs\2026-09-14-bam-signup-sweep-design.md
+
+BAMSweepIsAdmin := (A_UserName = "VHAMINBOCKA") ? 1 : 0
+BAMSignupSweepErrorNotified := 0
+BAMSweepTestMode := 0
+BAMSweepBackupFailed := 0
+
+if (BAMSweepIsAdmin = 1) {
+    EnvGet, bamSweepOneDrive, OneDrive
+    if (bamSweepOneDrive = "")
+        bamSweepOneDrive := "C:\Users\" . A_UserName . "\OneDrive - Department of Veterans Affairs"
+    BAMSignupFile := bamSweepOneDrive . "\AI\J Booster\GENERAL_BAM_SIGNUP.txt"
+    BAMSweepTargetFile := BAMUserFile
+    BAMSweepBetaTargetFile := pilotConfigRoot . "BAM\BAMBetaUsers.txt"
+    BAMSweepBackupFolder := pilotConfigRoot . "BAM\Backups"
+
+    ; Canonical 157-byte reset header. Built by successive appends rather than a
+    ; continuation section because a line starting with "." is ambiguous in AHK v1.
+    BAMSweepCanonicalHeader := "ADD your USERNAME to the list.`r`n"
+    BAMSweepCanonicalHeader .= "ADD it BELOW the last username on the list`r`n"
+    BAMSweepCanonicalHeader .= "Then click the save icon. Please DO NOT delete anyone's username`r`n"
+    BAMSweepCanonicalHeader .= "`r`n"
+    BAMSweepCanonicalHeader .= "VHAMINBOCKA`r`n"
+
+    ; Sandbox override for testing (spec section 7). Lines: signup, BAMUsers target, backups,
+    ; and an optional 4th = beta list (defaults to BAMBetaUsers.txt beside the target, so a
+    ; sandbox never touches the real beta list). Delete the file to return to production paths.
+    EnvGet, bamSweepLocalAppData, LOCALAPPDATA
+    BAMSweepSandboxFile := bamSweepLocalAppData . "\CPRSBooster\bam_sweep_sandbox.txt"
+    if FileExist(BAMSweepSandboxFile) {
+        FileReadLine, bamSandboxSignup, %BAMSweepSandboxFile%, 1
+        FileReadLine, bamSandboxTarget, %BAMSweepSandboxFile%, 2
+        FileReadLine, bamSandboxBackup, %BAMSweepSandboxFile%, 3
+        FileReadLine, bamSandboxBeta, %BAMSweepSandboxFile%, 4
+        if (Trim(bamSandboxSignup) != "" && Trim(bamSandboxTarget) != "" && Trim(bamSandboxBackup) != "") {
+            BAMSignupFile := Trim(bamSandboxSignup)
+            BAMSweepTargetFile := Trim(bamSandboxTarget)
+            if (Trim(bamSandboxBeta) != "")
+                BAMSweepBetaTargetFile := Trim(bamSandboxBeta)
+            else {
+                SplitPath, BAMSweepTargetFile, , bamSandboxTargetDir
+                BAMSweepBetaTargetFile := bamSandboxTargetDir . "\BAMBetaUsers.txt"
+            }
+            BAMSweepBackupFolder := Trim(bamSandboxBackup)
+            BAMSweepTestMode := 1
+        }
+    }
+
+    gosub SweepBAMSignupFile                ; one immediate sweep at startup
+    SetTimer, SweepBAMSignupFile, 3600000   ; then hourly
+}
+
+;############################################################################################
 ;################## NURSING BOOSTER MODULE INTEGRATION ######################################
 ;############################################################################################
-; Test version: pulls NursingBooster from GitHub if enabled.
+; Pull NursingBooster from GitHub only when enabled.
 ; The user toggles this in Ctrl+H settings.
 
 ; NB_Enabled and NB_Channel are loaded by refreshdata from CPRSData.txt
-; (slots 83 and 84). Default to 0/stable if undefined.
+; (slots 84 and 85; slot 83 belongs to CPRSBooster DisableBAM). Default to 0/stable if undefined.
 if (NB_Enabled = "")
     NB_Enabled := 0
 if (NB_Channel = "")
@@ -990,6 +1102,23 @@ Return  ; End of auto-execute section
 ;############################################################################################
 ;################## NURSING BOOSTER MODULE DOWNLOAD/UPDATE ##################################
 ;############################################################################################
+
+; Read both the current layout and the old NursingBooster host layout.
+; Current: 83 = DisableBAM, 84 = NB enabled, 85 = NB channel.
+; Legacy: 83 = NB enabled, 84 = NB channel, 85 empty. A recognized channel
+; in 84 distinguishes that layout from a fresh CPRSBooster installation.
+NB_ReadPreferences(data) {
+    prefs := {enabled: (data[84] = 1) ? 1 : 0
+        , channel: (data[85] = "master") ? "master" : "stable"
+        , disableBAM: (data[83] = 1) ? 1 : 0}
+    if (data[85] = "" && (data[84] = "stable" || data[84] = "master")) {
+        prefs.enabled := (data[83] = 1) ? 1 : 0
+        prefs.channel := data[84]
+        ; The legacy NB flag was never a BAM preference. Use the base default.
+        prefs.disableBAM := 0
+    }
+    return prefs
+}
 
 NB_FetchModuleIfNeeded:
     ; Channel: "stable" or "master" (stored internally, shown as Beta/Dev in UI)
@@ -1394,7 +1523,42 @@ ProcessPythonCommand:
         gosub HandleGetPatientInfo
     } else if (command = "fetch_data") {
         gosub HandleFetchData
+    } else if (command = "set_bam_disabled") {
+        gosub HandleSetBamDisabled
+    } else if (command = "open_evidence") {
+        gosub HandleOpenEvidence
+    } else if (command = "open_profile_setup") {
+        gosub HandleOpenProfileSetup
     }
+return
+
+HandleOpenProfileSetup:
+	; BAM's National Button Library publish found no (valid) library profile.
+	; Show the DP library's existing profile form (Gui 35) so the user can
+	; create it without leaving the publish flow. Fire-and-forget: no pipe
+	; response — Python re-reads Userprofile.txt on the next publish attempt.
+	gosub Gui35
+return
+
+HandleSetBamDisabled:
+	; Persist BAM startup setting through AHK's normal write path.
+	; Expected payload field: "disable_bam": 1|0|true|false
+	disableValue := 1
+	if RegExMatch(commandJSON, """disable_bam""\s*:\s*(true|false|1|0)", bamMatch) {
+		rawDisableValue := bamMatch1
+		if (rawDisableValue = "0" || rawDisableValue = "false") {
+			disableValue := 0
+		} else {
+			disableValue := 1
+		}
+	}
+
+	DisableBAM := disableValue
+	gosub writeit
+
+	FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
+	jsonData := "{""sentinel"": ""CPRS_BAM_DISABLED_SET"", ""disable_bam"": " . DisableBAM . ", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
+	gosub SendDataToPipe
 return
 
 HandleGetPatientInfo:
@@ -1411,6 +1575,9 @@ HandleGetPatientInfo:
 	if (!WinExist("ahk_id " . CPRSWindowHandle)) {
 		; Handle invalid - window closed or handle stale
 		CPRSWindowHandle := 0  ; Reset so CheckToolbars will recapture
+		BAMFirstPositioned := 0  ; Reset so BAM repositions for new CPRS session
+		BAMStoredPID := 0
+		BAMStoredHwnd := 0
 		FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
 		jsonData := "{""sentinel"": ""CPRS_WINDOW_NOT_FOUND"", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}" 
 		gosub SendDataToPipe
@@ -1429,19 +1596,28 @@ HandleGetPatientInfo:
 	}
 	
 	; Check if patient data parsing failed
+	; SSN + name are required for a valid CPRS read. DOB is no longer used by
+	; Python's cross-system match (name-only bridge), so a missing DOB must
+	; NOT block a CPRS read.
 	if (reformattedSSN = "" || PatientName = "") {
-		; DIAGNOSTIC: Save unparsable text to desktop file for troubleshooting
 		FormatTime, currentTime, , yyyy-MM-dd HH:mm:ss
-		debugFile := A_Desktop . "\CPRS_Parse_Debug.txt"
-		debugHeader := "`n`n========================================`n"
-		debugHeader .= "PARSE FAILED - " . currentTime . "`n"
-		debugHeader .= "Window Handle: " . CPRSWindowHandle . "`n"
-		debugHeader .= "Text Length: " . StrLen(SSVoogle) . " characters`n"
-		debugHeader .= "SSN Found: " . (reformattedSSN = "" ? "NO" : reformattedSSN) . "`n"
-		debugHeader .= "Name Found: " . (PatientName = "" ? "NO" : PatientName) . "`n"
-		debugHeader .= "========================================`n`n"
-		debugContent := debugHeader . SSVoogle . "`n"
-		FileAppend, %debugContent%, %debugFile%
+		; DIAGNOSTIC: Save unparsable text to desktop file for troubleshooting.
+		; PHI SAFETY: the raw scraped CPRS window text (SSVoogle) and any parsed
+		; name/DOB contain PHI, so this file must only ever be written on the
+		; developer's machine. End-user workstations must NOT receive a PHI log.
+		if (A_UserName = "VHAMINBOCKA") {
+			debugFile := A_Desktop . "\CPRS_Parse_Debug.txt"
+			debugHeader := "`n`n========================================`n"
+			debugHeader .= "PARSE FAILED - " . currentTime . "`n"
+			debugHeader .= "Window Handle: " . CPRSWindowHandle . "`n"
+			debugHeader .= "Text Length: " . StrLen(SSVoogle) . " characters`n"
+			debugHeader .= "SSN Found: " . (reformattedSSN = "" ? "NO" : reformattedSSN) . "`n"
+			debugHeader .= "Name Found: " . (PatientName = "" ? "NO" : PatientName) . "`n"
+			debugHeader .= "DOB Found: " . (ptDOB = "" ? "NO" : ptDOB) . "`n"
+			debugHeader .= "========================================`n`n"
+			debugContent := debugHeader . SSVoogle . "`n"
+			FileAppend, %debugContent%, %debugFile%
+		}
 		
 		; Note: Debug file saved but not auto-opened - Python GUI will show error details
 		
@@ -1459,7 +1635,7 @@ HandleGetPatientInfo:
 	StringReplace, escapedName, escapedName, ", \", All
 	
 	; Build patient-only JSON
-	jsonData := "{""sentinel"": ""CPRS_PATIENT_INFO"", ""patient"": {""ssn"": """ . reformattedSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . ptDOB . """, ""last4"": """ . lastFour . """}, ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
+	jsonData := "{""sentinel"": ""CPRS_PATIENT_INFO"", ""patient"": {""ssn"": """ . reformattedSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . ptDOB . """}, ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
 	
 	; Send via data pipe
 	gosub SendDataToPipe
@@ -1533,6 +1709,101 @@ SendDataToPipe:
         ; SplashTextOff
     }
 return
+
+;############################################################################################
+;####################OPEN EVIDENCE CODE#####################################################
+;############################################################################################
+
+HandleOpenEvidence:
+    ; Open OpenEvidence.com in Edge app mode and paste the question.
+    ; Python sends the question text in the pipe JSON — AHK sets the clipboard
+    ; itself (avoids cross-process clipboard race conditions).
+    ; Uses retry loop: paste + Enter, then check if window title contains "|"
+    ; (OpenEvidence adds "query text | OpenEvidence" to title when search runs).
+
+    SetTitleMatchMode, 2
+    OE_URL := "https://www.openevidence.com/"
+
+    ; Extract question text from pipe command JSON
+    OE_Question := ""
+    if RegExMatch(commandJSON, """question""\s*:\s*""([^""]+)""", OE_match) {
+        OE_Question := OE_match1
+    }
+
+    ; Save current clipboard and set question text
+    OE_OldClipboard := ClipboardAll
+    if (OE_Question != "") {
+        Clipboard := OE_Question
+        ClipWait, 2
+    }
+
+    ; Launch Edge in app mode
+    Run, msedge.exe --app=%OE_URL%
+
+    ; Wait for the OpenEvidence window to appear
+    WinWait, OpenEvidence,, 30
+    if ErrorLevel {
+        ; Fallback: wait for any new Edge window
+        WinWait, ahk_exe msedge.exe,, 10
+        if ErrorLevel {
+            Clipboard := OE_OldClipboard
+            OE_OldClipboard := ""
+            return
+        }
+    }
+
+    ; Wait for the browser to stop being "Not Responding"
+    ; (OpenEvidence SPA loads heavy JavaScript on startup)
+    WinGet, OE_hwnd, ID, OpenEvidence
+    if (OE_hwnd) {
+        Loop, 30 {
+            if !DllCall("IsHungAppWindow", "Ptr", OE_hwnd)
+                break
+            Sleep, 500
+        }
+    }
+
+    ; Brief wait for the SPA textarea to render after browser is responsive
+    Sleep, 1000
+
+    ; Activate, paste, enter — retry up to 3 times until title shows "|"
+    OE_MaxAttempts := 3
+
+    Loop, %OE_MaxAttempts%
+    {
+        OE_Attempt := A_Index
+
+        ; Activate the OpenEvidence window
+        WinActivate, OpenEvidence
+        WinWaitActive, OpenEvidence,, 5
+        Sleep, 500
+
+        ; Paste and submit
+        Send, ^v
+        Sleep, 500
+        Send, {Enter}
+
+        ; Wait for the title to change (pipe "|" appears when search starts)
+        Sleep, 3000
+        WinGetTitle, OE_CurrentTitle, A
+        if InStr(OE_CurrentTitle, "|") {
+            break
+        }
+
+        ; Title didn't change — retry after a delay
+        if (OE_Attempt < OE_MaxAttempts) {
+            Sleep, 2000
+        }
+    }
+
+    ; Restore original clipboard
+    Clipboard := OE_OldClipboard
+    OE_OldClipboard := ""
+return
+
+;############################################################################################
+;####################END OPEN EVIDENCE CODE#################################################
+;############################################################################################
 
 ;############################################################################################
 ;################## END BAM PIPE COMMUNICATION ##########################################
@@ -2027,13 +2298,13 @@ modnotelist := "   New Notes   ||  |EDIT LIST BELOW:|   CLICK HERE|  | "  .  not
 
 gui, 14: Add, DropdownList, gdropdownbutton y0 w100 -Tabstop altsubmit vnotefornow , %modnotelist%
 
-; Gui 14: +AlwaysOnTop -Caption HWNDGui_Hwnd  +ToolWindow ;   +LastFound
+; Gui 14: +AlwaysOnTop -Caption HWNDGui_Hwnd  +ToolWindow ;   +LastFound 
 
  Gui, 14: +AlwaysOnTop -Caption +ToolWindow +Owner
 
 	try 
 	{
-	Gui 14: Show, %  " h21 x" newX  " y" newY ,fxnbar   ; Position on Gui Parent
+	Gui 14: Show, % "NoActivate h21 x" newX  " y" newY ,fxnbar   ; NoActivate prevents focus steal
 
 	}
 	catch e
@@ -2317,15 +2588,186 @@ quickorder:  ; TO START QO GUI PRESENT &&&&&&&&& QO DATA LOAD
 ;############################################################################################
 
 ;############################################################################################
-;###################Cleanup Function - Close BstHelper when U64 exits##########################################
+;###################Cleanup Function - Close BstHelperV2 when U64 exits##########################################
 ;############################################################################################
 
+BoosterHeartbeat:
+    ; Re-stamp the liveness file BstHelperV2.ahk (WatchBoosterAlive) and BAM
+    ; (owner_watchdog.py) poll. Only the modification time matters; the contents
+    ; are for a human reading the folder. Deliberately silent on failure — a
+    ; heartbeat that cannot be written just leaves both watchdogs disarmed, which
+    ; is the safe direction. Runs in the global scope, so BoosterHeartbeatFile is
+    ; visible without a `global` declaration.
+    try {
+        SplitPath, BoosterHeartbeatFile, , heartbeatDir
+        if !FileExist(heartbeatDir)
+            FileCreateDir, %heartbeatDir%
+        if FileExist(BoosterHeartbeatFile)   ; FileDelete on a missing file THROWS inside try (v1) and aborts the write
+            FileDelete, %BoosterHeartbeatFile%
+        FileAppend, % "CPRS Booster PID " . DllCall("GetCurrentProcessId") . " alive at " . A_Now, %BoosterHeartbeatFile%
+    }
+return
+
 CleanupBstHelper(ExitReason, ExitCode) {
-    ; Close BstHelper.ahk when U64 exits (any reason: user close, crash, reload, etc.)
+    ; Graceful-first shutdown of BAM and its Playwright browser children.
+    ;
+    ; BAM (pythonw.exe running BAM_on_demand.py) spawns node.exe (the Playwright
+    ; driver) and msedge.exe processes (the JLV persistent-context browser plus a
+    ; separate document viewer). Hard-killing pythonw alone orphans those. So:
+    ;   1. Signal BAM to shut down cleanly via a sentinel file it polls — this lets
+    ;      Playwright tear down node/Edge and release the persistent Edge profile
+    ;      lock before exit.
+    ;   2. Force-kill anything left: the whole pythonw process tree, plus any stray
+    ;      msedge.exe still using the BAM Edge profile.
+    global BoosterHeartbeatFile
+
+    ; ── Do NOT tear anything down when we are being REPLACED ──────────────────
+    ; "Single" (#SingleInstance force — the user launched Booster again) and
+    ; "Reload" both mean a fresh Booster instance is already starting and will
+    ; relaunch BstHelperV2, which in turn kills and relaunches BAM. Running the
+    ; teardown here races that startup, and we lose the race in two ways, because
+    ; the new instance only waits ~2s for us while this handler can run for tens
+    ; of seconds:
+    ;   * we write bam_shutdown.flag AFTER the freshly-launched BAM cleared it at
+    ;     startup, so the NEW BAM immediately shuts itself down; and
+    ;   * WinClose below matches on window title, which the NEW BstHelperV2
+    ;     shares, so we close the new launcher instead of the old one.
+    ; Either one leaves Booster running with no BAM — the "BAM didn't come back"
+    ; half of this bug. The replacement instance owns the handoff; stay out of it.
+    if (ExitReason = "Single" || ExitReason = "Reload")
+        return
+
+    ; Windows force-terminates apps a few seconds into a logoff/shutdown, so the
+    ; wait budget has to shrink there. On a normal close it must EXCEED BAM's own
+    ; teardown budget (close_jlv_browser is given 15s in BAM_on_demand.py):
+    ; force-killing pythonw part-way through Playwright's teardown is what leaves
+    ; the persistent Edge profile locked and wedges the NEXT BAM launch.
+    isSessionEnd := (ExitReason = "Logoff" || ExitReason = "Shutdown")
+    bamWaitPolls := isSessionEnd ? 15 : 100      ; 3s vs 20s, at 200ms per poll
+
+    EnvGet, localAppData, LOCALAPPDATA
+    shutdownFlag := localAppData . "\CPRSBooster\bam_shutdown.flag"
+    edgeProfileDir := localAppData . "\CPRSBooster\EdgeProfile"
+
+    ; (1) Signal graceful shutdown
+    try {
+        SplitPath, shutdownFlag, , flagDir
+        if !FileExist(flagDir)
+            FileCreateDir, %flagDir%
+        if FileExist(shutdownFlag)   ; FileDelete on a missing file THROWS inside try (v1), which would skip the write below
+            FileDelete, %shutdownFlag%
+        FileAppend, shutdown, %shutdownFlag%
+    }
+
+    ; Wait for BAM to exit on its own after graceful teardown
+    Loop, %bamWaitPolls% {
+        if !BamPythonRunning()
+            break
+        Sleep, 200
+    }
+
+    ; (2a) Force-kill fallback — terminate the whole BAM process tree
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery("Select ProcessId, CommandLine from Win32_Process where Name = 'pythonw.exe'") {
+            if (InStr(proc.CommandLine, "BAM_on_demand.py")) {
+                KillProcessTree(proc.ProcessId)
+            }
+        }
+    }
+
+    ; (2b) Catch any stray Edge windows still using the BAM persistent profile
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery("Select ProcessId, CommandLine from Win32_Process where Name = 'msedge.exe'") {
+            if (proc.CommandLine && InStr(proc.CommandLine, edgeProfileDir)) {
+                try {
+                    proc.Terminate()
+                }
+            }
+        }
+    }
+
+    ; Clean up the sentinel file
+    try {
+        FileDelete, %shutdownFlag%
+    }
+
+    ; (3) Close BstHelperV2.ahk — ask nicely, then insist.
+    ; WinClose only POSTS WM_CLOSE. A BstHelperV2 parked on one of its modal
+    ; "Python Installation Error" MsgBoxes, or blocked inside a slow network
+    ; FileCopy, never processes it and outlives the Booster with its
+    ; Shift+Alt+Ctrl+A hotkey still live — so verify, and escalate if it stayed.
     DetectHiddenWindows, On
     SetTitleMatchMode, 2
-    WinClose, BstHelper.ahk ahk_class AutoHotkey
+    WinClose, BstHelperV2.ahk ahk_class AutoHotkey
+    helperWaitPolls := isSessionEnd ? 5 : 15
+    Loop, %helperWaitPolls% {
+        if !BstHelperRunning()
+            break
+        Sleep, 200
+    }
+    if (BstHelperRunning())
+        KillBstHelper()
+
+    ; (4) Retire the heartbeat last, so the watchdogs in BstHelperV2/BAM only see
+    ; it disappear once everything above has already been dealt with directly.
+    try {
+        FileDelete, %BoosterHeartbeatFile%
+    }
     return
+}
+
+BstHelperRunning() {
+    ; True if an AutoHotkey process is still running BstHelperV2.ahk. Matched on
+    ; the COMMAND LINE, not the process name: BstHelperV2 runs under the same
+    ; AutoHotkeyU64.exe engine this script does. The Booster's own command line
+    ; names CPRSBooster_ACTIVE_{BETA,PRODUCTION}_SCRIPT.ahk, so it can never
+    ; match itself here.
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery("Select CommandLine from Win32_Process where Name = 'AutoHotkeyU64.exe'") {
+            if (proc.CommandLine && InStr(proc.CommandLine, "BstHelperV2.ahk"))
+                return true
+        }
+    }
+    return false
+}
+
+KillBstHelper() {
+    ; Last resort for a BstHelperV2 that ignored WM_CLOSE. Same command-line
+    ; match as BstHelperRunning(), so this cannot terminate the Booster itself.
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery("Select ProcessId, CommandLine from Win32_Process where Name = 'AutoHotkeyU64.exe'") {
+            if (proc.CommandLine && InStr(proc.CommandLine, "BstHelperV2.ahk")) {
+                try {
+                    proc.Terminate()
+                }
+            }
+        }
+    }
+}
+
+BamPythonRunning() {
+    ; True if a pythonw.exe running BAM_on_demand.py is still alive.
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery("Select CommandLine from Win32_Process where Name = 'pythonw.exe'") {
+            if (proc.CommandLine && InStr(proc.CommandLine, "BAM_on_demand.py"))
+                return true
+        }
+    }
+    return false
+}
+
+KillProcessTree(pid) {
+    ; Terminate all descendants (recursively) before the parent so nothing
+    ; re-parents and escapes the kill.
+    wmi := ComObjGet("winmgmts:")
+    for child in wmi.ExecQuery("Select ProcessId from Win32_Process where ParentProcessId = " . pid) {
+        KillProcessTree(child.ProcessId)
+    }
+    for proc in wmi.ExecQuery("Select * from Win32_Process where ProcessId = " . pid) {
+        try {
+            proc.Terminate()
+        }
+    }
 }
 
 
@@ -4953,7 +5395,7 @@ Gui, 7:Add, Button, y0  h%hbar% -Tabstop, Exit Booster
 
 try
 {
-Gui, 7:Show, x%Px% y%Py% w1150 h%hGui% , hyperdrivebar   
+Gui, 7:Show, NoActivate x%Px% y%Py% w1150 h%hGui% , hyperdrivebar   
 }
 
 hyperX := Px
@@ -5181,6 +5623,10 @@ Gui, 8:Add, Button, y0  h20 g8RadsGopher -Tabstop, Record Retriever
 }
 Gui, 8:Add, Button, y0  h20  g8Voogle -Tabstop, CPRS SEARCH (Voogle)
 gui, 8:Add, Button, y0  h20 g8GetPCP -Tabstop, Add/Flag/Forward PCP
+if (BAMParticipant = 1)
+{
+Gui, 8:Add, Button, y0  h20 g8LaunchBAM -Tabstop, Booster AI (BAM)
+}
 
 
 linkbarX := Px+350
@@ -5188,7 +5634,7 @@ linkbarY := Py + 31  ; try change from + 40
 
 try
 {
-Gui, 8:Show, x%linkbarX% y%linkbarY% w900 h20 , hyperdriveSubbar
+Gui, 8:Show, NoActivate x%linkbarX% y%linkbarY% w900 h20 , hyperdriveSubbar
 }
 
 return  
@@ -5204,19 +5650,74 @@ sleep 10000
 SplashTextOff
 return
 
+8LaunchBAM:
+; Launch/restart BAM from the toolbar. Reruns BstHelperV2 (the launcher): #singleinstance
+; force, re-reads settings, kills any existing BAM, relaunches fresh — the tested path.
+if (BAMParticipant != 1)
+    return
+if (!FileExist(JBoosterPythonInstallerLocal)) {
+    MsgBox, 262160, CPRS Booster: BAM, BAM launcher not found.`n`nBAM will start with your next Booster launch.
+    return
+}
+if (DisableBAM != 1) {
+    gosub, RunBAMLauncher   ; enabled — just (re)launch
+    return
+}
+; BAM is disabled (Ctrl+H setting) — show a clearly-labeled choice dialog.
+Gui, 73:Destroy
+Gui, 73:+AlwaysOnTop +ToolWindow +Owner
+Gui, 73:Font, s10, Verdana
+Gui, 73:Add, Text, w370, BAM is currently turned OFF in your settings.`n`nHow would you like to start it?
+Gui, 73:Font, s9
+Gui, 73:Add, Button, xm w370 h36 g73BAMOnce, Launch BAM just this once`n(stays off the next time you open Booster)
+Gui, 73:Add, Button, xm w370 h36 g73BAMEnable, Turn BAM back ON`n(starts automatically with every Booster)
+Gui, 73:Add, Button, xm w370 h26 g73BAMCancel, Cancel
+Gui, 73:Show, , CPRS Booster: Start BAM
+return
+
+73BAMOnce:
+Gui, 73:Destroy
+; One-time force-launch: write the flag BstHelperV2 consumes so BAM starts this session
+; WITHOUT changing the saved disable setting.
+EnvGet, bamOneDrive, ONEDRIVE
+bamForceFlagDir := bamOneDrive . "\CPRSBooster\FlagFiles"
+if !FileExist(bamForceFlagDir)
+    FileCreateDir, %bamForceFlagDir%
+bamForceFlag := bamForceFlagDir . "\bam_force_launch_once.flag"
+FileDelete, %bamForceFlag%
+FileAppend, once, %bamForceFlag%
+gosub, RunBAMLauncher
+return
+
+73BAMEnable:
+Gui, 73:Destroy
+; Persist re-enable (CPRSData.txt line 83 = 0), same pattern as the Ctrl+H save.
+DisableBAM := 0
+gosub writeit
+gosub, RunBAMLauncher
+return
+
+73BAMCancel:
+73GuiClose:
+73GuiEscape:
+Gui, 73:Destroy
+return
+
+RunBAMLauncher:
+try {
+    Run, "%AHKengine%" "%JBoosterPythonInstallerLocal%", , Hide
+} catch e {
+    MsgBox, 262160, CPRS Booster: BAM, % "Could not start BAM:`n" e.Message
+}
+return
+
 
 ;############################################################################################
 ;#########################Start AMB SCRIBE BOTTON LOGIC###############################################
 ;############################################################################################
 
 AmbDict:
-; Route based on participation type:
-; - Dragon-only users (DragonAmbScribePilot=1, NonDragonAmbScribeParticipant=0): Go directly to Dragon
-; - Non-Dragon users (NonDragonAmbScribeParticipant=1, any Dragon status): Show choice dialog
-if (DragonAmbScribePilot = 1 && NonDragonAmbScribeParticipant = 0) {
-    goto 67UseDragon  ; Dragon-only users skip choice dialog
-}
-; Fall through to gui67 for Non-Dragon participants (premium access)
+; All Ambient Scribe participants now see the full choice dialog (GUI 67)
 
 ;############################################################################################
 ;#########################GUI 67: Scribe Options Selection###############################################
@@ -5225,11 +5726,26 @@ if (DragonAmbScribePilot = 1 && NonDragonAmbScribeParticipant = 0) {
 gui67:
 Gui, 67: Destroy
 Gui, 67: Font, s10, Verdana
-Gui, 67: Add, Button, x20 y20 w240 h40 g67UseDragon, DRAGON-BOOSTER Scribe
-Gui, 67: Add, Button, x+10 y20 w240 h40 g67UseNonDragon, NON-DRAGON-BOOSTER Scribe
+Gui, 67: Add, Button, x20 y20 w200 h40 g67UseDragon, DRAGON-BOOSTER Scribe
+; NON-DRAGON (Python-based) Scribe is only shown to Non-Dragon participants
+; (they are the only users who have the embedded Python deployed). Everyone
+; else just gets Dragon + VA Lambient (a URL, no Python required).
+if (NonDragonAmbScribeParticipant = 1)
+{
+    Gui, 67: Add, Button, x230 y20 w200 h40 g67UseNonDragon, NON-DRAGON-BOOSTER Scribe
+    Gui, 67: Add, Button, x440 y20 w200 h40 g67UseLambient, VA Lambient Scribe
+    scribeGuiWidth := 660
+    scribeHelpX := 260
+}
+else
+{
+    Gui, 67: Add, Button, x230 y20 w200 h40 g67UseLambient, VA Lambient Scribe
+    scribeGuiWidth := 450
+    scribeHelpX := 155
+}
 Gui, 67: Font, s9 cBlue underline
-Gui, 67: Add, Text, x200 y70 w120 g67HelpDecide, Help me decide
-Gui, 67: Show, w550 h100, Scribe Options
+Gui, 67: Add, Text, x%scribeHelpX% y70 w140 g67HelpDecide, Help me decide
+Gui, 67: Show, w%scribeGuiWidth% h100, Scribe Options
 return
 
 67GuiClose:
@@ -5238,6 +5754,16 @@ return
 
 67HelpDecide:
 run, https://tinyurl.com/BoosterScribeOptions
+return
+
+
+;############################################################################################
+;################For VA Lambient Scribe users###########################################
+;############################################################################################
+
+67UseLambient:
+Gui, 67: Destroy
+run, https://lambient.va.gov/record
 return
 
 
@@ -5274,6 +5800,7 @@ return
 67UseNonDragon:
 Gui, 67: Destroy
 
+/* ; Education popup disabled — does not apply to LambientScribe (V2 non-dragon scribe)
 ; Check if user has seen instructions before
 if (OneTimeNonDragonScribeEducation = 0) || (OneTimeNonDragonScribeEducation = "")
 {
@@ -5287,6 +5814,9 @@ if (OneTimeNonDragonScribeEducation = 0) || (OneTimeNonDragonScribeEducation = "
     
     IfMsgBox, Yes
     {
+        ; Show important reminder about first slide steps
+        MsgBox, 262144, CPRS Booster - Non-Dragon Ambient Scribe, You MUST complete steps on the first slide (coming next)
+        
         ; Open instructions URL
         run, https://dvagov-my.sharepoint.com/:p:/g/personal/adam_bock_va_gov/IQA8a1E-Kd_HS5gGdtn-OO5HAaTsmQE0wbvrJFqW74sDU0M?e=yfRUF7
         
@@ -5315,10 +5845,11 @@ if (OneTimeNonDragonScribeEducation = 0) || (OneTimeNonDragonScribeEducation = "
         ; Variable stays at 0 - they'll be asked again next time
     }
 }
+*/
 
-; Start the ambient scribe (only if they didn't choose to view instructions)
-send +!^a  ; hotkey to start amb scribe dictation
-SplashTextOn ,150 ,100, CPRS Booster, Starting Ambient Scribe...
+; Launch LambientScribe via BstHelperV2 hotkey
+send +!^a
+SplashTextOn ,150 ,100, CPRS Booster, Starting Lambient Scribe...
 sleep 600
 SplashTextOff
 
@@ -6261,12 +6792,14 @@ return
 			InternalMailItem.Subject := FYISubject
 			InternalMailItem.Body := InternalBody
 
-			; Set S/MIME encryption via MAPI property
+			; OLD S/MIME encryption — kept for reference
+			/*
 			try {
 				InternalMailItem.PropertyAccessor.SetProperty("http://schemas.microsoft.com/mapi/proptag/0x6E010003", 1)
 			} catch encErr {
 				; Encryption property failed — email will still display without encryption
 			}
+			*/
 		} catch {
 			InternalMailItem := ""
 		}
@@ -6299,7 +6832,9 @@ return
 	if (InternalMailItem != "") {
 		try {
 			InternalMailItem.Display
-			MsgBox, 262208, %activeMsgTitle%, I also created an encrypted FYI email to your imaging/records department.`n`nPlease click SEND on this email as well (they will look out for the images)
+			; Apply Encrypt-Only to the FYI email window
+			gosub EncryptOutlookEmail
+			MsgBox, 262208, %activeMsgTitle%, I also created an encrypted FYI email to your imaging/records department.`n`nPlease make sure it is encrypted (Encrypt button highlighted) and then click SEND on this email as well (they will look out for the images)
 
 			;--- Wait for FYI email window to close (or 30 second timeout)
 			SetTitleMatchMode, 2
@@ -6988,6 +7523,24 @@ return
 
 
 ;############################################################################################
+;###################Encrypt-Only via Outlook Ribbon Keystrokes##############################
+;############################################################################################
+; Applies Encrypt-Only to the currently active Outlook compose window
+; Sequence: Alt+P (Options tab) → pm (Permission menu) → Down (Encrypt-Only) → Enter
+
+EncryptOutlookEmail:
+	sleep 700
+	Send !p
+	sleep 400
+	Send pm
+	sleep 400
+	Send {Down}
+	sleep 80
+	Send {Enter}
+return
+
+
+;############################################################################################
 ;###################Email Fax Suggestion to Internal Contact (Facilitated Mode)#############
 ;############################################################################################
 
@@ -7338,6 +7891,370 @@ RemoveFaxKeeperTip:
 return
 
 
+;############################################################################################
+;############ Fax Keeper: Daily backup of master fax number files on W: drive ###############
+;############################################################################################
+BackupFaxNumberFiles:
+	; Only run once per day (flag resets on script restart)
+	if (FaxBackupDoneToday = 1)
+		return
+
+	; Best-effort: skip silently if W: drive is not available
+	if (WDriveAvailable != 1) {
+		gosub CheckWDrive
+	}
+	if (WDriveAvailable != 1)
+		return
+
+	; Create the backup folder if it doesn't exist
+	if !InStr(FileExist(FaxBackupFolder), "D") {
+		FileCreateDir, %FaxBackupFolder%
+		if (ErrorLevel)
+			return
+	}
+
+	; Generate timestamp for backup file names
+	FormatTime, backupStamp, , yyyy-MM-dd_HHmm
+
+	; Back up Imaging Request (Radiology) fax numbers
+	backupSource := RT_FaxFile["Radiology"]
+	if FileExist(backupSource) {
+		backupDest := FaxBackupFolder . "\Imaging_Request_FaxNumbers_" . backupStamp . ".txt"
+		FileCopy, %backupSource%, %backupDest%, 0
+	}
+
+	; Back up Medical Records fax numbers
+	backupSource := RT_FaxFile["MedRecords"]
+	if FileExist(backupSource) {
+		backupDest := FaxBackupFolder . "\Medical_Records_FaxNumbers_" . backupStamp . ".txt"
+		FileCopy, %backupSource%, %backupDest%, 0
+	}
+
+	FaxBackupDoneToday := 1
+	gosub PruneFaxBackups
+return
+
+
+;############################################################################################
+;############## Fax Keeper: Prune backups older than 14 days ################################
+;############################################################################################
+PruneFaxBackups:
+	; Calculate cutoff date (14 days ago)
+	pruneCutoff := A_Now
+	EnvAdd, pruneCutoff, -14, Days
+
+	Loop, Files, %FaxBackupFolder%\*.txt
+	{
+		FileGetTime, backupFileTime, %A_LoopFileFullPath%, M
+		if (backupFileTime < pruneCutoff) {
+			FileDelete, %A_LoopFileFullPath%
+		}
+	}
+return
+
+
+;############################################################################################
+;################## BAM Signup Sweep: move signups into BAMUsers.txt ########################
+;############################################################################################
+
+SweepBAMSignupFile:
+	; Belt and braces — the timer is only ever started for the admin, but this label is
+	; also reachable by Gosub.
+	if (BAMSweepIsAdmin != 1)
+		return
+
+	; ---- 1. Read the signup file -------------------------------------------------------
+	if !FileExist(BAMSignupFile) {
+		bamSweepErrorMsg := "The BAM signup file was not found:`n`n" . BAMSignupFile . "`n`nCheck that OneDrive is running and the file still exists."
+		gosub BAMSweepReportError
+		return
+	}
+	FileRead, bamSignupContents, %BAMSignupFile%
+	if (ErrorLevel) {
+		bamSweepErrorMsg := "The BAM signup file could not be read:`n`n" . BAMSignupFile
+		gosub BAMSweepReportError
+		return
+	}
+
+	; ---- 2. Extract candidate usernames ------------------------------------------------
+	; Accept only VHA-prefixed, purely alphanumeric tokens of plausible length. The three
+	; instruction lines in the header fail both the prefix and the alphanumeric test, so
+	; no sentinel line or fixed line offset is needed.
+	bamSweepCandidates := []
+	Loop, Parse, bamSignupContents, `n, `r
+	{
+		bamCandidate := Trim(A_LoopField)
+		if (bamCandidate = "")
+			continue
+		if !RegExMatch(bamCandidate, "i)^VHA")
+			continue
+		if !RegExMatch(bamCandidate, "^[A-Za-z0-9]+$")
+			continue
+		bamCandidateLen := StrLen(bamCandidate)
+		if (bamCandidateLen < 4 || bamCandidateLen > 30)
+			continue
+		bamSweepCandidates.Push(bamCandidate)
+	}
+	bamCandidateCount := bamSweepCandidates.Length()
+
+	; ---- 3. Confirm BOTH targets are reachable and readable ------------------------------
+	; Done BEFORE anything is written or cleared, so an unreachable share can never cost
+	; us a signup. Index 1 = BETA list (written first), index 2 = BAMUsers.txt.
+	; New users go to beta: BAMBetaUsers.txt only picks the J-Booster-BETA channel, while
+	; BAMUsers.txt is what gates BAM participation, so a beta user needs both.
+	bamSweepTargets := [BAMSweepBetaTargetFile, BAMSweepTargetFile]
+	bamSweepContents := []
+	bamSweepIndexes := []
+	for bamTgtIdx, bamTgtFile in bamSweepTargets
+	{
+		if !FileExist(bamTgtFile) {
+			bamSweepErrorMsg := "The BAM user list could not be reached:`n`n" . bamTgtFile . "`n`nThe network share may be unavailable."
+			gosub BAMSweepReportError
+			return
+		}
+		FileRead, bamTgtContents, %bamTgtFile%
+		if (ErrorLevel) {
+			bamSweepErrorMsg := "The BAM user list could not be read:`n`n" . bamTgtFile
+			gosub BAMSweepReportError
+			return
+		}
+		bamSweepContents[bamTgtIdx] := bamTgtContents
+
+		; ---- 4. Index existing names by WHOLE LINE -----------------------------------
+		; Whole-line matching, not a substring search. The master contains prefix pairs (a
+		; name that is a strict prefix of another, e.g. a base name and the same name with
+		; a digit). A substring search would find the shorter name inside the longer one
+		; and skip it, silently denying that person access forever.
+		bamTgtIndex := {}
+		Loop, Parse, bamTgtContents, `n, `r
+		{
+			bamExistingLine := Trim(A_LoopField)
+			if (bamExistingLine = "")
+				continue
+			StringLower, bamExistingKey, bamExistingLine
+			bamTgtIndex[bamExistingKey] := 1
+		}
+		bamSweepIndexes[bamTgtIdx] := bamTgtIndex
+	}
+
+	; ---- 5. Select the names each list is missing ----------------------------------------
+	; Brand-new name (in neither list)  -> added to both, so they land on BETA.
+	; In BAMUsers.txt only              -> existing production user: left alone, NOT moved to beta.
+	; In beta list only                 -> added to BAMUsers.txt (repairs an interrupted sweep).
+	bamSweepNewNames := [[], []]
+	bamSeenInBatch := {}
+	bamAlreadyPresent := 0
+	for bamCandIdx, bamCandidate in bamSweepCandidates
+	{
+		StringLower, bamCandidateKey, bamCandidate
+		if (bamSeenInBatch.HasKey(bamCandidateKey))
+			continue   ; collapses duplicates within this batch
+		bamSeenInBatch[bamCandidateKey] := 1
+		bamInBeta := bamSweepIndexes[1].HasKey(bamCandidateKey)
+		bamInProd := bamSweepIndexes[2].HasKey(bamCandidateKey)
+		if (!bamInBeta && !bamInProd) {
+			bamSweepNewNames[1].Push(bamCandidate)
+			bamSweepNewNames[2].Push(bamCandidate)
+		} else if (bamInBeta && !bamInProd) {
+			bamSweepNewNames[2].Push(bamCandidate)
+		} else {
+			bamAlreadyPresent++
+		}
+	}
+
+	bamAddedCount := 0
+	bamNewNames := bamSweepNewNames[1]   ; the brand-new names, for test-mode reporting
+
+	for bamTgtIdx, bamTgtFile in bamSweepTargets
+	{
+		bamTgtNewNames := bamSweepNewNames[bamTgtIdx]
+		if (bamTgtNewNames.Length() = 0)
+			continue
+		bamUsersContents := bamSweepContents[bamTgtIdx]
+
+		; ---- 6. Daily backup of this list, before the day's first modification -----------
+		BAMSweepBackupSrc := bamTgtFile
+		BAMSweepBackupPrefix := (bamTgtIdx = 1) ? "BAMBetaUsers_" : "BAMUsers_"
+		gosub BackupBAMUsersFile
+		if (BAMSweepBackupFailed = 1) {
+			bamSweepErrorMsg := "The daily backup of the BAM user list could not be created in:`n`n" . BAMSweepBackupFolder . "`n`nNo changes were made to:`n" . bamTgtFile
+			gosub BAMSweepReportError
+			return
+		}
+
+		; ---- 7. Append, guaranteeing the previous final line is terminated ---------------
+		; These lists do NOT end with a newline. Appending blind would produce
+		; "LastExistingUserNewUser" on one line, breaking access for both.
+		bamAppendPayload := ""
+		if (bamUsersContents != "" && SubStr(bamUsersContents, 0) != "`n")
+			bamAppendPayload := "`r`n"
+		for bamCandIdx, bamNewName in bamTgtNewNames
+			bamAppendPayload .= bamNewName . "`r`n"
+
+		FileAppend, %bamAppendPayload%, %bamTgtFile%
+		if (ErrorLevel) {
+			bamSweepErrorMsg := "New usernames could not be written to the BAM user list:`n`n" . bamTgtFile . "`n`nYou may have lost write access to the share. The signup file has been left untouched."
+			gosub BAMSweepReportError
+			return
+		}
+
+		; ---- 8. Verify every appended name is now present as an exact line ---------------
+		; The signup file is cleared on the strength of this check, so it is re-read from
+		; disk rather than trusting the write.
+		FileRead, bamVerifyContents, %bamTgtFile%
+		if (ErrorLevel) {
+			bamSweepErrorMsg := "The BAM user list could not be re-read to verify the update:`n`n" . bamTgtFile . "`n`nThe signup file has been left untouched."
+			gosub BAMSweepReportError
+			return
+		}
+		bamVerifyIndex := {}
+		Loop, Parse, bamVerifyContents, `n, `r
+		{
+			bamVerifyLine := Trim(A_LoopField)
+			if (bamVerifyLine = "")
+				continue
+			StringLower, bamVerifyKey, bamVerifyLine
+			bamVerifyIndex[bamVerifyKey] := 1
+		}
+		for bamCandIdx, bamNewName in bamTgtNewNames
+		{
+			StringLower, bamVerifyLookup, bamNewName
+			if (!bamVerifyIndex.HasKey(bamVerifyLookup)) {
+				bamSweepErrorMsg := "The BAM user list was written but could not be verified (" . bamTgtFile . "). Expected to find this username on its own line:`n`n" . bamNewName . "`n`nThe signup file has been left untouched."
+				gosub BAMSweepReportError
+				return
+			}
+		}
+
+		bamAddedCount += bamTgtNewNames.Length()
+	}
+
+	; ---- 9. Reset the signup file --------------------------------------------------------
+	; Only when it actually differs from the canonical header, so an untouched file is never
+	; rewritten. Note this runs even when nothing was appended: names that were all already
+	; present would otherwise sit in the signup file forever.
+	; AHK v1 "!=" is case-insensitive, so use "==" negated for a true byte comparison.
+	if !(Trim(bamSignupContents) == Trim(BAMSweepCanonicalHeader)) {
+
+		; Guard 2: unchanged since we read it. If someone saved, or OneDrive synced an edit
+		; down while we worked, abandon the wipe silently — the next sweep picks it up.
+		FileRead, bamSignupRecheck, %BAMSignupFile%
+		if (ErrorLevel || !(bamSignupRecheck == bamSignupContents)) {
+			BAMSignupSweepErrorNotified := 0
+			return
+		}
+
+		; Guard 3: snapshot before destroying anything.
+		gosub BackupBAMSignupFile
+		if (BAMSweepBackupFailed = 1) {
+			bamSweepErrorMsg := "The signup file could not be backed up, so it was NOT cleared:`n`n" . BAMSweepBackupFolder . "`n`nThe BAM user list was updated correctly. The next sweep will simply find nothing new."
+			gosub BAMSweepReportError
+			return
+		}
+
+		; UTF-8-RAW writes UTF-8 with no BOM, matching the file's existing 157 bytes.
+		bamResetHandle := FileOpen(BAMSignupFile, "w", "UTF-8-RAW")
+		if (!bamResetHandle) {
+			bamSweepErrorMsg := "The signup file could not be opened for reset:`n`n" . BAMSignupFile . "`n`nIt may be open in another program."
+			gosub BAMSweepReportError
+			return
+		}
+		bamResetHandle.Write(BAMSweepCanonicalHeader)
+		bamResetHandle.Close()
+	}
+
+	; ---- 10. Finish silently --------------------------------------------------------------
+	BAMSignupSweepErrorNotified := 0
+	if (BAMSweepTestMode = 1) {
+		bamTestNewList := ""
+		for bamCandIdx, bamNewName in bamNewNames
+			bamTestNewList .= bamNewName . "`n"
+		bamTestNewCount := bamNewNames.Length()
+		MsgBox, 262144, BAM SIGNUP SWEEP (TEST MODE), Candidates: %bamCandidateCount%`nAlready present: %bamAlreadyPresent%`nNew: %bamTestNewCount%`n`n%bamTestNewList%
+	}
+return
+
+
+;############################################################################################
+;################## BAM Signup Sweep: once-only failure notification ########################
+;############################################################################################
+; Silent on success, loud on failure. Without this, a sweep that stopped working (share
+; unreachable, permissions changed) would fail invisibly and signups would quietly stop
+; being processed. The latch keeps it to one message per run of failures; it is cleared
+; by the next successful sweep.
+
+BAMSweepReportError:
+	if (BAMSignupSweepErrorNotified = 0) {
+		BAMSignupSweepErrorNotified := 1
+		MsgBox, 262192, BAM SIGNUP SWEEP, The automatic sweep of BAM signups failed because:`n`n%bamSweepErrorMsg%`n`nThis message will only appear once. The sweep will keep retrying in the background.
+	}
+return
+
+
+;############################################################################################
+;################## BAM Signup Sweep: rolling backups (10 days) #############################
+;############################################################################################
+; Callers MUST check BAMSweepBackupFailed immediately after the gosub. There is no success
+; audit log by design, so these backups are the only way to reconstruct who was added when.
+
+BackupBAMUsersFile:
+	BAMSweepBackupFailed := 0
+	if !InStr(FileExist(BAMSweepBackupFolder), "D") {
+		FileCreateDir, %BAMSweepBackupFolder%
+		if (ErrorLevel) {
+			BAMSweepBackupFailed := 1
+			return
+		}
+	}
+	; One snapshot per calendar day, taken before that day's first modification. Keying on
+	; the filename rather than a flag means this survives a Booster restart.
+	FormatTime, bamBackupStamp, , yyyyMMdd
+	bamBackupDest := BAMSweepBackupFolder . "\" . BAMSweepBackupPrefix . bamBackupStamp . ".txt"
+	if !FileExist(bamBackupDest) {
+		FileCopy, %BAMSweepBackupSrc%, %bamBackupDest%, 0
+		if (ErrorLevel) {
+			BAMSweepBackupFailed := 1
+			return
+		}
+	}
+	gosub PruneBAMSweepBackups
+return
+
+
+BackupBAMSignupFile:
+	BAMSweepBackupFailed := 0
+	if !InStr(FileExist(BAMSweepBackupFolder), "D") {
+		FileCreateDir, %BAMSweepBackupFolder%
+		if (ErrorLevel) {
+			BAMSweepBackupFailed := 1
+			return
+		}
+	}
+	; Every wipe gets its own snapshot — this is the recovery path if a OneDrive sync race
+	; ever costs us a signup that was never swept.
+	FormatTime, bamSignupBackupStamp, , yyyyMMdd_HHmmss
+	bamSignupBackupDest := BAMSweepBackupFolder . "\GENERAL_BAM_SIGNUP_" . bamSignupBackupStamp . ".txt"
+	FileCopy, %BAMSignupFile%, %bamSignupBackupDest%, 1
+	if (ErrorLevel) {
+		BAMSweepBackupFailed := 1
+		return
+	}
+	gosub PruneBAMSweepBackups
+return
+
+
+PruneBAMSweepBackups:
+	bamPruneCutoff := A_Now
+	EnvAdd, bamPruneCutoff, -10, Days
+	Loop, Files, %BAMSweepBackupFolder%\*.txt
+	{
+		FileGetTime, bamBackupFileTime, %A_LoopFileFullPath%, M
+		if (bamBackupFileTime < bamPruneCutoff)
+			FileDelete, %A_LoopFileFullPath%
+	}
+return
+
+
 68EmailLocalContact:
 	activeMsgTitle := RT_MsgBoxTitle[ActiveRequestType]
 	HelpContactEmail := CachedInternalEmail[ActiveRequestType]
@@ -7359,12 +8276,16 @@ return
 		helpMail := olApp.CreateItem(0)
 		helpMail.To := HelpContactEmail
 		helpMail.Subject := RT_EmailSubjectPrefix[ActiveRequestType] . " - Help Request"
-		; Set S/MIME encryption via MAPI property
+		; OLD S/MIME encryption — kept for reference
+		/*
 		try {
 			helpMail.PropertyAccessor.SetProperty("http://schemas.microsoft.com/mapi/proptag/0x6E010003", 1)
 		} catch {
 		}
+		*/
 		helpMail.Display
+		; Apply Encrypt-Only to the help email window
+		gosub EncryptOutlookEmail
 	} catch {
 		MsgBox, 262160, %activeMsgTitle%, Failed to create the email.`n`nPlease make sure Outlook is running.
 	}
@@ -8162,14 +9083,14 @@ Gui, Add, Text, gopenfxnscreen x710 y+20 w300 h30, %fctlbl% ; pseudohyperlink
 
 
 
-; --- NursingBooster enable checkbox + channel selector (test integration) ---
+; --- NursingBooster enable checkbox + channel selector ---
 Gui, Font, s10 Bold, Verdana
 Gui, Add, Text, x200 y710 w600 h25 cBlue, Nursing Booster Module
 Gui, Font, s9 Norm, Verdana
 nbEnabledChkOpt := NB_Enabled ? "Checked" : ""
 Gui, Add, Checkbox, x200 y738 w350 h22 vNB_EnabledChk %nbEnabledChkOpt%, Enable Nursing Booster (downloads from GitHub)
 Gui, Add, Text, x600 y740 w60 h20, Channel:
-nbCurrentChannel := Array[84] ? Array[84] : "stable"
+nbCurrentChannel := NB_Channel
 nbDevSel := (nbCurrentChannel = "master") ? "|Stable|Beta/Dev||" : "|Stable||Beta/Dev|"
 Gui, Add, DropDownList, x665 y738 w100 vNB_ChannelDDL, %nbDevSel%
 
@@ -8291,6 +9212,7 @@ gosub, writeit
 sleep 10 ; data deletion issue: may not be able read if writing lags
 gosub, refreshdata  ;----need to refresh the working variables
 
+
 ; --- NursingBooster: handle enable/channel changes ---
 if (nbNeedsReload) {
     if (NB_Enabled && !nbPrevEnabled) {
@@ -8312,28 +9234,30 @@ if (nbNeedsReload) {
             nbToggle := "NB_TogglePanel"
             Gosub, %nbToggle%
         }
+        ; Resolve optional module timer targets at runtime. Literal targets are
+        ; validated at load time, before IsLabel can guard a fresh installation.
         if (IsLabel("NB_CheckCPRS"))
-            SetTimer, NB_CheckCPRS, Off
+            SetTimer, % "NB_CheckCPRS", Off
         if (IsLabel("NB_CheckFKeyHide"))
-            SetTimer, NB_CheckFKeyHide, Off
+            SetTimer, % "NB_CheckFKeyHide", Off
         ; Cancel a pending post-sign restore: if it fired after disable, the
         ; AlwaysOnTop panel would reappear with no hotkey/poll left to hide it
         if (IsLabel("NB_RestorePanelAfterFKey")) {
-            SetTimer, NB_RestorePanelAfterFKey, Off
+            SetTimer, % "NB_RestorePanelAfterFKey", Off
             NB_SignWasVisible := 0
         }
         ; Unhook the global panel toggle registered by NB_ModuleInit
         if (IsLabel("NB_TogglePanel"))
             Hotkey, ^+b, Off, UseErrorLevel
         if (IsLabel("NB_CheckGui14Dropdown")) {
-            SetTimer, NB_CheckGui14Dropdown, Off
+            SetTimer, % "NB_CheckGui14Dropdown", Off
             ; Remove the NB drop-up from the function bar too
             Gui, 85:Destroy
             NB_MiniBarBuilt := false
         }
         if (IsLabel("NB_ClearToolTip")) {
             ToolTip, NursingBooster disabled
-            SetTimer, NB_ClearToolTip, -2000
+            SetTimer, % "NB_ClearToolTip", -2000
         } else {
             ToolTip, NursingBooster disabled
             Sleep 2000
@@ -9724,7 +10648,7 @@ return ;----------???---------------**************END of ctrl-Q = test of functi
 
 ; beta 11-24-24 use line below #If (WinActive("ahk_exe CPRS") || WinActive("ahk_class AutoHotkeyGUI")) && !Winexist("Consult Toolbox") ; the second part means fxn and other keys will activate even if Floating bar active
 
-#If (!IncludeToolboxLogic || !WinExist("Consult Toolbox")) && (WinActive("ahk_exe CPRS") || WinActive("ahk_class AutoHotkeyGUI")) 
+#If (!IncludeToolboxLogic || !WinExist("Consult Toolbox")) && (WinActive("ahk_exe CPRS") || WinActive("ahk_class AutoHotkeyGUI") || WinActive("BAM:")) 
 ;-------***********************-------HOT KEYS BELOW WILL ONLY WORK IN CPRS given LINE ABOVE
 
 
@@ -9756,7 +10680,7 @@ sendalarm:
 	
 	loop, 6
 	{
-	send {f9){f11}
+	send {f9}{f11}
 	sleep 2000
 	}
 
@@ -10520,7 +11444,7 @@ if (targetItem) {
         StringReplace, escapedName, escapedName, ", \", All
         
         ; Build JSON structure (medical_data_b64 is Base64 encoded)
-        jsonData := "{""sentinel"": ""CPRS_BOOSTER_DATA"", ""patient"": {""ssn"": """ . AI_PatientSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . AI_PatientDOB . """, ""last4"": """ . AI_PatientLast4 . """}, ""medical_data_b64"": """ . base64Data . """, ""data_length"": " . textLength . ", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
+        jsonData := "{""sentinel"": ""CPRS_BOOSTER_DATA"", ""patient"": {""ssn"": """ . AI_PatientSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . AI_PatientDOB . """}, ""medical_data_b64"": """ . base64Data . """, ""data_length"": " . textLength . ", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
         
         ; Send data through persistent pipe
         gosub SendDataToPipe
@@ -10697,7 +11621,7 @@ StringReplace, escapedName, AI_PatientName, \, \\, All
 StringReplace, escapedName, escapedName, ", \", All
 
 ; Build JSON structure
-jsonData := "{""sentinel"": ""CPRS_BOOSTER_DATA"", ""patient"": {""ssn"": """ . AI_PatientSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . AI_PatientDOB . """, ""last4"": """ . AI_PatientLast4 . """}, ""medical_data_b64"": """ . base64Data . """, ""data_length"": " . textLength . ", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
+jsonData := "{""sentinel"": ""CPRS_BOOSTER_DATA"", ""patient"": {""ssn"": """ . AI_PatientSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . AI_PatientDOB . """}, ""medical_data_b64"": """ . base64Data . """, ""data_length"": " . textLength . ", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
 
 ; Send data through persistent pipe
 gosub SendDataToPipe
@@ -10917,7 +11841,7 @@ if (targetItem) {
     StringReplace, escapedName, escapedName, ", \", All
     
     ; Build JSON structure
-    jsonData := "{""sentinel"": ""CPRS_BOOSTER_DATA"", ""patient"": {""ssn"": """ . AI_PatientSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . AI_PatientDOB . """, ""last4"": """ . AI_PatientLast4 . """}, ""medical_data_b64"": """ . base64Data . """, ""data_length"": " . textLength . ", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
+    jsonData := "{""sentinel"": ""CPRS_BOOSTER_DATA"", ""patient"": {""ssn"": """ . AI_PatientSSN . """, ""name"": """ . escapedName . """, ""dob"": """ . AI_PatientDOB . """}, ""medical_data_b64"": """ . base64Data . """, ""data_length"": " . textLength . ", ""request_id"": """ . requestId . """, ""timestamp"": """ . currentTime . """}"
     
     ; Send data through persistent pipe
     gosub SendDataToPipe
@@ -11218,6 +12142,7 @@ return
 ^!s::
 
 sleep 50 ;  ... sometime it's not finding the meds .. ? need time for finger to come off key
+flaglocationDebugShown := 0  ; Reset guard: allow flaglocation debug splash once per signing action
 
 ; in notes we have "ClassNN:	TRichEdit6"
 ; blue meds that need refills "ClassNN:	TORListBox2"; ALSO flagged med orders to
@@ -11274,6 +12199,25 @@ else
 
 hereIam := whereAmI() ;-----DETERMINE what we're looking at via whereamI() function
 
+if (debugging = true)
+{
+	if (flagged = "yes")
+		boosterThinks := "Booster thinks this is a RED FLAGGED order (red pixels 0xFF0000 found on screen)"
+	else if (blueWasFound = "yes")
+		boosterThinks := "Booster thinks this is a BLUE unsigned order (blue pixels 0x0078D7 found in search area)"
+	else if (hereIam = "order")
+		boosterThinks := "Booster thinks this is an ORDER (ListBox control is focused - no red or blue pixels detected)"
+	else if (hereIam = "note")
+		boosterThinks := "Booster thinks this is an UNSIGNED NOTE (RichEdit/TreeView/Tab control is focused)"
+	else if (hereIam = "flag")
+		boosterThinks := "Booster thinks you are INSIDE a flagged order screen (ComboEdit control is focused)"
+	else
+		boosterThinks := "Booster is not sure what this is - will treat as UNSIGNED NOTE (could not identify the focused control)"
+	SplashTextOn ,600 ,100, CPRS Booster, %boosterThinks%
+	sleep 3500
+	SplashTextOff
+}
+
 if !(WinActive("ahk_class TfrmSignOrders") or WinActive("ahk_class TfrmReview") or WinActive("ahk_class TfrmSignItem")) ;---NOT JUST A SIG BOX
 
 {  ;------------ for things NOT just an SIG box :************LEFT 1
@@ -11303,11 +12247,12 @@ gosub flaglocation  ; added 8-15-24: don't we need this here?
 	if flagged = yes ;--------------THIS IS FLAGGED ORDER PROCESSING************************ LEFT 3: RED ORDERS
 		{
 
-			; SplashTextOn ,150 ,100, CPRS Booster, This is a flag!
-		; sleep 500
-		; SplashTextOff
-	
-	;MsgBox, 262144, CPRS Booster, THIS IS A FLAG
+		if (debugging = true)
+		{
+			SplashTextOn ,500 ,100, CPRS Booster, Now processing RED FLAGGED order...
+			sleep 3500
+			SplashTextOff
+		}
 
 	; Figure out if this is an unreleased order or not
 
@@ -11453,9 +12398,12 @@ Return
 
 ;**********NOTE: THIS IS NOT THE BLUE INSIDE OF RED LOGIC: THAT's above.
 
-		;	SplashTextOn ,150 ,100, CPRS Booster, NOT A flag!
-		; sleep 500
-		; SplashTextOff
+		if (debugging = true)
+		{
+			SplashTextOn ,500 ,100, CPRS Booster, No red flag found. Signing all unflagged orders now...
+			sleep 3500
+			SplashTextOff
+		}
 
 sleep 200
 send !ag 
@@ -11481,6 +12429,13 @@ send !ag
 
 ;If InStr(controlname, "RichEdit") ;  ---or InStr(controlname, "tree") ; SIGN NOTES; THIS WORKS; NO others can have tree
 	{
+
+	if (debugging = true)
+	{
+		SplashTextOn ,500 ,100, CPRS Booster, Signing as UNSIGNED NOTE now...
+		sleep 3500
+		SplashTextOff
+	}
 
 	gosub ActivateCPRS ; Floating bar drawing may take focus off; Note sigs also need CPRS activation***
 
@@ -11563,6 +12518,13 @@ send !ag
    ; } ;-***********RIGHT 1:--------end of logic to do something besides just pound in the sig code
 
 
+if (debugging = true)
+{
+	SplashTextOn ,500 ,100, CPRS Booster, Sign box is already open. Filling in your signature now...
+	sleep 3500
+	SplashTextOff
+}
+
 winactivate, Sign ; Floating bar drawing may take focus off; I think there has to be a sign box right??***
 
 gosub whatscreenamI ; this will get through to the review/sign changes but after we send sig code (after F1) it will come back here
@@ -11607,12 +12569,14 @@ gosub Bluelocation ; check for blue orders
 	if blue = yes
 	{
 	whereI = order
+	Global blueWasFound := "yes"  ; Snapshot before reset so debug summary can report accurately
 	Global blue:= "no" ; we are inside of a function
 	;  msgbox BLUE!  
 	 
 	
 	return WhereI
 	}
+	Global blueWasFound := "no"  ; No blue detected
 
 
 ControlGetFocus, focused_control
@@ -11739,6 +12703,7 @@ phoneClinic:= Array[8]
 Global pharm:= Array[9]
 Global Prov1:=Array[10]
 Global Prov2:=Array[11]
+Global DisableBAM:=Array[83]  ; BAM disable flag (1=disabled, 0 or blank=enabled)
   		  ;----load the fxn keys
 
 fxn.1:= Array[12]
@@ -11894,8 +12859,10 @@ GotRxQOInstructions :=Array[79]
 AmbDictationDone :=Array[80]
 lastprompttype := Array[81]
 OneTimeNonDragonScribeEducation := Array[82]
-NB_Enabled := Array[83]
-NB_Channel := Array[84] ? Array[84] : "stable"
+nbPreferences := NB_ReadPreferences(Array)
+NB_Enabled := nbPreferences.enabled
+NB_Channel := nbPreferences.channel
+DisableBAM := nbPreferences.disableBAM
 
  ; msgbox, %NoShortcut%  ;
 
@@ -11993,7 +12960,7 @@ return
 file := FileOpen(filename,"w `n")   ;-------******************WRITING DATA TO FILE
 ;                  ----------------the variable names from the form are case sensative: ORDER MATTERS BELOW
 file.writeline(CurVersion)
-file.writeline("No")F
+file.writeline("No")
 file.writeline(RN1)
 file.writeline(RN2)
 file.writeline(MSA)
@@ -12094,8 +13061,9 @@ writeArray[79] := GotRxQOInstructions
 writeArray[80] := AmbDictationDone
 WriteArray[81] := lastprompttype
 WriteArray[82] := OneTimeNonDragonScribeEducation
-WriteArray[83] := NB_Enabled
-WriteArray[84] := NB_Channel
+WriteArray[83] := DisableBAM
+WriteArray[84] := NB_Enabled
+WriteArray[85] := NB_Channel
 
 
 
@@ -12255,6 +13223,7 @@ return
 
 
 AddorFlag:   ;-----------------************this function adds as ADD signer OR FLAGS order to them: based on whereamI() location.
+flaglocationDebugShown := 0  ; Reset guard: allow flaglocation debug splash once per AddorFlag action
 
 If WinExist("Location for Current Activities") 
 
@@ -12479,12 +13448,12 @@ flaglocation:
 flagfound := "yes"   ; if there are pixel search errors below, we change this to no.
     
 
-if (debugging = true)
+if (debugging = true && flaglocationDebugShown = 0)
 	{
 		SplashTextOn ,150 ,100, CPRS Booster, In flag LOCATION subroutine
-		sleep 800
+		sleep 3500
 		SplashTextOff
-
+		flaglocationDebugShown := 1  ; Suppress repeats for this signing action
 	} 
 ; COORDS OF TOP RIGHT OF FLAG:
 CoordMode, Mouse, Screen
@@ -12499,16 +13468,16 @@ WinGetPos, cx ,cy, cw, ch, VistA CPRS in use
 PixelSearch, PxFlag, PyFlag, cx+cw-200, cy+150, cx+200, cy+ch-50, 0xFF0000, 0, Fast RGB ; This should search only within the window width and height
 if (ErrorLevel = 0)  ; COORDS OF TOP RIGHT OF FLAG: PxFlag, PyFlag
 {
-    if (debugging) 
+    if (debugging && flaglocationDebugShown = 1) 
     {
         SplashTextOn ,150 ,100, CPRS Booster, I think you're dealing with a flagged order.
-        sleep 4000
+        sleep 3500
         SplashTextOff
         ; MsgBox, 64, Debugging, I think you're dealing with a flagged order.
         
         MouseMove, PxFlag, PyFlag
         SplashTextOn ,150 ,100, CPRS Booster, Find the Mouse! That's red
-        sleep 3000
+        sleep 3500
         SplashTextOff
     }
     
@@ -12518,10 +13487,10 @@ if (ErrorLevel = 0)  ; COORDS OF TOP RIGHT OF FLAG: PxFlag, PyFlag
 else
 {
     flagfound := "no"
-    if (debugging) 
+    if (debugging && flaglocationDebugShown = 1) 
     {
         SplashTextOn ,150 ,100, CPRS Booster, Debugging, I think there is NOT a flagged order here (note or unflagged order)
-        sleep 4000
+        sleep 3500
         SplashTextOff
         ; MsgBox, 64, Debugging, I think there is NOT a flagged order here (note or unflagged order)
     }
@@ -12937,8 +13906,8 @@ Bluelocation: ;----load the variabels px and py with top of blue location (START
 	
 	if (debugging = true)
 		{
-			SplashTextOn ,150 ,100, CPRS Booster, In BLUE LOCATION click subroutine Px and Py
-			sleep 1600
+			SplashTextOn ,350 ,100, CPRS Booster, Checking for blue orders in search area X=750-850 Y=10-950
+			sleep 3500
 			SplashTextOff
 	
 		} 
@@ -12951,12 +13920,22 @@ Bluelocation: ;----load the variabels px and py with top of blue location (START
 	if ErrorLevel = 0
 		  {
 		global blue:= "yes"
-		; 
-    ; Msgbox, 262144, Blue location?, Blue! ; 
+		if (debugging = true)
+		{
+			SplashTextOn ,350 ,100, CPRS Booster, Blue FOUND at PxBlue=%PxBlue% PyBlue=%PyBlue%
+			sleep 3500
+			SplashTextOff
+		}
 		 }
 	else 
 	{
 		global blue:= "no"
+		if (debugging = true)
+		{
+			SplashTextOn ,350 ,100, CPRS Booster, Blue NOT found in search area X=750-850 Y=10-950
+			sleep 3500
+			SplashTextOff
+		}
 	}
 
 return
@@ -12971,7 +13950,7 @@ BlueClick:
 	if (debugging = true)
 		{
 			SplashTextOn ,150 ,100, CPRS Booster, In BLUE click subroutine
-			sleep 1500
+			sleep 3500
 			SplashTextOff
 	
 		} 
@@ -13356,6 +14335,13 @@ CalculateAverageBlue(x1, y1, x2, y2)
     ; Calculate the average blue component
     global avgB := totalB / pixelCount
 
+    if (debugging = true)
+    {
+        SplashTextOn ,350 ,100, CPRS Booster, Average Blue Value: %avgB% (>200 = Unreleased)
+        sleep 3500
+        SplashTextOff
+    }
+
     ; Show the averaged blue component
    ;  MsgBox, The average blue component is: %avgB%
 }
@@ -13381,9 +14367,12 @@ ShowDebugArea(x1, y1, x2, y2)
         Gui, New, +AlwaysOnTop -Caption +ToolWindow
         Gui, Color, black  ; Highlight click point in red
         Gui, Show, x%x1% y%y1% w10 h10
-		SplashTextOn ,150 ,100, CPRS Booster, Press SPACEBAR to continue
-		sleep 2000
-		SplashTextOff
+		if (debugging = true)
+		{
+			SplashTextOn ,150 ,100, CPRS Booster, Press SPACEBAR to continue
+			sleep 3500
+			SplashTextOff
+		}
     }
     else
     {
@@ -13392,9 +14381,12 @@ ShowDebugArea(x1, y1, x2, y2)
         Gui, New, +AlwaysOnTop -Caption +ToolWindow
         Gui, Color, black  ; Highlight the area in green
         Gui, Show, x%x1% y%y1% w%Width% h%Height%
-		SplashTextOn ,150 ,100, CPRS Booster, Press SPACEBAR to continue
-		sleep 2000
-		SplashTextOff
+		if (debugging = true)
+		{
+			SplashTextOn ,150 ,100, CPRS Booster, Press SPACEBAR to continue
+			sleep 3500
+			SplashTextOff
+		}
     }
 
     ; Wait for spacebar press to close the GUI
@@ -15356,6 +16348,15 @@ if AutoDragon = 1
  dragon1 =
  }
 
+if DisableBAM = 1
+	{
+ releaseme10 = checked
+	}
+ else
+ {
+ releaseme10 =
+ }
+
 
 instru := "
 (
@@ -15368,10 +16369,12 @@ Gui, 6: Font, bold underline s13, Verdana  ; Set 13-point Verdana.
 
 Gui, 6: Add, Text,y10, RELEASE KEYS:
 Gui, 6: add, text,y10 x700, DRAGON NS:
+Gui, 6: add, text,y300 x700, DISABLE BAM:
 
 Gui, 6: Font,norm s11, Verdana  ; Set 11-point Verdana.
 Gui, 6: Add, Text, x10 y40  R4, %instru%
 Gui, 6: Add, CheckBox, x650 y40 %dragon1% vAutoDragon, Auto-start Dragon with CPRS start?
+Gui, 6: Add, CheckBox, x600 y320 %releaseme10% vDisableBAMGUI, Disable BAM (BAM will not launch with Booster)
 
 Gui, 6: Add, CheckBox, x25 y110 %releaseme1% vCtrlA, Release Ctrl-A: Check this and Ctrl-A --> Select all
 Gui, 6: Add, CheckBox, %releaseme3% vCtrlM, Release Ctrl-M: Check this and Ctrl-M --> Go to CPRS Meds tab
@@ -15453,7 +16456,51 @@ return
 	Gui, 6: Submit ; Save all the information in the GUI (The variables)
 	Gui, 6: Destroy ; Destroy the GUI to get it out of the way
 
+; Update DisableBAM from the GUI checkbox
+	prevDisableBAM := DisableBAM  ; remember prior value to detect an enable/disable transition
+	if (DisableBAMGUI = 1) {
+		DisableBAM := 1
+	} else {
+		DisableBAM := 0
+	}
+
 gosub, writeit
+
+; --- Apply the BAM enable/disable change immediately (setting is already persisted
+;     to CPRSData.txt line 83 by writeit above, so these are runtime effects only) ---
+if (prevDisableBAM != 1 && DisableBAM = 1) {
+	; Just DISABLED: gracefully close a running BAM via its shutdown sentinel.
+	; BAM polls this file, tears down its Playwright/Edge children cleanly, and
+	; deletes the file; BAM also clears a stale flag at startup, so writing it
+	; while BAM is not running is harmless.
+	EnvGet, bamLocalAppData, LOCALAPPDATA
+	bamShutdownFlag := bamLocalAppData . "\CPRSBooster\bam_shutdown.flag"
+	SplitPath, bamShutdownFlag, , bamFlagDir
+	if !FileExist(bamFlagDir)
+		FileCreateDir, %bamFlagDir%
+	FileDelete, %bamShutdownFlag%
+	FileAppend, shutdown, %bamShutdownFlag%
+}
+else if (prevDisableBAM = 1 && DisableBAM != 1) {
+	; Just RE-ENABLED: offer to start BAM now instead of waiting for the next
+	; Booster launch. BstHelperV2 is #singleinstance force and re-reads the
+	; DisableBAM setting fresh from CPRSData.txt, then kills any existing BAM
+	; instance before launching — so a rerun is the same battle-tested path as
+	; a normal Booster start.
+	if (AnyPythonFeatureParticipant = 1 && FileExist(JBoosterPythonInstallerLocal)) {
+		MsgBox, 262148, CPRS Booster: BAM Re-enabled, BAM is re-enabled. Start BAM now?`n`n(If No: BAM will start with your next Booster launch.)
+		IfMsgBox, Yes
+		{
+			try {
+				Run, "%AHKengine%" "%JBoosterPythonInstallerLocal%", , Hide
+			} catch e {
+				MsgBox, 262160, CPRS Booster: BAM, % "Could not start the BAM launcher:`n" e.Message "`n`nBAM will start with your next Booster launch."
+			}
+		}
+	} else {
+		MsgBox, 262208, CPRS Booster: BAM Re-enabled, BAM is re-enabled and will start with your next Booster launch.
+	}
+}
 
 ; gosub, refreshdata  ;----need to refresh the working variables: Don't need this: variables are global already
 
@@ -23908,11 +24955,12 @@ if WinExist("VistA CPRS in") {
     ; Also check ahk_exe CPRSChart.exe so CPRS subwindows (dialogs, encounters, orders) keep toolbars visible
     if (!WinActive("ahk_id " . CPRSWindowHandle) && !WinActive("ahk_exe CPRSChart.exe")) {
         ; CPRS exists but isn't active - hide toolbars unless a toolbar is active
-        if (!winactive("fxnbar") && !winactive("hyperdrivebar") && !winactive("hyperdriveSubbar") && !winactive("Booster Quick Orders") && !winactive("Ambient Scribe Toolbar") && !winactive("Booster Dictation Box") && !winactive("Booster AI Module") && !winactive("BAM:") && !winactive("BAM Quick AI")) {
+        if (!winactive("fxnbar") && !winactive("hyperdrivebar") && !winactive("hyperdriveSubbar") && !winactive("Booster Quick Orders") && !winactive("Ambient Scribe Toolbar") && !winactive("Booster Dictation Box") && !winactive("BAM:")) {
             Gui 14: Destroy
             gui 7: destroy
             gui 8: destroy
             gui 28: destroy
+            ; BAM visibility managed by Python (_start_root_state_monitor)
             Lastscreen := "notCPRS"
             WinGetPos, CprsStartX, CprsStartY, CprsStartWidth, CprsStartHeight, ahk_id %CPRSWindowHandle%
         } Else {
@@ -23930,10 +24978,14 @@ if WinExist("VistA CPRS in") {
     if !WinExist("ahk_id " . CPRSWindowHandle) {
         ; Window really closed - reset handle AND hide toolbars
         CPRSWindowHandle := 0
+        BAMFirstPositioned := 0  ; Reset so BAM repositions for new CPRS session
+        BAMStoredPID := 0
+        BAMStoredHwnd := 0
         Gui 14: Destroy
         gui 7: destroy
         gui 8: destroy
         gui 28: destroy
+        ; BAM visibility managed by Python
         Lastscreen := "notCPRS"
         return
     }
@@ -23942,13 +24994,13 @@ if WinExist("VistA CPRS in") {
     ; Also check ahk_exe CPRSChart.exe so CPRS subwindows (dialogs, encounters, orders) keep toolbars visible
     if (!WinActive("ahk_id " . CPRSWindowHandle) && !WinActive("ahk_exe CPRSChart.exe")) {
         ; CPRS not active - check if toolbars or exceptions are active
-        if (!winactive("fxnbar") && !winactive("hyperdrivebar") && !winactive("hyperdriveSubbar") && !winactive("Booster Quick Orders") && !winactive("Ambient Scribe Toolbar") && !winactive("Booster Dictation Box") && !winactive("Booster AI Module") && !winactive("BAM:") && !winactive("BAM Quick AI")) {
+        if (!winactive("fxnbar") && !winactive("hyperdrivebar") && !winactive("hyperdriveSubbar") && !winactive("Booster Quick Orders") && !winactive("Ambient Scribe Toolbar") && !winactive("Booster Dictation Box") && !winactive("BAM:")) {
             ; Neither CPRS nor toolbars active - HIDE toolbars but preserve handle
             Gui 14: Destroy
             gui 7: destroy
             gui 8: destroy
             gui 28: destroy
-            ; WinMinimize, Booster AI Module: Ask AI  ; Disabled - BAM windows handle themselves
+            ; BAM visibility managed by Python
             Lastscreen := "notCPRS"
             WinGetPos, CprsStartX, CprsStartY, CprsStartWidth, CprsStartHeight, ahk_id %CPRSWindowHandle%
             ; DON'T reset handle - window still exists, just not focused
@@ -23968,12 +25020,12 @@ if WinExist("VistA CPRS in") {
         ; Don't destroy toolbars - CPRS is active via subwindow
         return
     }
-    if (!winactive("fxnbar") && !winactive("hyperdrivebar") && !winactive("hyperdriveSubbar") && !winactive("Booster Quick Orders") && !winactive("Ambient Scribe Toolbar") && !winactive("Booster Dictation Box") && !winactive("Booster AI Module") && !winactive("BAM:") && !winactive("BAM Quick AI")) {
+    if (!winactive("fxnbar") && !winactive("hyperdrivebar") && !winactive("hyperdriveSubbar") && !winactive("Booster Quick Orders") && !winactive("Ambient Scribe Toolbar") && !winactive("Booster Dictation Box") && !winactive("BAM:")) {
         Gui 14: Destroy
         gui 7: destroy
         gui 8: destroy
         gui 28: destroy
-        ; WinMinimize, Booster AI Module: Ask AI  ; Disabled - BAM windows handle themselves
+        ; BAM visibility managed by Python
         Lastscreen := "notCPRS"
     } Else {
         Lastscreen := "BoosterToolbar"
@@ -23994,37 +25046,23 @@ if (IsMax = 1)
 			if !WinExist("fxnbar") && !(FBO = 1)  ; if function bar not there and user hasn't turned it off
 			{
 				gosub !+h ; gui 14 = function key bar
-				gosub ActivateCPRS ; 
 			}
 
 				if !WinExist("hyperdrivebar") && !(HBO = 1)  ; if hyperdrive bar not there and user hasn't turned it off
 			{
 				gosub !+z ; gui 7 = hyperdrive bar
-				gosub ActivateCPRS ; hopefully this solves both issue of focus on CPRS but not subscreen
 			}
 
 			if !WinExist("hyperdriveSubbar") && !(HBO = 1)  ; if hyperdrive bar not there and user hasn't turned it off
 			{
 				Gosub gui8 ; gui 8 = sub seven bar
-				gosub ActivateCPRS ; hopefully this solves both issue of focus on CPRS but not subscreen
 			}
 
-			; Position BAM window if it exists
-			if WinExist("Booster AI Module: Ask AI")
-			{
-				; Get CPRS window position first (need this to calculate BAM position)
-				WinGetPos, BamCprsX, BamCprsY, BamCprsWidth, BamCprsHeight, ahk_id %CPRSWindowHandle%
-				
-				; Calculate BAM position based on CPRS dimensions
-			bamX := BamCprsX + BamCprsWidth - 315  ; 15px from right edge (300px window + 15px)
-			bamY := BamCprsY + 210  ; 210px from top (avoids CPRS min/max buttons)
-			
-			; Position and show BAM (restore if minimized/hidden)
-			WinRestore, Booster AI Module: Ask AI
-			WinShow, Booster AI Module: Ask AI
-			WinMove, Booster AI Module: Ask AI,, %bamX%, %bamY%, 300, 700
-			WinSet, AlwaysOnTop, On, Booster AI Module: Ask AI
-		}
+			; NoActivate on all Gui Show commands means toolbars never steal focus,
+			; so no ActivateCPRS needed here. Calling it every cycle caused title bar flashing.
+
+			; BAM visibility, positioning, and AlwaysOnTop now managed by Python
+			; (_start_root_state_monitor in BAM_on_demand.py)
 			;WinGetPos , CPRSMaxX, CPRSMaxY, CPRSMaxWidth, CPRSMaxHeight, A   ; active window should be CPRS
 			WinGetPos, CPRSMaxX, CPRSMaxY, CPRSMaxWidth, CPRSMaxHeight, "Vista CPRS in use"
 		}
@@ -24077,15 +25115,64 @@ if (IsMax = 1)
 							gui 8: destroy
 					}
 			
-			; Hide BAM window when CPRS not maximized (WinMinimize works better for Tkinter windows)
-			if WinExist("Booster AI Module: Ask AI")
-					{
-							WinMinimize, Booster AI Module: Ask AI
-					}
+			; BAM visibility managed by Python
 		}
 
 
 
+return
+
+;--- Helper: Hide ALL BAM windows (main + child Toplevels) by PID ---
+; Uses WinHide (not WinMinimize) because Tkinter's -toolwindow attribute
+; converts WinMinimize into wm_withdraw, making the window unfindable.
+; WinHide operates at the Win32 ShowWindow level and pairs with WinShow.
+MinimizeAllBAM:
+    ; Try to find BAM by title first, fall back to stored PID
+    bamPIDToUse := 0
+    if WinExist("BAM: Booster AI Module") {
+        WinGet, bamPIDToUse, PID, BAM: Booster AI Module
+        WinGet, bamHwndNow, ID, BAM: Booster AI Module
+        ; Store PID and hwnd for future recovery when WinExist by title fails
+        BAMStoredPID := bamPIDToUse
+        BAMStoredHwnd := bamHwndNow
+    } else if (BAMStoredPID != 0) {
+        ; Title not found but we have a stored PID — check process is still alive
+        Process, Exist, %BAMStoredPID%
+        if (ErrorLevel != 0)
+            bamPIDToUse := BAMStoredPID
+    }
+    if (bamPIDToUse != 0) {
+        WinGet, bamWinList, List, ahk_pid %bamPIDToUse%
+        Loop, %bamWinList% {
+            bamHwnd := bamWinList%A_Index%
+            WinHide, ahk_id %bamHwnd%
+        }
+    }
+return
+
+;--- Helper: Show ALL BAM windows (main + child Toplevels) by PID ---
+; Uses stored PID/hwnd so BAM can be restored even when WinExist by title
+; fails (e.g. after WinHide made the window invisible).
+RestoreAllBAM:
+    bamPIDToUse := 0
+    if WinExist("BAM: Booster AI Module") {
+        WinGet, bamPIDToUse, PID, BAM: Booster AI Module
+        WinGet, bamHwndNow, ID, BAM: Booster AI Module
+        BAMStoredPID := bamPIDToUse
+        BAMStoredHwnd := bamHwndNow
+    } else if (BAMStoredPID != 0) {
+        ; Title not found — try stored PID (process might still be running)
+        Process, Exist, %BAMStoredPID%
+        if (ErrorLevel != 0)
+            bamPIDToUse := BAMStoredPID
+    }
+    if (bamPIDToUse != 0) {
+        WinGet, bamWinList, List, ahk_pid %bamPIDToUse%
+        Loop, %bamWinList% {
+            bamHwnd := bamWinList%A_Index%
+            WinShow, ahk_id %bamHwnd%
+        }
+    }
 return
 
 ;############################################################################################

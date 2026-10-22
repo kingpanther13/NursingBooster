@@ -496,7 +496,8 @@ def check_host_congruence(repo, module_lines):
     # A SetTimer-targeted label that can re-show the panel (Gui 80:Show) will
     # resurrect an undismissable AlwaysOnTop panel if it fires after NB is
     # disabled (^+b unhooked, hide poll off). Require a matching
-    # `SetTimer, <label>, Off` somewhere in the host.
+    # SetTimer teardown, including a quoted expression target (the safe form
+    # when the optional module has not been downloaded yet).
     host_text = host.read_text(encoding="utf-8", errors="replace")
     bodies = module_label_bodies(module_lines)
     timer_targets = set(re.findall(r"SetTimer\s*,\s*(NB_[A-Za-z0-9_]+)", module_text))
@@ -504,7 +505,9 @@ def check_host_congruence(repo, module_lines):
         body = "\n".join(bodies.get(label, []))
         if "Gui, 80:Show" not in body:
             continue
-        if not re.search(rf"SetTimer\s*,\s*{re.escape(label)}\s*,\s*Off", host_text, re.IGNORECASE):
+        target = rf'(?:{re.escape(label)}|%\s*"{re.escape(label)}")'
+        if not re.search(rf"^[ \t]*SetTimer\s*,\s*{target}\s*,\s*Off", host_text,
+                         re.IGNORECASE | re.MULTILINE):
             finding("host-congruence", HOST, 0,
                     f"panel-showing timer {label} is never turned Off in the host's "
                     "disable path - it can re-show the panel after NB is disabled")

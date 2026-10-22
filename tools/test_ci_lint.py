@@ -115,7 +115,11 @@ def main():
 
     # 5c. panel-showing timer with no host teardown
     case("panel-show timer never turned Off", "host-congruence", lambda t: sub(
-        t, HOST, "SetTimer, NB_RestorePanelAfterFKey, Off", "; seed: teardown removed"))
+        t, HOST, 'SetTimer, % "NB_RestorePanelAfterFKey", Off', "; seed: teardown removed"))
+
+    case("commented timer teardown does not count", "host-congruence", lambda t: sub(
+        t, HOST, 'SetTimer, % "NB_RestorePanelAfterFKey", Off',
+        '; SetTimer, % "NB_RestorePanelAfterFKey", Off'))
 
     # 7a. MsgBox without the topmost flag
     case("MsgBox without MB_TOPMOST flag", "dialog-topmost", lambda t: sub(

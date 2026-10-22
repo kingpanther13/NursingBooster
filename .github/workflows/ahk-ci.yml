@@ -9,14 +9,18 @@ on:
     paths:
       - '**.ahk'
       - '**.ahk.txt'
+      - '**.ahk.inc'
       - 'tools/ci_lint.py'
+      - 'tools/test_ci_lint.py'
       - 'tools/test_host_install.ps1'
       - '.github/workflows/ahk-ci.yml'
   pull_request:
     paths:
       - '**.ahk'
       - '**.ahk.txt'
+      - '**.ahk.inc'
       - 'tools/ci_lint.py'
+      - 'tools/test_ci_lint.py'
       - 'tools/test_host_install.ps1'
       - '.github/workflows/ahk-ci.yml'
 
@@ -81,7 +85,7 @@ jobs:
           Write-Host "AHK v1 found at: $($exe.FullName)"
           echo "AHK1_EXE=$($exe.FullName)" >> $env:GITHUB_ENV
 
-      - name: Load host with and without a cached module
+      - name: Host loading and preference migration
         shell: pwsh
         run: ./tools/test_host_install.ps1 -AhkExe $env:AHK1_EXE
 
